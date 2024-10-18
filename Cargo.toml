@@ -1,0 +1,20 @@
+[package]
+name = "mosaic"
+version = "0.1.0"
+edition = "2021"
+
+[profile.bench]
+lto = "fat"
+overflow-checks = false
+opt-level = 3
+incremental = true
+debug-assertions = false
+debug = "line-tables-only"
+
+[profile.release]
+lto = "fat"
+overflow-checks = false
+opt-level = 3
+incremental = true
+debug-assertions = false
+debug = "line-tables-only"
