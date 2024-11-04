@@ -1,7 +1,4 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <app>
-    <window>
-        <uisrc>./main.html</uisrc>
-        <backendsrc>./main.</backendsrc>
-    </window>
+    <htmlsrc>./main.html</htmlsrc>
 </app>

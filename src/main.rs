@@ -1,49 +1,35 @@
+#![forbid(unsafe_code)]
 #![feature(ptr_as_ref_unchecked)]
 #![feature(test)]
 
 #[allow(invalid_reference_casting)]
 extern crate test;
 
+use crate::file::File;
 use crate::lexer::StreamedLexer;
-use crate::reader::CharReader;
-use std::cell::Cell;
-use std::fs::File;
-use std::io::Read;
 use crate::parser::StreamedParser;
+use crate::reader::CharReader;
 
+mod file;
 mod lexer;
-mod reader;
-pub mod tokens;
 mod macros;
 mod parser;
+mod reader;
+mod states;
+pub mod tokens;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut reader = Cell::new(CharReader::new(File::open("/Users/geez/RustroverProjects/mosaic/examples/bench.mosaic").unwrap()));
+    let reader = CharReader::new(
+        File::new("/Users/geez/RustroverProjects/mosaic/examples/bench.mosaic".to_string())
+            .unwrap(),
+    );
 
-    let mut lexer = StreamedLexer::new(reader.as_ptr());
-    let mut parser = StreamedParser::new(&mut lexer);
+    let lexer = StreamedLexer::new(reader);
+    let parser = StreamedParser::new(lexer);
 
     for node in parser {
-        println!("{:?}", node)
+        println!("[NODE] {:#?}", node?)
     }
 
     Ok(())
-}
-
-mod tests {
-    use std::cell::Cell;
-    use std::fs::File;
-    use crate::lexer::StreamedLexer;
-    use crate::parser::StreamedParser;
-    use crate::reader::CharReader;
-
-    #[test]
-    fn peek_token() -> () {
-        let mut reader = Cell::new(CharReader::new(File::open("examples/bench.mosaic").unwrap()));
-
-        let mut lexer = StreamedLexer::new(reader.as_ptr());
-        let mut parser = StreamedParser::new(&mut lexer);
-
-        let node = parser.next_ast_node().unwrap().unwrap();
-    }
 }

@@ -18,3 +18,7 @@ opt-level = 3
 incremental = true
 debug-assertions = false
 debug = "line-tables-only"
+
+[dependencies]
+filename = "0.1.1"
+serde = { version = "1.0.214", features = ["derive"] }

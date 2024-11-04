@@ -1,1 +1,5 @@
-foo::bar + ba::na
+use std::ptr
+
+def [str 67.9] abc -> ["32", "89"]
+
+if

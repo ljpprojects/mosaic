@@ -1,13 +1,16 @@
+#![forbid(unsafe_code)]
+
 use crate::reader::CharReader;
+use crate::states::{LexerState, WithState};
 use crate::tokens::{LineInfo, Token};
-use std::cell::{Cell, UnsafeCell};
+use crate::{ptr_op_const, ptr_op_mut};
+use std::cell::{Cell, RefCell, UnsafeCell};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::num::NonZeroUsize;
-use std::os::unix::fs::FileExt;
+use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 use std::str::FromStr;
-use crate::{ptr_op_const, ptr_op_mut};
 
 /// This is equal to amount spaces a tab character is equal to.
 /// This is important because without it the character position system does not work.
@@ -31,10 +34,9 @@ pub fn is_mosaic_ident_part(c: &char) -> bool {
     c.is_alphanumeric() || ['_', '$'].contains(c)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LexError {
     InvalidChar(char, LineInfo),
-    UnexpectedEOF,
     UnfinishedString(LineInfo),
     TooManyLines,
 }
@@ -50,7 +52,6 @@ impl Display for LexError {
                 write!(f, "LexError: Unfinished string at {line_info}")
             }
 
-            LexError::UnexpectedEOF => write!(f, "LexError: Unexpected EOF"),
             LexError::TooManyLines => write!(f, "LexError: Too many lines in source file"),
         }
     }
@@ -67,19 +68,18 @@ impl Error for LexError {}
 /// Like the CharReader struct, it returns tokens individually, allowing for better performance,
 /// especially for large files.
 #[derive(Debug)]
-pub struct StreamedLexer<R>
-where R: FileExt {
-    pub(crate) reader: *mut CharReader<R>,
+pub struct StreamedLexer {
+    pub(crate) reader: CharReader,
     pos: u64,
     current_char: usize,
     current_line: usize,
-    is_first: bool
+    is_first: bool,
 }
 
-impl<R: FileExt> Clone for StreamedLexer<R> {
+impl Clone for StreamedLexer {
     fn clone(&self) -> Self {
         StreamedLexer {
-            reader: self.reader,
+            reader: self.reader.clone(),
             pos: self.pos,
             current_char: self.current_char,
             current_line: self.current_line,
@@ -88,7 +88,7 @@ impl<R: FileExt> Clone for StreamedLexer<R> {
     }
 }
 
-impl<R: FileExt> Iterator for StreamedLexer<R> {
+impl Iterator for StreamedLexer {
     type Item = Result<Token, LexError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -99,32 +99,62 @@ impl<R: FileExt> Iterator for StreamedLexer<R> {
     }
 }
 
-impl<R: FileExt> StreamedLexer<R> {
-    pub fn new(reader: *mut CharReader<R>) -> StreamedLexer<R> {
+impl WithState for StreamedLexer {
+    type ToState = LexerState;
+
+    fn from_state(state: Self::ToState) -> Self {
+        Self::new(CharReader::from_state(state.reader_state))
+    }
+
+    fn reset_to_state(&mut self, state: Self::ToState) {
+        self.reader.pos = state.reader_state.pos;
+
+        self.pos = state.pos;
+        self.current_char = state.current_char;
+        self.current_line = state.current_line;
+        self.is_first = state.is_first;
+    }
+
+    fn state(&self) -> Self::ToState {
+        Self::ToState::new(
+            self.reader.state(),
+            self.pos,
+            self.current_char,
+            self.current_line,
+            self.is_first,
+        )
+    }
+}
+
+impl StreamedLexer {
+    pub fn new(reader: CharReader) -> StreamedLexer {
         Self {
             reader,
             pos: 0,
             current_char: 1,
             current_line: 1,
-            is_first: true
+            is_first: true,
         }
     }
 
     /// This is essentially equivalent to next_token, but it resets the lexer back to its previous state.
     /// This means that if you call this two or more times in a row, you will get the same output.
     pub fn peek_next_token(&mut self) -> Option<Result<Token, LexError>> {
-        let prev_pos = unsafe { self.reader.as_ref().unwrap() }.pos;
+        /*let prev_pos = self.reader.pos;
         let prev_line = self.current_line;
         let prev_column = self.current_char;
-        let was_first = self.is_first;
+        let was_first = self.is_first;*/
+
+        let prev_state = self.state();
 
         let res = self.next_token();
 
-        unsafe { (*self.reader).pos = prev_pos }
-
+        /*self.reader.pos = prev_pos;
         self.current_char = prev_column;
         self.current_line = prev_line;
-        self.is_first = was_first;
+        self.is_first = was_first;*/
+
+        self.reset_to_state(prev_state);
 
         res
     }
@@ -132,72 +162,63 @@ impl<R: FileExt> StreamedLexer<R> {
     /// This gets the next token from the given CharReader
     /// This will return None when EOF is encountered.
     pub fn next_token(&mut self) -> Option<Result<Token, LexError>> {
-        let buffer = UnsafeCell::new(String::new());
+        let mut buffer = UnsafeCell::new(String::new());
 
-        let stream = self.reader;
-
-        let linec: *mut usize = &mut self.current_line;
-        let columnc: *mut usize = &mut self.current_char;
+        let mut reader = RefCell::from(&mut self.reader);
+        let linec = Cell::from_mut(&mut self.current_line);
+        let columnc = Cell::from_mut(&mut self.current_char);
 
         let mut next_char = |inc: bool| -> Option<char> {
             if inc {
-                unsafe {
-                    *columnc += 1;
-                }
+                columnc.set(columnc.get() + 1);
             }
 
-            ptr_op_mut! {
-                stream => next_char
-            }
+            (*reader.borrow_mut()).next_char()
         };
 
         let mut peek_char = || -> Option<char> {
-            ptr_op_mut! {
-                stream => peek_next_char
-            }
+            reader.borrow().peek_next_char()
         };
 
         let Some(c) = next_char(!self.is_first) else {
             // encountered EOF
-            return None
+            return None;
         };
 
         self.is_first = false;
 
         match c {
             '+' | '-' | '*' | '/' | '%' | ':' | '^' | '?' | '!' | '=' | '>' | '<' | '{' | '}'
-            | '[' | ']' | '(' | ')' | '@' | ',' | '&' | '|' | '.' => {
-                Some(Ok(Token::Char(
-                    c,
-                    LineInfo::new_one_char(
-                        Rc::from(NonZeroUsize::new(unsafe { *columnc }).unwrap()),
-                        Rc::from(NonZeroUsize::new(unsafe { *linec }).unwrap())
-                    ),
-                )))
-            }
+            | '[' | ']' | '(' | ')' | '@' | ',' | '&' | '|' | '.' => Some(Ok(Token::Char(
+                c,
+                LineInfo::new_one_char(
+                    Rc::from(NonZeroUsize::new(columnc.get()).unwrap()),
+                    Rc::from(NonZeroUsize::new(columnc.get()).unwrap()),
+                ),
+            ))),
 
             '#' => loop {
                 let Some(next_c) = next_char(true) else {
                     // Encountered EOF
-                    return None
+                    return None;
                 };
 
                 if next_c == '\n' {
-                    unsafe { *linec += 1 }
+                    linec.set(linec.get() + 1);
 
                     // comments and whitespace are auto-ignored
-                    return self.next_token()
+                    return self.next_token();
                 }
             },
 
             '\n' => {
-                if let None = unsafe { *linec }.checked_add(1) {
+                if let None = linec.get().checked_add(1) {
                     return Some(Err(LexError::TooManyLines));
                 } else {
-                    unsafe { *linec += 1 }
+                    linec.set(linec.get() + 1);
                 }
 
-                unsafe { *columnc = 1 }
+                columnc.set(columnc.get() + 1);
 
                 self.is_first = true;
 
@@ -205,40 +226,35 @@ impl<R: FileExt> StreamedLexer<R> {
             }
 
             '\t' => {
-                unsafe { *columnc += TAB_SPACES_COUNT as usize }
+                columnc.set(columnc.get() + TAB_SPACES_COUNT as usize);
 
                 self.next_token()
             }
 
             '"' => {
-                let beginc = Rc::from(NonZeroUsize::new(unsafe { *columnc } - 1).unwrap());
-                let beginl = Rc::from(NonZeroUsize::new(unsafe { *linec }).unwrap());
+                let beginc = Rc::from(NonZeroUsize::new(columnc.get() - 1).unwrap());
+                let beginl = Rc::from(NonZeroUsize::new(linec.get()).unwrap());
 
                 loop {
                     let Some(next_c) = next_char(true) else {
                         return Some(Err(LexError::UnfinishedString(LineInfo::new_one_char(
-                            beginc,
-                            beginl
+                            beginc, beginl,
                         ))));
                     };
 
                     if next_c == '"' {
                         break;
                     }
-
-                    unsafe { *buffer.get() += next_c.to_string().as_str() }
+                    
+                    *buffer.get_mut() += next_c.to_string().as_str();
                 }
 
-                let string = ptr_op_const! {
-                    buffer.get() => to_owned
-                };
+                let string = buffer.get_mut().to_owned();
 
-                ptr_op_mut! {
-                    buffer.get() => clear
-                }
+                buffer.get_mut().clear();
 
-                let endc = Rc::from(NonZeroUsize::new(unsafe { *columnc }).unwrap());
-                let endl = Rc::from(NonZeroUsize::new(unsafe { *linec }).unwrap());
+                let endc = Rc::from(NonZeroUsize::new(columnc.get()).unwrap());
+                let endl = Rc::from(NonZeroUsize::new(linec.get()).unwrap());
 
                 Some(Ok(Token::String(
                     string,
@@ -248,14 +264,14 @@ impl<R: FileExt> StreamedLexer<R> {
 
             _ => {
                 if c.is_whitespace() {
-                    unsafe { *columnc += 1 }
+                    columnc.set(columnc.get() + 1);
 
-                    return self.next_token()
+                    return self.next_token();
                 } else if is_mosaic_ident_start(&c) {
-                    let beginc = Rc::from(NonZeroUsize::new(unsafe { *columnc }).unwrap());
-                    let beginl = Rc::from(NonZeroUsize::new(unsafe { *linec }).unwrap());
-
-                    unsafe { *buffer.get() += c.to_string().as_str() }
+                    let beginc = Rc::from(NonZeroUsize::new(columnc.get()).unwrap());
+                    let beginl = Rc::from(NonZeroUsize::new(linec.get()).unwrap());
+                    
+                    *buffer.get_mut() += c.to_string().as_str();
 
                     loop {
                         let Some(next_c) = peek_char() else {
@@ -266,33 +282,27 @@ impl<R: FileExt> StreamedLexer<R> {
                             break;
                         }
 
-                        unsafe { *buffer.get() += next_c.to_string().as_str() }
+                        *buffer.get_mut() += next_c.to_string().as_str();
 
                         next_char(true);
                     }
 
-                    let ident = ptr_op_const! {
-                        buffer.get() => to_owned
-                    };
+                    let ident = buffer.get_mut().to_owned();
 
-                    ptr_op_mut! {
-                        buffer.get() => clear
-                    }
+                    buffer.get_mut().clear();
 
                     let endc = Rc::from(beginc.checked_add(ident.len()).unwrap());
-
-                    println!("{}", ident.len());
 
                     return Some(Ok(Token::Ident(
                         ident,
                         LineInfo::new(beginc, endc, beginl.clone(), beginl),
-                    )))
+                    )));
                 } else if c.is_numeric() {
-                    let beginc = Rc::from(NonZeroUsize::new(unsafe { *columnc }).unwrap());
-                    let beginl = Rc::from(NonZeroUsize::new(unsafe { *linec }).unwrap());
+                    let beginc = Rc::from(NonZeroUsize::new(columnc.get()).unwrap());
+                    let beginl = Rc::from(NonZeroUsize::new(linec.get()).unwrap());
                     let mut is_float = false;
-
-                    unsafe { *buffer.get() += c.to_string().as_str() }
+                    
+                    *buffer.get_mut() += c.to_string().as_str();
 
                     loop {
                         let Some(next_c) = peek_char() else {
@@ -310,30 +320,31 @@ impl<R: FileExt> StreamedLexer<R> {
                             is_float = true;
                         }
 
-                        unsafe { *buffer.get() += next_c.to_string().as_str() };
+                        *buffer.get_mut() += next_c.to_string().as_str();
 
                         next_char(true);
                     }
 
-                    let string = unsafe { buffer.get().as_ref().unwrap() };
+                    let string = buffer.get_mut().to_owned();
                     let num = f64::from_str(string.as_str()).unwrap();
 
-                    ptr_op_mut! {
-                        buffer.get() => clear
-                    }
+                    buffer.get_mut().clear();
 
-                    let endc = Rc::from(NonZeroUsize::new(unsafe { *columnc }).unwrap());
-                    let endl = Rc::from(NonZeroUsize::new(unsafe { *linec }).unwrap());
+                    let endc = Rc::from(NonZeroUsize::new(columnc.get()).unwrap());
+                    let endl = Rc::from(NonZeroUsize::new(linec.get()).unwrap());
 
                     return Some(Ok(Token::Number(
                         num,
                         LineInfo::new(beginc, endc, beginl, endl),
-                    )))
+                    )));
                 }
 
                 Some(Err(LexError::InvalidChar(
                     c,
-                    LineInfo::new_one_char(Rc::from(NonZeroUsize::new(unsafe { *columnc }).unwrap()), Rc::from(NonZeroUsize::new(unsafe { *linec }).unwrap())),
+                    LineInfo::new_one_char(
+                        Rc::from(NonZeroUsize::new(columnc.get()).unwrap()),
+                        Rc::from(NonZeroUsize::new(linec.get()).unwrap()),
+                    ),
                 )))
             }
         }

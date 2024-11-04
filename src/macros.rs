@@ -16,7 +16,7 @@ macro_rules! ptr_op_const {
     {
         $ptr:expr => $($action:ident $($($arg:expr)+)?),*
     } => {{
-        unsafe { $ptr.as_mut().unwrap() }.$(
+        unsafe { $ptr.as_ref().unwrap() }.$(
             $action(
                 $($($arg)+),*
             )

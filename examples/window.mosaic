@@ -1,0 +1,11 @@
+use std::ui
+use std::geo
+use std::mosaicjs
+
+alias 2dSize = geo::2dSize
+
+# A window with the title "Example App" and size 500 x 250
+def ui::Window window mut -> ui::Service::with_name("Example App", 2dSize::new(500, 250))
+
+def ui::Storyboard storyboard_main const -> ui::Storyboard::from_file("./main.mosaic.ui")
+
