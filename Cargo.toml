@@ -21,4 +21,5 @@ debug = "line-tables-only"
 
 [dependencies]
 filename = "0.1.1"
-serde = { version = "1.0.214", features = ["derive"] }
+serde = { version = "1.0.215", features = ["derive"] }
+libc = "0.2.162"

@@ -1,5 +1,2 @@
-use std::ptr
-
-def [str 67.9] abc -> ["32", "89"]
-
-if
+def i32 foo -> 67
+def str bar -> nil

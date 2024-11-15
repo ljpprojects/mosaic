@@ -176,9 +176,7 @@ impl StreamedLexer {
             (*reader.borrow_mut()).next_char()
         };
 
-        let mut peek_char = || -> Option<char> {
-            reader.borrow().peek_next_char()
-        };
+        let mut peek_char = || -> Option<char> { reader.borrow().peek_next_char() };
 
         let Some(c) = next_char(!self.is_first) else {
             // encountered EOF
@@ -245,7 +243,7 @@ impl StreamedLexer {
                     if next_c == '"' {
                         break;
                     }
-                    
+
                     *buffer.get_mut() += next_c.to_string().as_str();
                 }
 
@@ -270,7 +268,7 @@ impl StreamedLexer {
                 } else if is_mosaic_ident_start(&c) {
                     let beginc = Rc::from(NonZeroUsize::new(columnc.get()).unwrap());
                     let beginl = Rc::from(NonZeroUsize::new(linec.get()).unwrap());
-                    
+
                     *buffer.get_mut() += c.to_string().as_str();
 
                     loop {
@@ -301,7 +299,7 @@ impl StreamedLexer {
                     let beginc = Rc::from(NonZeroUsize::new(columnc.get()).unwrap());
                     let beginl = Rc::from(NonZeroUsize::new(linec.get()).unwrap());
                     let mut is_float = false;
-                    
+
                     *buffer.get_mut() += c.to_string().as_str();
 
                     loop {

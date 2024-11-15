@@ -81,6 +81,7 @@ pub enum Token {
     String(String, LineInfo),
     Ident(String, LineInfo),
     Number(f64, LineInfo),
+    Debug(String)
 }
 
 impl Token {
@@ -90,6 +91,7 @@ impl Token {
             Token::String(_, info) => info.clone(),
             Token::Ident(_, info) => info.clone(),
             Token::Number(_, info) => info.clone(),
+            Token::Debug(_) => LineInfo::default(),
         }
     }
 }

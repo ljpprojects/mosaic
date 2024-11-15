@@ -6,7 +6,7 @@ use std::os::unix::fs::FileExt;
 use std::rc::Rc;
 
 #[derive(Debug)]
-pub(crate) struct CharReader {
+pub struct CharReader {
     reader: File<String>,
     pub pos: u64,
 }

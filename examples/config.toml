@@ -1,0 +1,15 @@
+# when a float is encountered, the result will be the result of std::prelude::ilit64_to_i64(REPR_BIT_ARRAY)
+[literals.integer]
+bound_to = "std::prelude::ilit64_to_i64"
+
+# when a float is encountered, the result will be the result of std::prelude::flit64_to_f64(REPR_BIT_ARRAY)
+[literals.float]
+bound_to = "std::prelude::flit64_to_f64"
+
+# when a float is encountered, the result will be the result of std::prelude::slit_to_str(REPR_BIT_ARRAY)
+[literals.string]
+bound_to = "std::prelude::slit_to_str"
+
+# when a float is encountered, the result will be the result of std::prelude::alit_to_arr<T>(REPR_BIT_ARRAY)
+[literals.array]
+bound_to = "std::prelude::slit_to_str"

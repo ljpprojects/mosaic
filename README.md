@@ -3,7 +3,7 @@
 # Mosaic
 
 Mosaic is a small interpreted programming language with
-access to low-level APIs, like pointers, in a safe way.
+access to low-level APIs, like pointers, safely.
 
 ```
 use std::ptr
