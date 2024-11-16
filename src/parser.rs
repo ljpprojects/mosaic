@@ -4,7 +4,7 @@ use crate::lexer::{LexError, StreamedLexer};
 use crate::states::{ParserState, WithState};
 use crate::tokens::{LineInfo, Token};
 use std::error::Error;
-use std::fmt::{write, Debug, Display};
+use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
 use std::string::ToString;
 use crate::utils::{Indirection, OneOf};
@@ -14,7 +14,6 @@ pub const MULTIPLICATIVE_OPS: &[&str] = &["*", "/", "%"];
 pub const EXPONENTIAL_OPS: &[&str] = &["^"];
 pub const PREFIX_OPS: &[&str] = &["!", "-", "+"];
 
-#[derive(Debug)]
 pub enum ParseType {
     IdentType(String),
     SpecificNumberType(f64),
@@ -22,7 +21,13 @@ pub enum ParseType {
         element_type: Indirection<ParseType>,
         length: usize,
     },
-    PathType(Box<[String]>),
+    PathType(Indirection<[String]>),
+}
+
+impl Debug for ParseType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self}")
+    }
 }
 
 impl Display for ParseType {
@@ -327,14 +332,14 @@ impl StreamedParser {
                 return Ok(left);
             };
 
-            let right = match self.parse_path_expr(Some(AstNode::Identifier(left_tname.clone()))) {
+            let mut right = match self.parse_path_expr(Some(AstNode::Identifier(left_tname.clone()))) {
                 Some(Ok(AstNode::Path(p))) => p,
                 Some(Ok(_)) => unreachable!(),
                 Some(Err(e)) => return Err(e),
                 None => return Err(ParseError::UnexpectedEOF(Token::Ident("PATH_SEG".to_string(), LineInfo::default()))),
             };
 
-            left = ParseType::PathType(Box::from(&*right))
+            left = ParseType::PathType(Indirection::from_mut(&mut *right))
         };
 
         Ok(left)
@@ -867,7 +872,7 @@ impl StreamedParser {
             [Some(e)]
         } else {
             [None]
-        }).filter(|r| r.is_some()).map(|r| r.unwrap()).collect::<Vec<ParseError>>();
+        }).flatten().collect::<Vec<ParseError>>();
 
         if !errors.is_empty() {
             return OneOf::Second(errors.into_boxed_slice())

@@ -1,6 +1,4 @@
 use crate::file::File;
-use std::marker::PhantomData;
-use std::mem;
 use std::rc::Rc;
 
 pub trait WithState {

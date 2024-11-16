@@ -3,6 +3,9 @@ name = "mosaic"
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+members = ["src/BEVM"]
+
 [profile.bench]
 lto = "fat"
 overflow-checks = false
@@ -20,6 +23,5 @@ debug-assertions = false
 debug = "line-tables-only"
 
 [dependencies]
-filename = "0.1.1"
 serde = { version = "1.0.215", features = ["derive"] }
-libc = "0.2.162"
+bincode = "2.0.0-rc.3"

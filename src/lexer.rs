@@ -3,12 +3,10 @@
 use crate::reader::CharReader;
 use crate::states::{LexerState, WithState};
 use crate::tokens::{LineInfo, Token};
-use crate::{ptr_op_const, ptr_op_mut};
 use std::cell::{Cell, RefCell, UnsafeCell};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::num::NonZeroUsize;
-use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 use std::str::FromStr;
 
@@ -164,11 +162,11 @@ impl StreamedLexer {
     pub fn next_token(&mut self) -> Option<Result<Token, LexError>> {
         let mut buffer = UnsafeCell::new(String::new());
 
-        let mut reader = RefCell::from(&mut self.reader);
+        let reader = RefCell::from(&mut self.reader);
         let linec = Cell::from_mut(&mut self.current_line);
         let columnc = Cell::from_mut(&mut self.current_char);
 
-        let mut next_char = |inc: bool| -> Option<char> {
+        let next_char = |inc: bool| -> Option<char> {
             if inc {
                 columnc.set(columnc.get() + 1);
             }
@@ -176,7 +174,7 @@ impl StreamedLexer {
             (*reader.borrow_mut()).next_char()
         };
 
-        let mut peek_char = || -> Option<char> { reader.borrow().peek_next_char() };
+        let peek_char = || -> Option<char> { reader.borrow().peek_next_char() };
 
         let Some(c) = next_char(!self.is_first) else {
             // encountered EOF

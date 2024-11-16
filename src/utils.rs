@@ -2,7 +2,6 @@ use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
-use std::sync::atomic::Ordering;
 
 pub enum OneOf<A, B> {
     First(A),
@@ -158,7 +157,7 @@ impl<T> Clone for MutRc<T> {
     }
 }
 
-pub struct Indirection<T> {
+pub struct Indirection<T: ?Sized> {
     pub ptr: NonNull<T>,
     phantom: PhantomData<T>
 }
@@ -172,7 +171,16 @@ impl<T> Indirection<T> {
     }
 }
 
-impl<T> Deref for Indirection<T> {
+impl <T: ?Sized> Indirection<T> {
+    pub fn from_mut(r: &mut T) -> Self {
+        Indirection {
+            ptr: NonNull::new(r as *mut T).unwrap(),
+            phantom: PhantomData
+        }
+    }
+}
+
+impl<T: ?Sized> Deref for Indirection<T> {
     type Target = T;
     
     fn deref(&self) -> &Self::Target {
@@ -180,20 +188,23 @@ impl<T> Deref for Indirection<T> {
     }
 }
 
-impl<T> DerefMut for Indirection<T> {
+impl<T: ?Sized> DerefMut for Indirection<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { self.ptr.as_mut() }
     }
 }
 
-impl<T: Debug> Debug for Indirection<T> {
+impl<T: Display> Display for Indirection<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", *self)
+        write!(f, "{}", (*self).deref())
     }
 }
 
-impl<T: Display> Display for Indirection<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", *self)
+impl<T: ?Sized> Clone for Indirection<T> {
+    fn clone(&self) -> Self {
+        Indirection {
+            ptr: self.ptr.clone(),
+            phantom: PhantomData,
+        }
     }
 }
