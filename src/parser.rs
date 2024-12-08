@@ -3,25 +3,27 @@
 use crate::lexer::{LexError, StreamedLexer};
 use crate::states::{ParserState, WithState};
 use crate::tokens::{LineInfo, Token};
+use crate::utils::{Indirection, OneOf};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
 use std::string::ToString;
-use crate::utils::{Indirection, OneOf};
 
 pub const ADDITIVE_OPS: &[&str] = &["+", "-"];
 pub const MULTIPLICATIVE_OPS: &[&str] = &["*", "/", "%"];
 pub const EXPONENTIAL_OPS: &[&str] = &["^"];
-pub const PREFIX_OPS: &[&str] = &["!", "-", "+"];
+pub const PREFIX_OPS: &[&str] = &["!", "-", "+", "*", "&"];
 
+#[derive(Clone)]
 pub enum ParseType {
     IdentType(String),
-    SpecificNumberType(f64),
     ArrayType {
         element_type: Indirection<ParseType>,
         length: usize,
     },
-    PathType(Indirection<[String]>),
+    PointerType(Indirection<ParseType>),
+    FatPointerType(Indirection<ParseType>, u32),
+    TerminatedSlice(Indirection<ParseType>, Indirection<AstNode>),
 }
 
 impl Debug for ParseType {
@@ -31,28 +33,41 @@ impl Debug for ParseType {
 }
 
 impl Display for ParseType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ParseType::IdentType(t) => write!(f, "{t}"),
-            ParseType::SpecificNumberType(n) => write!(f, "{n}"),
-            ParseType::ArrayType { element_type, length } => write!(f, "[{element_type} {length}]"),
-            ParseType::PathType(p) => write!(f, "{}", p.join("::")),
+            ParseType::ArrayType {
+                element_type,
+                length,
+            } => write!(f, "[{element_type} {length}]"),
+            ParseType::PointerType(p) => write!(f, "*{p}"),
+            ParseType::FatPointerType(t, l) => write!(f, "*{l}[{t}]"),
+            ParseType::TerminatedSlice(t, e) => write!(f, "*:{e}[{t}]"),
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ParseBlock {
     Plain(Box<[AstNode]>),
 }
 
 impl Display for ParseBlock {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self { ParseBlock::Plain(b) => write!(f, "{}", b.iter().map(|n| format!("{}", n)).collect::<Vec<String>>().join("\n")) }
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParseBlock::Plain(b) => write!(
+                f,
+                "{}",
+                b.iter()
+                    .map(|n| format!("{}", n))
+                    .collect::<Vec<String>>()
+                    .join("\n")
+            ),
+        }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AstNode {
     // --- EXPRESSIONS --- //
     NumberLiteral(f64),
@@ -62,10 +77,11 @@ pub enum AstNode {
     NullLiteral,
     Identifier(String),
     InfixOp(Rc<AstNode>, String, Rc<AstNode>),
-    PrefixOp(String, Rc<AstNode>),
+    PrefixOp(String, Indirection<AstNode>),
     PostfixOp(Rc<AstNode>, String),
     Path(Box<[String]>),
     MemberExpr(Box<[String]>),
+    IdxAccess(Indirection<AstNode>, usize),
     CallExpr {
         callee: Rc<AstNode>,
         args: Box<[AstNode]>,
@@ -74,6 +90,16 @@ pub enum AstNode {
     IfExpr {
         cond: Rc<AstNode>,
         block: ParseBlock,
+        else_clause: ParseBlock,
+    },
+    FnExpr {
+        name: String,
+        ret_type: ParseType,
+
+        /// Box<\[(name, type, default)\]>
+        args: Box<[(String, ParseType, Option<AstNode>)]>,
+
+        code: ParseBlock,
     },
 
     // --- Statements --- //
@@ -84,14 +110,29 @@ pub enum AstNode {
     },
 
     /// self.0 is always an AstNode::Path
-    UseStmt(Rc<AstNode>),
+    IncludeStmt(Box<AstNode>),
+
+    IfStmt {
+        cond: Rc<AstNode>,
+        block: ParseBlock,
+    },
+
+    ExternFn {
+        name: String,
+        ret_type: ParseType,
+
+        /// Box<\[(name, type, default)\]>
+        args: Box<[(String, ParseType, Option<AstNode>)]>,
+    },
+
+    ReturnStmt(Indirection<AstNode>),
 
     // --- SPECIAL --- //
     Program(Box<[AstNode]>),
 }
 
 impl Display for AstNode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             AstNode::NumberLiteral(n) => write!(f, "{n}"),
             AstNode::StringLiteral(s) => write!(f, "\"{s}\""),
@@ -104,12 +145,48 @@ impl Display for AstNode {
             AstNode::PostfixOp(v, o) => write!(f, "({v}){o}"),
             AstNode::Path(p) => write!(f, "{}", p.join("::")),
             AstNode::MemberExpr(p) => write!(f, "{}", p.join(".")),
-            AstNode::CallExpr { args, callee } => write!(f, "({callee})({})", args.iter().map(|n| format!("{n}")).collect::<Vec<String>>().join(", ")),
+            AstNode::IdxAccess(v, i) => write!(f, "{v}[{i}]"),
+            AstNode::CallExpr { args, callee } => write!(
+                f,
+                "({callee})({})",
+                args.iter()
+                    .map(|n| format!("{n}"))
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
             AstNode::AsExpr(v, t) => write!(f, "({v}) as {t}"),
-            AstNode::IfExpr { cond, block } => write!(f, "if ({cond}) {{\n{block}}}"),
-            AstNode::DefStmt { name, def_type, value } => write!(f, "def {def_type} {name} -> {value}"),
-            AstNode::UseStmt(p) => write!(f, "use {p}"),
-            AstNode::Program(p) => write!(f, "{}", p.iter().map(|n| format!("{n}")).collect::<Vec<String>>().join("\n")),
+            AstNode::IfExpr {
+                cond,
+                block,
+                else_clause,
+            } => write!(f, "if ({cond}) {{\n{block}}} else {{\n{else_clause}}}"),
+            AstNode::FnExpr {
+                name,
+                ret_type,
+                args,
+                ..
+            } => write!(f, "fn {name}({args:?}) -> {ret_type} {{ ... }}"),
+            AstNode::DefStmt {
+                name,
+                def_type,
+                value,
+            } => write!(f, "def {def_type} {name} -> {value}"),
+            AstNode::IncludeStmt(p) => write!(f, "include {p}"),
+            AstNode::IfStmt { cond, block } => write!(f, "if ({cond}) {{\n{block}}}"),
+            AstNode::ExternFn {
+                name,
+                ret_type,
+                args,
+            } => write!(f, "extern fn {name}({args:?}) -> {ret_type}"),
+            AstNode::Program(p) => write!(
+                f,
+                "{}",
+                p.iter()
+                    .map(|n| format!("{n}"))
+                    .collect::<Vec<String>>()
+                    .join("\n")
+            ),
+            AstNode::ReturnStmt(v) => write!(f, "return {v}"),
         }
     }
 }
@@ -123,17 +200,19 @@ pub enum ParseError {
 
     LexError(LexError),
 
-    InvalidNode(AstNode),
+    InvalidNode(Box<AstNode>),
 
     InvalidToken(Token),
 
-    Forbidden(String)
+    Forbidden(String),
 }
 
 impl Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            ParseError::UnexpectedEOF(tk) => write!(f, "Unexpected EOF during parsing (expecting {tk:?})."),
+            ParseError::UnexpectedEOF(tk) => {
+                write!(f, "Unexpected EOF during parsing (expecting {tk:?}).")
+            }
             ParseError::ExpectedToken(token, expected) => {
                 write!(f, "Expected token '{expected:?}', got '{token:?}'")
             }
@@ -202,7 +281,10 @@ impl StreamedParser {
         let tk = self.lexer.peek_next_token();
 
         match tk {
-            None => Err(ParseError::UnexpectedEOF(Token::Ident(chars.to_string(), LineInfo::default()))),
+            None => Err(ParseError::UnexpectedEOF(Token::Ident(
+                chars.to_string(),
+                LineInfo::default(),
+            ))),
             Some(Err(e)) => Err(ParseError::LexError(e)),
             Some(Ok(Token::Ident(ref c, _))) => {
                 if c.as_str() == *chars {
@@ -241,11 +323,17 @@ impl StreamedParser {
         let tk = self.lexer.peek_next_token();
 
         let Some(tk) = tk else {
-            return Err(ParseError::UnexpectedEOF(Token::Char(*c, LineInfo::default())));
+            return Err(ParseError::UnexpectedEOF(Token::Char(
+                *c,
+                LineInfo::default(),
+            )));
         };
 
-        let Ok(tk) = tk.map_err(|e| ParseError::LexError(e)) else {
-            return Err(ParseError::UnexpectedEOF(Token::Char(*c, LineInfo::default())));
+        let Ok(tk) = tk.map_err(ParseError::LexError) else {
+            return Err(ParseError::UnexpectedEOF(Token::Char(
+                *c,
+                LineInfo::default(),
+            )));
         };
 
         if let Token::Char(char, _) = tk {
@@ -257,8 +345,8 @@ impl StreamedParser {
                 Ok(char)
             } else {
                 Err(ParseError::ExpectedToken(
-                    Token::Char(c.to_owned(), tk.line_info()),
                     Token::Char(char, tk.line_info()),
+                    Token::Char(c.to_owned(), tk.line_info()),
                 ))
             }
         } else {
@@ -269,23 +357,17 @@ impl StreamedParser {
         }
     }
 
-    fn parse_num_type(&mut self) -> Result<ParseType, ParseError> {
-        let t = match self.lexer.next_token() {
-            Some(Ok(Token::Number(t, _))) => t,
-            Some(Ok(tk)) => panic!("Invalid token for type parsing: {tk:?}"),
-            Some(Err(e)) => return Err(ParseError::LexError(e)),
-            None => return Err(ParseError::UnexpectedEOF(Token::Number(0f64, LineInfo::default()))),
-        };
-
-        Ok(ParseType::SpecificNumberType(t))
-    }
-
     fn parse_ident_type(&mut self) -> Result<ParseType, ParseError> {
         let t = match self.lexer.peek_next_token() {
             Some(Ok(Token::Ident(t, _))) => t,
-            Some(Ok(_tk)) => return self.parse_num_type(),
+            Some(Ok(tk)) => return Err(ParseError::InvalidToken(tk)),
             Some(Err(e)) => return Err(ParseError::LexError(e)),
-            None => return Err(ParseError::UnexpectedEOF(Token::Ident("TYPE".to_string(), LineInfo::default()))),
+            None => {
+                return Err(ParseError::UnexpectedEOF(Token::Ident(
+                    "TYPE".to_string(),
+                    LineInfo::default(),
+                )))
+            }
         };
 
         self.lexer.next_token();
@@ -293,53 +375,69 @@ impl StreamedParser {
         Ok(ParseType::IdentType(t))
     }
 
-    fn parse_array_type(&mut self) -> Result<ParseType, ParseError> {
-        self.expect_chars(&"[", true)?;
+    fn parse_type(&mut self) -> Result<ParseType, ParseError> {
+       if self.expect_chars(&"*", true).is_ok() {
+            // parse terminated slice
+            if self.expect_chars(&":", true).is_ok() {
+                let term = match self.lexer.next_token() {
+                    None => {
+                        return Err(ParseError::UnexpectedEOF(Token::Number(
+                            1f64,
+                            LineInfo::default(),
+                        )))
+                    }
+                    Some(Ok(node)) => node,
+                    Some(Err(e)) => return Err(ParseError::LexError(e)),
+                };
 
-        let element_type = self.parse_type()?;
+                let term = match term {
+                    Token::String(s, _) => AstNode::StringLiteral(s),
+                    Token::Number(n, _) => AstNode::NumberLiteral(n),
+                    _ => unimplemented!(),
+                };
 
-        let length = match self.lexer.peek_next_token() {
-            Some(Ok(Token::Number(n, _))) => {
+                self.expect_chars(&"[", true)?;
+
+                let left = match self.parse_type() {
+                    Ok(t) => t,
+                    Err(e) => return Err(e),
+                };
+
+                self.expect_chars(&"]", true)?;
+
+                return Ok(ParseType::TerminatedSlice(
+                    Indirection::new(left),
+                    Indirection::new(term),
+                ));
+            }
+
+            // parse fat pointer
+            if let Some(Ok(Token::Number(l, _))) = self.lexer.peek_next_token() {
                 self.lexer.next_token();
 
-                n as usize
+                self.expect_chars(&"[", true)?;
+
+                let left = match self.parse_type() {
+                    Ok(t) => t,
+                    Err(e) => return Err(e),
+                };
+
+                self.expect_chars(&"]", true)?;
+
+                return Ok(ParseType::FatPointerType(Indirection::new(left), l as u32));
             }
-            Some(Ok(tk)) => return Err(ParseError::ExpectedToken(Token::Number(0f64, LineInfo::default()), tk)),
-            Some(Err(e)) => return Err(ParseError::LexError(e)),
-            None => return Err(ParseError::UnexpectedEOF(Token::Number(0f64, LineInfo::default()))),
-        };
 
-        self.expect_chars(&"]", true)?;
+            let left = match self.parse_type() {
+                Ok(t) => t,
+                Err(e) => return Err(e),
+            };
 
-        Ok(ParseType::ArrayType {
-            element_type: Indirection::new(element_type),
-            length: length,
-        })
-    }
-
-    fn parse_type(&mut self) -> Result<ParseType, ParseError> {
-        if let Ok(_) = self.expect_chars(&"[", false) {
-            return self.parse_array_type();
+            return Ok(ParseType::PointerType(Indirection::new(left)));
         }
 
-        let mut left = match self.parse_ident_type() {
+        let left = match self.parse_ident_type() {
             Ok(t) => t,
             Err(e) => return Err(e),
-        };
-
-        if let Ok(_) = self.expect_chars(&"::", false) {
-            let ParseType::IdentType(left_tname) = left else {
-                return Ok(left);
-            };
-
-            let mut right = match self.parse_path_expr(Some(AstNode::Identifier(left_tname.clone()))) {
-                Some(Ok(AstNode::Path(p))) => p,
-                Some(Ok(_)) => unreachable!(),
-                Some(Err(e)) => return Err(e),
-                None => return Err(ParseError::UnexpectedEOF(Token::Ident("PATH_SEG".to_string(), LineInfo::default()))),
-            };
-
-            left = ParseType::PathType(Indirection::from_mut(&mut *right))
         };
 
         Ok(left)
@@ -353,7 +451,12 @@ impl StreamedParser {
                 return Ok(match tk {
                     Some(Ok(node)) => node,
                     Some(Err(e)) => return Err(e),
-                    None => return Err(ParseError::UnexpectedEOF(Token::Ident("ANY".to_string(), LineInfo::default()))),
+                    None => {
+                        return Err(ParseError::UnexpectedEOF(Token::Ident(
+                            "ANY".to_string(),
+                            LineInfo::default(),
+                        )))
+                    }
                 });
             };
 
@@ -379,6 +482,63 @@ impl StreamedParser {
         }
 
         Ok(items)
+    }
+
+    pub fn parse_args_list(
+        &mut self,
+    ) -> Result<Vec<(String, ParseType, Option<AstNode>)>, ParseError> {
+        self.expect_chars(&"(", true)?;
+
+        if self.expect_chars(&")", true).is_ok() {
+            return Ok(vec![]);
+        }
+
+        let mut args: Vec<(String, ParseType, Option<AstNode>)> = vec![];
+        let mut is_first = true;
+
+        while self.expect_chars(&",", true).is_ok() || is_first {
+            is_first = false;
+
+            let t = self.parse_type()?;
+
+            let name = match self.lexer.next_token() {
+                Some(Ok(Token::Ident(name, _))) => name,
+                Some(Ok(tk)) => {
+                    return Err(ParseError::ExpectedToken(
+                        Token::Ident("PARAM_NAME".to_string(), LineInfo::default()),
+                        tk,
+                    ))
+                }
+                Some(Err(e)) => return Err(ParseError::LexError(e)),
+                None => {
+                    return Err(ParseError::UnexpectedEOF(Token::Ident(
+                        "PARAM_NAME".to_string(),
+                        LineInfo::default(),
+                    )))
+                }
+            };
+
+            if self.expect_chars(&"=", true).is_ok() {
+                let default = match self.next_ast_node() {
+                    Some(Ok(node)) => node,
+                    Some(Err(e)) => return Err(e),
+                    None => {
+                        return Err(ParseError::UnexpectedEOF(Token::Ident(
+                            "PARAM_DEFAULT".to_string(),
+                            LineInfo::default(),
+                        )))
+                    }
+                };
+
+                args.push((name, t, Some(default)))
+            } else {
+                args.push((name, t, None))
+            }
+        }
+
+        self.expect_chars(&")", true)?;
+
+        Ok(args)
     }
 
     pub fn parse_array_expr(&mut self) -> Option<Result<AstNode, ParseError>> {
@@ -408,7 +568,11 @@ impl StreamedParser {
             match self.next_ast_node() {
                 Some(Ok(node)) => body.push(node),
                 Some(Err(e)) => return Err(e),
-                None => return Err(ParseError::UnexpectedEOF(Token::Debug("STATEMENT".to_string()))),
+                None => {
+                    return Err(ParseError::UnexpectedEOF(Token::Debug(
+                        "STATEMENT".to_string(),
+                    )))
+                }
             }
         }
 
@@ -421,77 +585,108 @@ impl StreamedParser {
             Err(e) => return Some(Err(ParseError::LexError(e))),
         };
 
-        match token {
+        let mut left = match token {
             Token::Char(c, line_info) => {
                 if c == '[' {
-                    return self.parse_array_expr();
+                    return match self.parse_array_expr()? {
+                        Ok(node) => Some(Ok(node)),
+                        Err(e) => Some(Err(e)),
+                    };
                 }
 
                 let Some(next) = self.next_ast_node() else {
-                    return Some(Err(ParseError::UnexpectedEOF(Token::Debug("EXPRESSION".to_string()))));
+                    return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                        "EXPRESSION".to_string(),
+                    ))));
                 };
 
-                let Ok(next) = next else {
+                let Ok(mut next) = next else {
                     return Some(Err(next.err().unwrap()));
                 };
 
                 if PREFIX_OPS.contains(&c.to_string().as_str()) {
-                    return Some(Ok(AstNode::PrefixOp(c.to_string(), Rc::from(next))));
+                    c.to_string();
+
+                    Indirection::from_mut(&mut next);
                 } else if c == '(' {
                     return match self.expect_char(&')', true) {
                         Err(e) => Some(Err(e)),
                         Ok(_) => self.parse_call_expr(next),
                     };
+                } else {
+                    return Some(Err(ParseError::InvalidToken(Token::Char(c, line_info))));
                 }
 
-                Some(Err(ParseError::InvalidToken(Token::Char(c, line_info))))
+                next
             }
 
-            Token::String(s, _) => Some(Ok(AstNode::StringLiteral(s))),
-            Token::Ident(i, _) => if i == "true".to_string() || i == "false".to_string() {
-                Some(Ok(AstNode::BooleanLiteral(i == "true")))
-            } else if i.to_lowercase() == "null" || i == "nil" {
-                Some(Ok(AstNode::NullLiteral))
-            } else {
-                self.parse_call_expr(AstNode::Identifier(i))
-            },
-            Token::Number(n, _) => Some(Ok(AstNode::NumberLiteral(n))),
+            Token::String(s, _) => AstNode::StringLiteral(s),
+            Token::Ident(i, _) => {
+                if i == *"true" || i == *"false" {
+                    AstNode::BooleanLiteral(i == "true")
+                } else if i.to_lowercase() == "null" || i == "nil" {
+                    AstNode::NullLiteral
+                } else {
+                    match self.parse_call_expr(AstNode::Identifier(i))? {
+                        Ok(node) => node,
+                        Err(e) => return Some(Err(e)),
+                    }
+                }
+            }
+            Token::Number(n, _) => AstNode::NumberLiteral(n),
             Token::Debug(_) => unreachable!("How on earth did a debug token get lexed???"),
+        };
+
+        if self.expect_chars(&"[", true).is_ok() {
+            let Some(Ok(Token::Number(idx, ..))) = self.lexer.next_token() else {
+                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                    "INDEX".to_string(),
+                ))));
+            };
+
+            left = AstNode::IdxAccess(Indirection::new(left), idx as usize);
+
+            match self.expect_chars(&"]", true) {
+                Ok(_) => (),
+                Err(e) => return Some(Err(e)),
+            }
         }
+
+        Some(Ok(left))
     }
 
     pub fn parse_call_expr(&mut self, caller: AstNode) -> Option<Result<AstNode, ParseError>> {
         match caller {
-            AstNode::Identifier(_) | AstNode::MemberExpr(_) => if let Ok(_) = self.expect_chars(&"(", true) {
-                println!("[PEEK] {:?}", self.lexer.peek_next_token());
+            AstNode::Identifier(_) | AstNode::MemberExpr(_) => {
+                if let Ok(_) = self.expect_chars(&"(", true) {
+                    if let Some(Ok(Token::Char(c, _))) = self.lexer.peek_next_token() {
+                        if c == ')' {
+                            self.lexer.next_token();
 
-                if let Some(Ok(Token::Char(c, _))) = self.lexer.peek_next_token() {
-                    if c == ')' {
-                        self.lexer.next_token();
-
-                        return Some(Ok(AstNode::CallExpr {
-                            callee: Rc::from(caller),
-                            args: Box::from([]),
-                        }))
+                            return Some(Ok(AstNode::CallExpr {
+                                callee: Rc::from(caller),
+                                args: Box::from([]),
+                            }));
+                        }
                     }
-                }
 
-                let args = match self.parse_list(None) {
-                    Ok(args) => args,
-                    Err(e) => return Some(Err(e)),
-                };
+                    let args = match self.parse_list(None) {
+                        Ok(args) => args,
+                        Err(e) => return Some(Err(e)),
+                    };
 
-                match self.expect_chars(&")", true) {
-                    Ok(_) => Some(Ok(AstNode::CallExpr {
-                        callee: Rc::from(caller),
-                        args: args.into_boxed_slice(),
-                    })),
-                    Err(e) => Some(Err(e)),
+                    match self.expect_chars(&")", true) {
+                        Ok(_) => Some(Ok(AstNode::CallExpr {
+                            callee: Rc::from(caller),
+                            args: args.into_boxed_slice(),
+                        })),
+                        Err(e) => Some(Err(e)),
+                    }
+                } else {
+                    Some(Ok(caller))
                 }
-            } else {
-                Some(Ok(caller))
-            },
-            _ => Some(Err(ParseError::Forbidden("Cannot call non-callable values.".to_string()))),
+            }
+            _ => Some(Ok(caller)),
         }
     }
 
@@ -512,7 +707,11 @@ impl StreamedParser {
                         ))
                     }
                     Some(Err(e)) => return Err(ParseError::LexError(e)),
-                    None => return Err(ParseError::UnexpectedEOF(Token::Debug("PATH_SEG".to_string()))),
+                    None => {
+                        return Err(ParseError::UnexpectedEOF(Token::Debug(
+                            "PATH_SEG".to_string(),
+                        )))
+                    }
                 });
             };
 
@@ -557,7 +756,11 @@ impl StreamedParser {
                         ))
                     }
                     Some(Err(e)) => return Err(ParseError::LexError(e)),
-                    None => return Err(ParseError::UnexpectedEOF(Token::Debug("SEGMENT".to_string()))),
+                    None => {
+                        return Err(ParseError::UnexpectedEOF(Token::Debug(
+                            "SEGMENT".to_string(),
+                        )))
+                    }
                 });
             };
 
@@ -639,7 +842,9 @@ impl StreamedParser {
             self.lexer.next_token().unwrap().unwrap();
 
             let Some(right) = self.parse_exponential_expr() else {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug("EXPRESSION".to_string()))));
+                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                    "EXPRESSION".to_string(),
+                ))));
             };
 
             match right {
@@ -677,7 +882,9 @@ impl StreamedParser {
             self.lexer.next_token().unwrap().unwrap();
 
             let Some(right) = self.parse_multiplicative_expr() else {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug("EXPRESSION".to_string()))));
+                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                    "EXPRESSION".to_string(),
+                ))));
             };
 
             match right {
@@ -714,7 +921,9 @@ impl StreamedParser {
             self.lexer.next_token().unwrap().unwrap();
 
             let Some(right) = self.parse_additive_expr() else {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug("EXPRESSION".to_string()))));
+                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                    "EXPRESSION".to_string(),
+                ))));
             };
 
             match right {
@@ -737,7 +946,9 @@ impl StreamedParser {
 
         if let Ok(op) = self.expect_chars(&"==", true) {
             let Some(right) = self.parse_comparative_expr() else {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug("EXPRESSION".to_string()))));
+                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                    "EXPRESSION".to_string(),
+                ))));
             };
 
             match right {
@@ -749,7 +960,9 @@ impl StreamedParser {
             }
         } else if let Ok(op) = self.expect_chars(&"!=", true) {
             let Some(right) = self.parse_comparative_expr() else {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug("EXPRESSION".to_string()))));
+                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                    "EXPRESSION".to_string(),
+                ))));
             };
 
             match right {
@@ -761,7 +974,9 @@ impl StreamedParser {
             }
         } else if let Ok(op) = self.expect_chars(&"||", true) {
             let Some(right) = self.parse_comparative_expr() else {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug("EXPRESSION".to_string()))));
+                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                    "EXPRESSION".to_string(),
+                ))));
             };
 
             match right {
@@ -773,7 +988,9 @@ impl StreamedParser {
             }
         } else if let Ok(op) = self.expect_chars(&"&&", true) {
             let Some(right) = self.parse_comparative_expr() else {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug("EXPRESSION".to_string()))));
+                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                    "EXPRESSION".to_string(),
+                ))));
             };
 
             match right {
@@ -797,7 +1014,11 @@ impl StreamedParser {
         };
 
         let name = match self.lexer.next_token() {
-            None => return Some(Err(ParseError::UnexpectedEOF(Token::Debug("PATH".to_string())))),
+            None => {
+                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                    "PATH".to_string(),
+                ))))
+            }
             Some(Err(e)) => return Some(Err(ParseError::LexError(e))),
             Some(Ok(Token::Ident(name, _))) => name,
             Some(Ok(tk)) => {
@@ -811,7 +1032,11 @@ impl StreamedParser {
         self.expect_chars(&"->", true).unwrap();
 
         let value = match self.next_ast_node() {
-            None => return Some(Err(ParseError::UnexpectedEOF(Token::Debug("EXPRESSION".to_string())))),
+            None => {
+                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                    "EXPRESSION".to_string(),
+                ))))
+            }
             Some(Ok(node)) => node,
             Some(Err(e)) => return Some(Err(e)),
         };
@@ -823,17 +1048,21 @@ impl StreamedParser {
         }))
     }
 
-    pub fn parse_use_stmt(&mut self) -> Option<Result<AstNode, ParseError>> {
-        self.expect_ident(&"use", true).unwrap();
+    pub fn parse_include_stmt(&mut self) -> Option<Result<AstNode, ParseError>> {
+        self.expect_ident(&"include", true).unwrap();
 
         let path = match self.parse_path_expr(None) {
             Some(Ok(AstNode::Path(path))) => path,
             Some(Ok(_)) => unreachable!(),
             Some(Err(e)) => return Some(Err(e)),
-            None => return Some(Err(ParseError::UnexpectedEOF(Token::Debug("PATH".to_string())))),
+            None => {
+                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                    "PATH".to_string(),
+                ))))
+            }
         };
 
-        Some(Ok(AstNode::UseStmt(Rc::from(AstNode::Path(path)))))
+        Some(Ok(AstNode::IncludeStmt(Box::from(AstNode::Path(path)))))
     }
 
     pub fn parse_if_expr(&mut self) -> Option<Result<AstNode, ParseError>> {
@@ -842,24 +1071,137 @@ impl StreamedParser {
         let cond = match self.parse_comparative_expr() {
             Some(Ok(cond)) => cond,
             Some(Err(e)) => return Some(Err(e)),
-            None => return Some(Err(ParseError::UnexpectedEOF(Token::Debug("EXPRESSION".to_string())))),
+            None => {
+                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                    "EXPRESSION".to_string(),
+                ))))
+            }
         };
 
-        Some(Ok(AstNode::IfExpr {
-            cond: Rc::from(cond),
-            block: match self.parse_block_expr() {
+        let main_body = match self.parse_block_expr() {
+            Ok(block) => block,
+            Err(e) => return Some(Err(e)),
+        };
+
+        if self.expect_ident(&"else", true).is_ok() {
+            let else_clause = match self.parse_block_expr() {
                 Ok(block) => block,
                 Err(e) => return Some(Err(e)),
-            },
+            };
+
+            return Some(Ok(AstNode::IfExpr {
+                cond: Rc::from(cond),
+                block: main_body,
+                else_clause,
+            }));
+        }
+
+        Some(Ok(AstNode::IfStmt {
+            cond: Rc::from(cond),
+            block: main_body,
         }))
+    }
+
+    pub fn parse_fn_expr(&mut self) -> Option<Result<AstNode, ParseError>> {
+        self.expect_ident(&"fn", true).unwrap();
+
+        let name = match self.lexer.next_token() {
+            Some(Ok(Token::Ident(name, ..))) => name,
+            Some(Ok(tk)) => return Some(Err(ParseError::InvalidToken(tk))),
+            Some(Err(e)) => return Some(Err(ParseError::LexError(e))),
+            None => {
+                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                    "FN_NAME".to_string(),
+                ))))
+            }
+        };
+
+        let args = match self.parse_args_list() {
+            Ok(args) => args.into_boxed_slice(),
+            Err(e) => return Some(Err(e)),
+        };
+
+        match self.expect_chars(&"->", true) {
+            Ok(_) => (),
+            Err(e) => return Some(Err(e)),
+        };
+
+        let ret_type = match self.parse_type() {
+            Ok(t) => t,
+            Err(e) => return Some(Err(e)),
+        };
+
+        let code = match self.parse_block_expr() {
+            Ok(block) => block,
+            Err(e) => return Some(Err(e)),
+        };
+
+        Some(Ok(AstNode::FnExpr {
+            name,
+            ret_type,
+            args,
+            code,
+        }))
+    }
+
+    pub fn parse_extern_fn_stmt(&mut self) -> Option<Result<AstNode, ParseError>> {
+        self.expect_ident(&"extern", true).unwrap();
+        self.expect_ident(&"fn", true).unwrap();
+
+        let name = match self.lexer.next_token() {
+            Some(Ok(Token::Ident(name, ..))) => name,
+            Some(Ok(tk)) => return Some(Err(ParseError::InvalidToken(tk))),
+            Some(Err(e)) => return Some(Err(ParseError::LexError(e))),
+            None => {
+                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                    "FN_NAME".to_string(),
+                ))))
+            }
+        };
+
+        let args = match self.parse_args_list() {
+            Ok(args) => args.into_boxed_slice(),
+            Err(e) => return Some(Err(e)),
+        };
+
+        match self.expect_chars(&"->", true) {
+            Ok(_) => (),
+            Err(e) => return Some(Err(e)),
+        };
+
+        let ret_type = match self.parse_type() {
+            Ok(t) => t,
+            Err(e) => return Some(Err(e)),
+        };
+
+        Some(Ok(AstNode::ExternFn {
+            name,
+            ret_type,
+            args,
+        }))
+    }
+
+    pub fn parse_return_stmt(&mut self) -> Option<Result<AstNode, ParseError>> {
+        self.expect_ident(&"return", true).unwrap();
+
+        let value = match self.next_ast_node() {
+            Some(Ok(node)) => node,
+            Some(Err(e)) => return Some(Err(e)),
+            None => return None,
+        };
+
+        Some(Ok(AstNode::ReturnStmt(Indirection::new(value))))
     }
 
     pub fn next_ast_node(&mut self) -> Option<Result<AstNode, ParseError>> {
         if let Some(Ok(Token::Ident(ident, _))) = self.lexer.peek_next_token() {
             match ident.as_str() {
                 "def" => self.parse_def_stmt(),
-                "use" => self.parse_use_stmt(),
+                "include" => self.parse_include_stmt(),
                 "if" => self.parse_if_expr(),
+                "fn" => self.parse_fn_expr(),
+                "extern" => self.parse_extern_fn_stmt(),
+                "return" => self.parse_return_stmt(),
                 _ => self.parse_comparative_expr(),
             }
         } else {
@@ -868,23 +1210,26 @@ impl StreamedParser {
     }
 
     pub fn parse_as_program(&mut self) -> OneOf<AstNode, Box<[ParseError]>> {
-        let errors = self.flat_map(|node| if let Err(e) = node {
-            [Some(e)]
-        } else {
-            [None]
-        }).flatten().collect::<Vec<ParseError>>();
+        let errors = self
+            .flat_map(|node| if let Err(e) = node { [Some(e)] } else { [None] })
+            .flatten()
+            .collect::<Vec<ParseError>>();
 
         if !errors.is_empty() {
-            return OneOf::Second(errors.into_boxed_slice())
+            return OneOf::Second(errors.into_boxed_slice());
         }
 
-        let ok_nodes = self.flat_map(|node| if let Ok(node) = node {
-            [Some(node)]
-        } else {
-            [None]
-        }).filter(|r| r.is_some()).map(|r| {
-            if let Some(r) = r { r } else { unreachable!() }
-        }).collect::<Vec<AstNode>>();
+        let ok_nodes = self
+            .flat_map(|node| {
+                if let Ok(node) = node {
+                    [Some(node)]
+                } else {
+                    [None]
+                }
+            })
+            .filter(|r| r.is_some())
+            .map(|r| if let Some(r) = r { r } else { unreachable!() })
+            .collect::<Vec<AstNode>>();
 
         OneOf::First(AstNode::Program(ok_nodes.into_boxed_slice()))
     }

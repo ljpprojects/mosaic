@@ -1,15 +1,16 @@
-
 #![feature(ptr_as_ref_unchecked)]
 #![feature(test)]
+#![feature(f128)]
+#![feature(let_chains)]
+#![feature(unsized_locals)]
 #![allow(invalid_reference_casting)]
+#![allow(incomplete_features)]
 
 extern crate test;
 
-use crate::file::File;
-use crate::lexer::StreamedLexer;
-use crate::parser::StreamedParser;
-use crate::reader::CharReader;
+use crate::compiler::linker::Linker;
 
+pub mod compiler;
 pub mod file;
 pub mod lexer;
 pub mod parser;
@@ -19,17 +20,10 @@ pub mod tokens;
 pub mod utils;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let reader = CharReader::new(
-        File::new("/Users/geez/RustroverProjects/mosaic/examples/bench.mosaic".to_string())
-            .unwrap(),
-    );
+    let f_name = "/Users/geez/RustroverProjects/mosaic/examples/bench.mosaic".to_string();
+    let linker = Linker::new(f_name.parse().unwrap(), "bench");
 
-    let lexer = StreamedLexer::new(reader);
-    let mut parser = StreamedParser::new(lexer);
-
-    while let Some(Ok(node)) = parser.next_ast_node() {
-        println!("{}", &node);
-    }
+    linker.link().unwrap();
 
     Ok(())
 }

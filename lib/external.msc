@@ -1,0 +1,5 @@
+extern fn puts(*i8 s) -> null
+
+fn print(*i8 s) -> null {
+    return puts(s)
+}

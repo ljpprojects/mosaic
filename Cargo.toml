@@ -3,8 +3,8 @@ name = "mosaic"
 version = "0.1.0"
 edition = "2021"
 
-[workspace]
-members = ["src/BEVM"]
+[profile.dev]
+incremental = true
 
 [profile.bench]
 lto = "fat"
@@ -23,5 +23,5 @@ debug-assertions = false
 debug = "line-tables-only"
 
 [dependencies]
-serde = { version = "1.0.215", features = ["derive"] }
-bincode = "2.0.0-rc.3"
+qbe = "2.2.0"
+either = "1.13.0"

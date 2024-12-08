@@ -54,7 +54,7 @@ impl<A, B> OneOf<A, B> {
             OneOf::Second(b) => b,
         }
     }
-    
+
     pub fn into_first(self) -> Option<A> {
         match self {
             OneOf::First(a) => Some(a),
@@ -91,15 +91,12 @@ pub struct MutRc<T> {
 
 struct MutRcInner<T> {
     rc: usize,
-    data: T
+    data: T,
 }
 
 impl<T> MutRc<T> {
     pub fn new(data: T) -> MutRc<T> {
-        let boxed = Box::new(MutRcInner {
-            rc: 1usize,
-            data,
-        });
+        let boxed = Box::new(MutRcInner { rc: 1usize, data });
 
         MutRc {
             ptr: NonNull::new(Box::into_raw(boxed)).unwrap(),
@@ -109,7 +106,7 @@ impl<T> MutRc<T> {
 
     pub fn into_mut<'a>(mut self) -> &'a mut T {
         let inner = unsafe { self.ptr.as_mut() };
-        
+
         &mut inner.data
     }
 
@@ -128,7 +125,7 @@ impl<T> MutRc<T> {
 
 impl<T> Deref for MutRc<T> {
     type Target = T;
-    
+
     fn deref(&self) -> &Self::Target {
         self.as_ref()
     }
@@ -142,13 +139,17 @@ impl<T> DerefMut for MutRc<T> {
 
 impl<T> Clone for MutRc<T> {
     fn clone(&self) -> Self {
-        let inner = unsafe { (self as *const Self as *mut Self).as_mut().unwrap().ptr.as_mut() };
+        let inner = unsafe {
+            (self as *const Self as *mut Self)
+                .as_mut()
+                .unwrap()
+                .ptr
+                .as_mut()
+        };
 
         if inner.rc >= isize::MAX as usize {
             std::process::abort();
         }
-
-
 
         Self {
             ptr: self.ptr,
@@ -157,32 +158,45 @@ impl<T> Clone for MutRc<T> {
     }
 }
 
+#[derive(Debug, Copy)]
 pub struct Indirection<T: ?Sized> {
     pub ptr: NonNull<T>,
-    phantom: PhantomData<T>
+    phantom: PhantomData<T>,
 }
 
 impl<T> Indirection<T> {
     pub fn new(data: T) -> Self {
         Indirection {
             ptr: NonNull::new(Box::into_raw(Box::new(data))).unwrap(),
-            phantom: PhantomData
+            phantom: PhantomData,
         }
+    }
+
+    pub fn map<U, F: FnOnce(T) -> U>(self, f: F) -> Indirection<U> {
+        let v = f(unsafe { self.ptr.read() });
+
+        Indirection::new(v)
+    }
+
+    pub fn map_result<U, E, F: FnOnce(T) -> Result<U, E>>(self, f: F) -> Result<Indirection<U>, E> {
+        let v = f(unsafe { self.ptr.read() })?;
+
+        Ok(Indirection::new(v))
     }
 }
 
-impl <T: ?Sized> Indirection<T> {
+impl<T: ?Sized> Indirection<T> {
     pub fn from_mut(r: &mut T) -> Self {
         Indirection {
             ptr: NonNull::new(r as *mut T).unwrap(),
-            phantom: PhantomData
+            phantom: PhantomData,
         }
     }
 }
 
 impl<T: ?Sized> Deref for Indirection<T> {
     type Target = T;
-    
+
     fn deref(&self) -> &Self::Target {
         unsafe { self.ptr.as_ref() }
     }

@@ -81,7 +81,7 @@ pub enum Token {
     String(String, LineInfo),
     Ident(String, LineInfo),
     Number(f64, LineInfo),
-    Debug(String)
+    Debug(String),
 }
 
 impl Token {
