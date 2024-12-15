@@ -1,7 +1,9 @@
+use std::alloc::{dealloc, Layout};
 use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
+use crate::parser::ParseType;
 
 pub enum OneOf<A, B> {
     First(A),
@@ -158,43 +160,54 @@ impl<T> Clone for MutRc<T> {
     }
 }
 
-#[derive(Debug, Copy)]
-pub struct Indirection<T: ?Sized> {
+pub struct Indirection<T: Sized> {
     pub ptr: NonNull<T>,
     phantom: PhantomData<T>,
 }
 
 impl<T> Indirection<T> {
-    pub fn new(data: T) -> Self {
-        Indirection {
-            ptr: NonNull::new(Box::into_raw(Box::new(data))).unwrap(),
-            phantom: PhantomData,
+    pub fn get(&self) -> T {
+        unsafe { 
+            self.ptr.read()
         }
     }
+}
 
-    pub fn map<U, F: FnOnce(T) -> U>(self, f: F) -> Indirection<U> {
-        let v = f(unsafe { self.ptr.read() });
-
-        Indirection::new(v)
+impl<T> Indirection<T> {
+    pub fn new(data: T) -> Self {
+        let layout = Layout::new::<T>();
+        let ptr = unsafe { std::alloc::alloc(layout) as *mut T };
+        
+        unsafe { ptr.write(data) };
+        
+        Indirection {
+            ptr: NonNull::new(ptr).unwrap(),
+            phantom: PhantomData,
+        }
     }
 
     pub fn map_result<U, E, F: FnOnce(T) -> Result<U, E>>(self, f: F) -> Result<Indirection<U>, E> {
-        let v = f(unsafe { self.ptr.read() })?;
+        let arg = unsafe { self.ptr.read() };
 
-        Ok(Indirection::new(v))
-    }
-}
+        let layout = Layout::new::<U>();
+        let ptr = unsafe { std::alloc::alloc(layout) as *mut U };
+        
+        assert!(!ptr.is_null());
+        
+        // write to the new pointer
+        unsafe { ptr.write(f(arg)?) };
+        
+        // deallocate old pointer
+        unsafe { dealloc(self.ptr.as_ptr() as *mut u8, Layout::new::<T>()) };
 
-impl<T: ?Sized> Indirection<T> {
-    pub fn from_mut(r: &mut T) -> Self {
-        Indirection {
-            ptr: NonNull::new(r as *mut T).unwrap(),
+        Ok(Indirection {
+            ptr: NonNull::new(ptr).unwrap(),
             phantom: PhantomData,
-        }
+        })
     }
 }
 
-impl<T: ?Sized> Deref for Indirection<T> {
+impl<T: Sized> Deref for Indirection<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -202,7 +215,7 @@ impl<T: ?Sized> Deref for Indirection<T> {
     }
 }
 
-impl<T: ?Sized> DerefMut for Indirection<T> {
+impl<T: Sized> DerefMut for Indirection<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { self.ptr.as_mut() }
     }
@@ -214,11 +227,50 @@ impl<T: Display> Display for Indirection<T> {
     }
 }
 
-impl<T: ?Sized> Clone for Indirection<T> {
+impl<T: Debug> Debug for Indirection<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", (*self).deref())
+    }
+}
+
+impl<T: Sized> Clone for Indirection<T> {
     fn clone(&self) -> Self {
         Indirection {
             ptr: self.ptr.clone(),
             phantom: PhantomData,
         }
+    }
+}
+
+impl<T: Sized> Drop for Indirection<T> {
+    fn drop(&mut self) {
+        unsafe {
+            dealloc(self.ptr.as_ptr() as *mut u8, Layout::new::<T>())
+        }
+    }
+}
+
+impl<T: Display> From<T> for Indirection<T> {
+    fn from(t: T) -> Self {
+        Indirection::new(t)
+    }
+}
+
+#[must_use="This function should be used sparingly."]
+pub struct UseSparingly<T>(T);
+
+impl<T> UseSparingly<T> {
+    pub(crate) fn new(t: T) -> UseSparingly<T> {
+        UseSparingly(t)
+    }
+    
+    pub fn acknowledge(self) -> T {
+        self.0
+    }
+}
+
+impl<T> From<T> for UseSparingly<T> {
+    fn from(t: T) -> Self {
+        UseSparingly(t)
     }
 }

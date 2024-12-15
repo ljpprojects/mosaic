@@ -1,12 +1,10 @@
-include std::io
-
-# required for comparing strings in Mosaic
-include std::string
+fn nothing<T>(T foo) -> null {
+	return null
+}
 
 fn main() -> i32 {
-    def *5[i8] msg -> [65, 66, 67, 68, 69, 0]
+	nothing("hello")
+	nothing("world!")
 
-    printc(msg[0])
-	
 	return 0
 }

@@ -66,6 +66,7 @@ impl Error for LexError {}
 /// Like the CharReader struct, it returns tokens individually, allowing for better performance,
 /// especially for large files.
 #[derive(Debug)]
+#[derive(PartialEq)]
 pub struct StreamedLexer {
     pub(crate) reader: CharReader,
     pos: u64,

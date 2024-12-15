@@ -2,9 +2,14 @@
 name = "mosaic"
 version = "0.1.0"
 edition = "2021"
+repository = "https://github.com/ljp-projects/mosaic"
 
 [profile.dev]
 incremental = true
+panic = "unwind"
+
+[profile.test]
+panic = "unwind"
 
 [profile.bench]
 lto = "fat"
@@ -13,6 +18,7 @@ opt-level = 3
 incremental = true
 debug-assertions = false
 debug = "line-tables-only"
+panic = "unwind"
 
 [profile.release]
 lto = "fat"
@@ -21,7 +27,7 @@ opt-level = 3
 incremental = true
 debug-assertions = false
 debug = "line-tables-only"
+panic = "unwind"
 
 [dependencies]
 qbe = "2.2.0"
-either = "1.13.0"

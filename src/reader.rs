@@ -5,9 +5,9 @@ use crate::states::{ReaderState, WithState};
 use std::os::unix::fs::FileExt;
 use std::rc::Rc;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct CharReader {
-    reader: File<String>,
+    pub(crate) reader: File<String>,
     pub pos: u64,
 }
 

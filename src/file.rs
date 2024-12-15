@@ -4,13 +4,19 @@ use std::path::Path;
 #[derive(Debug)]
 pub struct File<P>
 where
-    P: AsRef<Path> + Clone,
+    P: AsRef<Path> + Clone + PartialEq,
 {
     path: P,
     file: std::fs::File,
 }
 
-impl<P: AsRef<Path> + Clone> File<P> {
+impl<P: AsRef<Path> + Clone + PartialEq> PartialEq for File<P> {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path
+    }
+}
+
+impl<P: AsRef<Path> + Clone + PartialEq> File<P> {
     pub fn new(path: P) -> io::Result<Self> {
         Ok(Self {
             path: path.clone(),
@@ -27,7 +33,7 @@ impl<P: AsRef<Path> + Clone> File<P> {
     }
 }
 
-impl<P: AsRef<Path> + Clone> Clone for File<P> {
+impl<P: AsRef<Path> + Clone + PartialEq> Clone for File<P> {
     fn clone(&self) -> Self {
         Self {
             path: self.path.clone(),
