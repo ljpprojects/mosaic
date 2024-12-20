@@ -1,0 +1,5 @@
+extern fn printf(*i8 s) -> null
+
+fn main() {
+	printf("Hello, World!")
+}

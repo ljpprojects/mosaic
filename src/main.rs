@@ -13,12 +13,11 @@
 extern crate test;
 extern crate core;
 
-use std::fmt::Debug;
-use std::io;
-use std::ptr::addr_of;
-use std::sync::LazyLock;
-use compiler::qbe::linker::QbeLinker;
-use crate::compiler::qbe::QbeGenerator;
+use std::path::PathBuf;
+use cranelift_native;
+use crate::compiler::cranelift::CraneliftGenerator;
+use crate::compiler::cranelift::errors::CraneliftError;
+use crate::compiler::cranelift::linker::Linker;
 use crate::file::File;
 use crate::lexer::StreamedLexer;
 use crate::parser::StreamedParser;
@@ -32,22 +31,30 @@ pub mod reader;
 pub mod states;
 pub mod tokens;
 pub mod utils;
-mod cli;
+pub mod cli;
 
 const F_NAME: &str = "/Users/geez/RustroverProjects/mosaic/examples/bench.mosaic";
 
-static mut GENERATOR: LazyLock<QbeGenerator<'static>, fn() -> QbeGenerator<'static>> = LazyLock::new(|| {
-    let reader = CharReader::new(File::new(F_NAME.to_string()).unwrap());
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /*
+    let reader = CharReader::new(File::new("./examples/hello.msc".to_string()).unwrap());
     let lexer = StreamedLexer::new(reader);
     let parser = StreamedParser::new(lexer);
 
-    QbeGenerator::new(parser, None)
-});
+    let mut cg = CraneliftGenerator::new(parser, cranelift_native::builder()?, "bench".into());
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let linker = QbeLinker::new(F_NAME.parse().unwrap(), "bench");
+    cg.compile(true, None);
+    */
     
-    unsafe { linker.link((addr_of!(GENERATOR) as *const QbeGenerator<'static> as *mut QbeGenerator<'static>).as_mut().unwrap()).unwrap(); }
+    let file = PathBuf::from("test.msc");
+    
+    println!("{}", CraneliftError::UnknownModule(file.clone(), vec!["test".to_string()].into_boxed_slice()));
 
+    println!();
+    println!("{}", CraneliftError::UndefinedVariable(file.clone(), "foo".into()));
+
+    println!();
+    println!("{}", CraneliftError::DualDefinition(file.clone(), "bar".into()));
+    
     Ok(())
 }

@@ -1,14 +1,12 @@
-use std::collections::HashMap;
 use crate::lexer::{LexError, StreamedLexer};
 use crate::states::{ParserState, WithState};
 use crate::tokens::{LineInfo, Token};
 use crate::utils::{Indirection, OneOf};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
-use std::marker::PhantomData;
-use std::mem::SizedTypeProperties;
-use std::ptr::{without_provenance, NonNull};
 use std::rc::Rc;
+use std::str::FromStr;
 use std::string::ToString;
 
 pub const ADDITIVE_OPS: &[&str] = &["+", "-"];
@@ -16,11 +14,36 @@ pub const MULTIPLICATIVE_OPS: &[&str] = &["*", "/", "%"];
 pub const EXPONENTIAL_OPS: &[&str] = &["^"];
 pub const PREFIX_OPS: &[&str] = &["!", "-", "+", "*", "&"];
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Modifier {
     Export,
-    /// the 'context(ctx)' modifier. The type is usually inferred.
-    Context(String, ParseType),
-    
+
+    /// Tell the compiler to automatically free the returned value of a function when
+    /// a 'return' statement is compiled.
+    /// To manually free before a return statement is compiled, use the 'autofree' statement.
+    AutoFree,
+}
+
+#[macro_export]
+macro_rules! modifier {
+    ($s: literal) => {
+        match crate::parser::Modifier::from_str($s) {
+            Err(_) => compile_error!($s),
+            Ok(m) => m,
+        }
+    };
+}
+
+impl FromStr for Modifier {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "export" => Ok(Modifier::Export),
+            "autofree" | "auto_free" => Ok(Modifier::AutoFree),
+            m => Err(format!("Invalid modifier {m}"))
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -97,6 +120,7 @@ impl Display for TypeBound {
 pub enum AstNode {
     // --- EXPRESSIONS --- //
     NumberLiteral(f64),
+    ByteLiteral(u8),
     StringLiteral(String),
     ArrayLiteral(Box<[AstNode]>),
     BooleanLiteral(bool),
@@ -129,9 +153,10 @@ pub enum AstNode {
 
         /// Box<\[(name, type, default)\]>
         args: Box<[(String, ParseType, Option<AstNode>)]>,
-        
+
         type_generics: HashMap<String, Option<TypeBound>>,
         code: ParseBlock,
+        modifiers: Box<[Modifier]>
     },
 
     // --- Statements --- //
@@ -142,7 +167,7 @@ pub enum AstNode {
     },
 
     /// self.0 is always an AstNode::Path
-    IncludeStmt(Box<AstNode>),
+    IncludeStmt(Box<[String]>),
 
     IfStmt {
         cond: Rc<AstNode>,
@@ -203,7 +228,7 @@ impl Display for AstNode {
                 def_type,
                 value,
             } => write!(f, "def {def_type} {name} -> {value}"),
-            AstNode::IncludeStmt(p) => write!(f, "include {p}"),
+            AstNode::IncludeStmt(p) => write!(f, "include {P}", P = p.join("::")),
             AstNode::IfStmt { cond, block } => write!(f, "if ({cond}) {{\n{block}\n}}"),
             AstNode::ExternFn {
                 name,
@@ -219,7 +244,8 @@ impl Display for AstNode {
                     .join("\n")
             ),
             AstNode::ReturnStmt(v) => write!(f, "return {v}"),
-            AstNode::ForInExpr { var, of, block } => write!(f, "for {var} in {of} {{\n{block}\n}}")
+            AstNode::ForInExpr { var, of, block } => write!(f, "for {var} in {of} {{\n{block}\n}}"),
+            AstNode::ByteLiteral(b) => write!(f, "'{C}'", C = *b as char)
         }
     }
 }
@@ -304,12 +330,12 @@ impl Iterator for StreamedParser {
 }
 
 impl StreamedParser {
-    pub fn to_vec(&self) -> Vec<Result<AstNode, ParseError>> {
+    pub fn iter(&self) -> impl Iterator<Item = Result<AstNode, ParseError>> {
         let iter = self.clone().into_iter();
-        
-        iter.collect::<Vec<_>>()
+
+        iter.collect::<Vec<_>>().into_iter()
     }
-    
+
     pub fn new(lexer: StreamedLexer) -> Self {
         Self { lexer }
     }
@@ -417,7 +443,7 @@ impl StreamedParser {
     }
 
     fn parse_type(&mut self) -> Result<ParseType, ParseError> {
-       if self.expect_chars(&"*", true).is_ok() {
+        if self.expect_chars(&"*", true).is_ok() {
             // parse terminated slice
             if self.expect_chars(&":", true).is_ok() {
                 let term = match self.lexer.next_token() {
@@ -524,36 +550,36 @@ impl StreamedParser {
 
         Ok(items)
     }
-    
+
     pub fn parse_tg_bound(&mut self) -> Result<TypeBound, ParseError> {
         let mut left = match self.lexer.next_token() {
             None => return Err(ParseError::UnexpectedEOF(Token::Debug("TG_BOUND".into()))),
             Some(Err(e)) => return Err(ParseError::LexError(e)),
             Some(Ok(Token::Ident(i, _))) if i == "iter".to_string() => {
                 self.expect_chars(&"[", true)?;
-                
+
                 let iterate_over = self.parse_type()?;
-                
+
                 self.expect_chars(&"]", true)?;
-                
+
                 TypeBound::Iterator(Indirection::new(iterate_over))
             },
             Some(Ok(Token::Char(c, _))) if c == '!' => TypeBound::Not(Indirection::new(self.parse_tg_bound()?)),
             Some(Ok(t)) => return Err(ParseError::InvalidToken(t))
         };
-        
+
         while self.expect_chars(&"+", true).is_ok() {
             let right = self.parse_tg_bound()?;
-            
+
             match right {
                 TypeBound::Compound(b) => left = TypeBound::Compound([&[left], b.as_ref()].concat().into_boxed_slice()),
                 b => left = b
             }
         }
-        
+
         Ok(left)
     }
-    
+
     pub fn parse_tg_list(&mut self) -> Result<HashMap<String, Option<TypeBound>>, ParseError> {
         self.expect_chars(&"<", true)?;
 
@@ -583,7 +609,7 @@ impl StreamedParser {
                     )))
                 }
             };
-            
+
             if self.expect_chars(&":", true).is_ok() {
                 args.insert(name, Some(self.parse_tg_bound()?));
             } else {
@@ -698,6 +724,10 @@ impl StreamedParser {
         };
 
         let mut left = match token {
+            Token::Byte(b, _) => {
+                AstNode::ByteLiteral(b)
+            }
+
             Token::Char(c, line_info) => {
                 if c == '[' {
                     return match self.parse_array_expr()? {
@@ -764,7 +794,7 @@ impl StreamedParser {
             }
         }
 
-        Some(Ok(left.clone()))
+        Some(Ok(left))
     }
 
     pub fn parse_call_expr(&mut self, caller: AstNode) -> Option<Result<AstNode, ParseError>> {
@@ -1174,7 +1204,7 @@ impl StreamedParser {
             }
         };
 
-        Some(Ok(AstNode::IncludeStmt(Box::from(AstNode::Path(path)))))
+        Some(Ok(AstNode::IncludeStmt(path)))
     }
 
     pub fn parse_if_expr(&mut self) -> Option<Result<AstNode, ParseError>> {
@@ -1227,7 +1257,7 @@ impl StreamedParser {
                 ))))
             }
         };
-        
+
         let tg_args = if self.expect_chars(&"<", false).is_ok() {
             match self.parse_tg_list() {
                 Ok(v) => v,
@@ -1241,6 +1271,18 @@ impl StreamedParser {
             Ok(args) => args.into_boxed_slice(),
             Err(e) => return Some(Err(e)),
         };
+
+        let mut modifiers = vec![];
+
+        while let Some(Ok(Token::Ident(m, _))) = self.lexer.peek_next_token() {
+            let Ok(m) = Modifier::from_str(&*m) else {
+                break
+            };
+
+            modifiers.push(m);
+
+            self.lexer.next_token().unwrap().unwrap();
+        }
 
         match self.expect_chars(&"->", true) {
             Ok(_) => (),
@@ -1262,7 +1304,8 @@ impl StreamedParser {
             ret_type,
             args,
             code,
-            type_generics: tg_args
+            type_generics: tg_args,
+            modifiers: modifiers.into_boxed_slice(),
         }))
     }
 
@@ -1314,10 +1357,10 @@ impl StreamedParser {
 
         Some(Ok(AstNode::ReturnStmt(Indirection::new(value))))
     }
-    
+
     pub fn parse_for_in_expr(&mut self) -> Option<Result<AstNode, ParseError>> {
         self.expect_ident(&"for", true).unwrap();
-        
+
         let var = match self.lexer.next_token() {
             Some(Ok(Token::Ident(v, _))) => v,
             Some(Ok(tk)) => return Some(Err(ParseError::InvalidToken(tk))),
@@ -1326,21 +1369,17 @@ impl StreamedParser {
         };
 
         self.expect_ident(&"in", true).unwrap();
-        
+
         let of = match self.next_ast_node()? {
             Err(e) => return Some(Err(e)),
             Ok(n) => n
         };
-        
-        println!("{var} in {of}");
-        
+
         let block = match self.parse_block_expr() {
             Ok(b) => b,
             Err(e) => return Some(Err(e))
         };
-        
-        println!("{block}");
-        
+
         Some(Ok(AstNode::ForInExpr {
             var,
             of: Indirection::new(of),

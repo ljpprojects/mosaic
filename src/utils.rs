@@ -3,6 +3,7 @@ use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
+use std::rc::Rc;
 use crate::parser::ParseType;
 
 pub enum OneOf<A, B> {
@@ -160,99 +161,17 @@ impl<T> Clone for MutRc<T> {
     }
 }
 
-pub struct Indirection<T: Sized> {
-    pub ptr: NonNull<T>,
-    phantom: PhantomData<T>,
+pub trait IndirectionTrait<T> {
+    fn map<U, F: FnOnce(&T) -> U>(self, f: F) -> Indirection<U>;
 }
 
-impl<T> Indirection<T> {
-    pub fn get(&self) -> T {
-        unsafe { 
-            self.ptr.read()
-        }
-    }
-}
+pub type Indirection<T> = Rc<T>;
 
-impl<T> Indirection<T> {
-    pub fn new(data: T) -> Self {
-        let layout = Layout::new::<T>();
-        let ptr = unsafe { std::alloc::alloc(layout) as *mut T };
+impl<T> IndirectionTrait<T> for Indirection<T> {
+    fn map<U, F: FnOnce(&T) -> U>(self, f: F) -> Indirection<U> {
+        let res = f(self.as_ref());
         
-        unsafe { ptr.write(data) };
-        
-        Indirection {
-            ptr: NonNull::new(ptr).unwrap(),
-            phantom: PhantomData,
-        }
-    }
-
-    pub fn map_result<U, E, F: FnOnce(T) -> Result<U, E>>(self, f: F) -> Result<Indirection<U>, E> {
-        let arg = unsafe { self.ptr.read() };
-
-        let layout = Layout::new::<U>();
-        let ptr = unsafe { std::alloc::alloc(layout) as *mut U };
-        
-        assert!(!ptr.is_null());
-        
-        // write to the new pointer
-        unsafe { ptr.write(f(arg)?) };
-        
-        // deallocate old pointer
-        unsafe { dealloc(self.ptr.as_ptr() as *mut u8, Layout::new::<T>()) };
-
-        Ok(Indirection {
-            ptr: NonNull::new(ptr).unwrap(),
-            phantom: PhantomData,
-        })
-    }
-}
-
-impl<T: Sized> Deref for Indirection<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { self.ptr.as_ref() }
-    }
-}
-
-impl<T: Sized> DerefMut for Indirection<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { self.ptr.as_mut() }
-    }
-}
-
-impl<T: Display> Display for Indirection<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", (*self).deref())
-    }
-}
-
-impl<T: Debug> Debug for Indirection<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", (*self).deref())
-    }
-}
-
-impl<T: Sized> Clone for Indirection<T> {
-    fn clone(&self) -> Self {
-        Indirection {
-            ptr: self.ptr.clone(),
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<T: Sized> Drop for Indirection<T> {
-    fn drop(&mut self) {
-        unsafe {
-            dealloc(self.ptr.as_ptr() as *mut u8, Layout::new::<T>())
-        }
-    }
-}
-
-impl<T: Display> From<T> for Indirection<T> {
-    fn from(t: T) -> Self {
-        Indirection::new(t)
+        Indirection::new(res)
     }
 }
 

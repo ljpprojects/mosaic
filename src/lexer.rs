@@ -3,7 +3,7 @@
 use crate::reader::CharReader;
 use crate::states::{LexerState, WithState};
 use crate::tokens::{LineInfo, Token};
-use std::cell::{Cell, RefCell, UnsafeCell};
+use std::cell::{Cell, RefCell};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::num::NonZeroUsize;
@@ -161,7 +161,7 @@ impl StreamedLexer {
     /// This gets the next token from the given CharReader
     /// This will return None when EOF is encountered.
     pub fn next_token(&mut self) -> Option<Result<Token, LexError>> {
-        let mut buffer = UnsafeCell::new(String::new());
+        let mut buffer = RefCell::new(String::new());
 
         let reader = RefCell::from(&mut self.reader);
         let linec = Cell::from_mut(&mut self.current_line);
@@ -257,6 +257,23 @@ impl StreamedLexer {
                     string,
                     LineInfo::new(beginc, endc, beginl, endl),
                 )))
+            }
+            
+            '\'' => {
+                let beginc = Rc::from(NonZeroUsize::new(columnc.get()).unwrap());
+                let beginl = Rc::from(NonZeroUsize::new(linec.get()).unwrap());
+                
+                let c = next_char(true).unwrap() as u8;
+                
+                let linfo = LineInfo::new_one_char(beginc, beginl);
+                
+                if peek_char().unwrap() != '\'' {
+                    return Some(Err(LexError::InvalidChar(peek_char().unwrap(), linfo)));
+                }
+                
+                next_char(true);
+
+                Some(Ok(Token::Byte(c, linfo)))
             }
 
             _ => {
