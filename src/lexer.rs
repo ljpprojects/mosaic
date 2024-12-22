@@ -32,7 +32,7 @@ pub fn is_mosaic_ident_part(c: &char) -> bool {
     c.is_alphanumeric() || ['_', '$'].contains(c)
 }
 
-type LexError = Box<CompilationError>;
+type LexError = CompilationError;
 
 /// This is the lexer for the Mosaic programming language.
 /// Like the CharReader struct, it returns tokens individually, allowing for better performance,
@@ -187,7 +187,7 @@ impl StreamedLexer {
 
             '\n' => {
                 if let None = linec.get().checked_add(1) {
-                    return Some(Err(Box::new(CompilationError::TooManyLines(self.file.clone()))));
+                    return Some(Err(CompilationError::TooManyLines(self.file.clone())));
                 } else {
                     linec.set(linec.get() + 1);
                 }
@@ -211,9 +211,9 @@ impl StreamedLexer {
 
                 loop {
                     let Some(next_c) = next_char(true) else {
-                        return Some(Err(Box::new(CompilationError::UnfinishedString(self.file.clone(), LineInfo::new_one_char(
+                        return Some(Err(CompilationError::UnfinishedString(self.file.clone(), LineInfo::new_one_char(
                             beginc, beginl,
-                        )))));
+                        ))));
                     };
 
                     if next_c == '"' {
@@ -245,7 +245,7 @@ impl StreamedLexer {
                 let linfo = LineInfo::new_one_char(beginc, beginl);
                 
                 if peek_char().unwrap() != '\'' {
-                    return Some(Err(Box::new(CompilationError::InvalidChar(self.file.clone(), peek_char().unwrap(), linfo))));
+                    return Some(Err(CompilationError::InvalidChar(self.file.clone(), peek_char().unwrap(), linfo)));
                 }
                 
                 next_char(true);
@@ -329,14 +329,14 @@ impl StreamedLexer {
                         LineInfo::new(beginc, endc, beginl, endl),
                     )))
                 } else {
-                    Some(Err(Box::new(CompilationError::InvalidChar(
+                    Some(Err(CompilationError::InvalidChar(
                         self.file.clone(),
                         c,
                         LineInfo::new_one_char(
                             Rc::from(NonZeroUsize::new(columnc.get()).unwrap()),
                             Rc::from(NonZeroUsize::new(linec.get()).unwrap()),
                         ),
-                    ))))
+                    )))
                 }
             }
         }

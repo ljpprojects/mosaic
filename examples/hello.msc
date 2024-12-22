@@ -1,10 +1,16 @@
-include core::alloc
 include std::io
 
-fn main() -> i32 {
-	def *i8 msg -> readln()
+extern fn popen(*i8 cmd, *i8 mode) -> *null
+extern fn pclose(*null file) -> null
+extern fn fgets(*i8 buf, i32 size, *null file) -> *null
 
-	println(msg)
+fn main() -> i32 {
+	def *null fp -> popen("/bin/echo Hello, World!", "r")
+	def *i8 line -> ""
+
+	fgets(line, 32, fp)
+
+	println(line)
 
 	return 0
 }

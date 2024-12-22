@@ -1,4 +1,4 @@
-use std::fmt::{write, Display};
+use std::fmt::{write, Debug, Display, Formatter};
 use std::path::PathBuf;
 use colored::Colorize;
 use crate::file::File;
@@ -28,6 +28,12 @@ pub enum CompilationError {
     UnknownModule(PathBuf, Box<[String]>),
     UndefinedVariable(PathBuf, String),
     DualDefinition(PathBuf, String),
+}
+
+impl Debug for CompilationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self}")
+    }
 }
 
 impl Display for CompilationError {

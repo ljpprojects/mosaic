@@ -1,10 +1,11 @@
-use crate::lexer::{LexError, StreamedLexer};
+use crate::lexer::{StreamedLexer};
 use crate::states::{ParserState, WithState};
 use crate::tokens::{LineInfo, Token};
 use crate::utils::{Indirection, OneOf};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::string::ToString;
@@ -121,33 +122,33 @@ impl Display for TypeBound {
 #[derive(Debug, Clone)]
 pub enum AstNode {
     // --- EXPRESSIONS --- //
-    NumberLiteral(LineInfo, f64),
-    ByteLiteral(LineInfo, u8),
-    StringLiteral(LineInfo, String),
-    ArrayLiteral(LineInfo, Box<[AstNode]>),
-    BooleanLiteral(LineInfo, bool),
-    NullLiteral(LineInfo),
-    Identifier(LineInfo, String),
-    InfixOp(LineInfo, Rc<AstNode>, String, Rc<AstNode>),
-    PrefixOp(LineInfo, String, Indirection<AstNode>),
-    PostfixOp(LineInfo, Rc<AstNode>, String),
-    Path(LineInfo, Box<[String]>),
-    MemberExpr(LineInfo, Box<[String]>),
-    IdxAccess(LineInfo, Indirection<AstNode>, Indirection<AstNode>),
+    NumberLiteral(/*LineInfo, */f64),
+    ByteLiteral(/*LineInfo, */u8),
+    StringLiteral(/*LineInfo, */String),
+    ArrayLiteral(/*LineInfo, */Box<[AstNode]>),
+    BooleanLiteral(/*LineInfo, */bool),
+    NullLiteral,
+    Identifier(/*LineInfo, */String),
+    InfixOp(/*LineInfo, */Rc<AstNode>, String, Rc<AstNode>),
+    PrefixOp(/*LineInfo, */String, Indirection<AstNode>),
+    PostfixOp(/*LineInfo, */Rc<AstNode>, String),
+    Path(/*LineInfo, */Box<[String]>),
+    MemberExpr(/*LineInfo, */Box<[String]>),
+    IdxAccess(/*LineInfo, */Indirection<AstNode>, Indirection<AstNode>),
     CallExpr {
-        line_info: LineInfo,
+        ////line_info: LineInfo,
         callee: Rc<AstNode>,
         args: Box<[AstNode]>,
     },
-    AsExpr(LineInfo, Rc<AstNode>, ParseType),
+    AsExpr(/*LineInfo, */Rc<AstNode>, ParseType),
     IfExpr {
-        line_info: LineInfo,
+        //line_info: LineInfo,
         cond: Rc<AstNode>,
         block: ParseBlock,
         else_clause: ParseBlock,
     },
     ForInExpr {
-        line_info: LineInfo,
+        //line_info: LineInfo,
         var: String,
         of: Indirection<AstNode>,
         block: ParseBlock,
@@ -157,7 +158,7 @@ pub enum AstNode {
         ret_type: ParseType,
 
         /// Box<\[(name, type, default)\]>
-        args: Box<[(LineInfo, String, ParseType, Option<AstNode>)]>,
+        args: Box<[(/*LineInfo, */String, ParseType, Option<AstNode>)]>,
 
         type_generics: HashMap<String, Option<TypeBound>>,
         code: ParseBlock,
@@ -166,28 +167,28 @@ pub enum AstNode {
 
     // --- Statements --- //
     DefStmt {
-        name_info: LineInfo,
+        //name_info: LineInfo,
         name: String,
         def_type: ParseType,
         value: Rc<AstNode>,
     },
 
     /// self.0 is always an AstNode::Path
-    IncludeStmt(LineInfo, Box<[String]>),
+    IncludeStmt(/*LineInfo, */Box<[String]>),
 
     IfStmt {
-        line_info: LineInfo,
+        //line_info: LineInfo,
         cond: Rc<AstNode>,
         block: ParseBlock,
     },
 
     ExternFn {
-        line_info: LineInfo,
+        //line_info: LineInfo,
         name: String,
         ret_type: ParseType,
 
         /// Box<\[(name, type, default)\]>
-        args: Box<[(LineInfo, String, ParseType, Option<AstNode>)]>,
+        args: Box<[(/*LineInfo, */String, ParseType, Option<AstNode>)]>,
     },
     
     ExternDef {
@@ -272,6 +273,7 @@ type ParseError = CompilationError;
 #[derive(Debug, PartialEq)]
 pub struct StreamedParser {
     pub(crate) lexer: StreamedLexer,
+    file: PathBuf
 }
 
 impl WithState for StreamedParser {
@@ -294,6 +296,7 @@ impl Clone for StreamedParser {
     fn clone(&self) -> StreamedParser {
         StreamedParser {
             lexer: self.lexer.clone(),
+            file: self.lexer.reader.reader.path().to_path_buf()
         }
     }
 }
@@ -314,7 +317,9 @@ impl StreamedParser {
     }
 
     pub fn new(lexer: StreamedLexer) -> Self {
-        Self { lexer }
+        let file = lexer.reader.reader.path().to_path_buf();
+        
+        Self { lexer, file }
     }
 
     pub fn expect_ident<'b>(
@@ -325,11 +330,11 @@ impl StreamedParser {
         let tk = self.lexer.peek_next_token();
 
         match tk {
-            None => Err(ParseError::UnexpectedEOF(Token::Ident(
+            None => Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Ident(
                 chars.to_string(),
                 LineInfo::default(),
             ))),
-            Some(Err(e)) => Err(ParseError::LexError(e)),
+            Some(Err(e)) => Err(e),
             Some(Ok(Token::Ident(ref c, _))) => {
                 if c.as_str() == *chars {
                     if mutate {
@@ -339,14 +344,16 @@ impl StreamedParser {
                     Ok(c.clone())
                 } else {
                     Err(ParseError::ExpectedToken(
+                        self.file.clone(),
                         Token::Ident(chars.to_string(), LineInfo::default()),
-                        tk.clone().unwrap().unwrap(),
+                        tk.clone().unwrap()?,
                     ))
                 }
             }
             _ => Err(ParseError::ExpectedToken(
+                self.file.clone(), 
                 Token::Ident(chars.to_string(), LineInfo::default()),
-                tk.unwrap().unwrap(),
+                tk.unwrap()?,
             )),
         }
     }
@@ -367,14 +374,14 @@ impl StreamedParser {
         let tk = self.lexer.peek_next_token();
 
         let Some(tk) = tk else {
-            return Err(ParseError::UnexpectedEOF(Token::Char(
+            return Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Char(
                 *c,
                 LineInfo::default(),
             )));
         };
 
-        let Ok(tk) = tk.map_err(ParseError::LexError) else {
-            return Err(ParseError::UnexpectedEOF(Token::Char(
+        let Ok(tk) = tk else {
+            return Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Char(
                 *c,
                 LineInfo::default(),
             )));
@@ -389,12 +396,14 @@ impl StreamedParser {
                 Ok(char)
             } else {
                 Err(ParseError::ExpectedToken(
+                    self.file.clone(),
                     Token::Char(char, tk.line_info()),
                     Token::Char(c.to_owned(), tk.line_info()),
                 ))
             }
         } else {
             Err(ParseError::ExpectedToken(
+                self.file.clone(),
                 Token::Char(c.to_owned(), tk.line_info()),
                 tk,
             ))
@@ -404,10 +413,10 @@ impl StreamedParser {
     fn parse_ident_type(&mut self) -> Result<ParseType, ParseError> {
         let t = match self.lexer.peek_next_token() {
             Some(Ok(Token::Ident(t, _))) => t,
-            Some(Ok(tk)) => return Err(ParseError::InvalidToken(tk)),
-            Some(Err(e)) => return Err(ParseError::LexError(e)),
+            Some(Ok(tk)) => return Err(ParseError::InvalidToken(self.file.clone(), tk)),
+            Some(Err(e)) => return Err(e),
             None => {
-                return Err(ParseError::UnexpectedEOF(Token::Ident(
+                return Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Ident(
                     "TYPE".to_string(),
                     LineInfo::default(),
                 )))
@@ -425,13 +434,13 @@ impl StreamedParser {
             if self.expect_chars(&":", true).is_ok() {
                 let term = match self.lexer.next_token() {
                     None => {
-                        return Err(ParseError::UnexpectedEOF(Token::Number(
+                        return Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Number(
                             1f64,
                             LineInfo::default(),
                         )))
                     }
                     Some(Ok(node)) => node,
-                    Some(Err(e)) => return Err(ParseError::LexError(e)),
+                    Some(Err(e)) => return Err(e),
                 };
 
                 let term = match term {
@@ -496,7 +505,7 @@ impl StreamedParser {
                     Some(Ok(node)) => node,
                     Some(Err(e)) => return Err(e),
                     None => {
-                        return Err(ParseError::UnexpectedEOF(Token::Ident(
+                        return Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Ident(
                             "ANY".to_string(),
                             LineInfo::default(),
                         )))
@@ -507,7 +516,7 @@ impl StreamedParser {
             Ok(left)
         })() {
             Ok(p) => p,
-            Err(ParseError::UnexpectedEOF(_)) => return Ok(vec![]),
+            Err(ParseError::UnexpectedEOF(..)) => return Ok(vec![]),
             Err(e) => return Err(e),
         };
 
@@ -530,8 +539,8 @@ impl StreamedParser {
 
     pub fn parse_tg_bound(&mut self) -> Result<TypeBound, ParseError> {
         let mut left = match self.lexer.next_token() {
-            None => return Err(ParseError::UnexpectedEOF(Token::Debug("TG_BOUND".into()))),
-            Some(Err(e)) => return Err(ParseError::LexError(e)),
+            None => return Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug("TG_BOUND".into()))),
+            Some(Err(e)) => return Err(e),
             Some(Ok(Token::Ident(i, _))) if i == "iter".to_string() => {
                 self.expect_chars(&"[", true)?;
 
@@ -542,7 +551,7 @@ impl StreamedParser {
                 TypeBound::Iterator(Indirection::new(iterate_over))
             },
             Some(Ok(Token::Char(c, _))) if c == '!' => TypeBound::Not(Indirection::new(self.parse_tg_bound()?)),
-            Some(Ok(t)) => return Err(ParseError::InvalidToken(t))
+            Some(Ok(t)) => return Err(ParseError::InvalidToken(self.file.clone(), t))
         };
 
         while self.expect_chars(&"+", true).is_ok() {
@@ -574,13 +583,14 @@ impl StreamedParser {
                 Some(Ok(Token::Ident(name, _))) => name,
                 Some(Ok(tk)) => {
                     return Err(ParseError::ExpectedToken(
+                        self.file.clone(),
                         Token::Ident("TG_NAME".to_string(), LineInfo::default()),
                         tk,
                     ))
                 }
-                Some(Err(e)) => return Err(ParseError::LexError(e)),
+                Some(Err(e)) => return Err(e),
                 None => {
-                    return Err(ParseError::UnexpectedEOF(Token::Ident(
+                    return Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Ident(
                         "PARAM_NAME".to_string(),
                         LineInfo::default(),
                     )))
@@ -620,13 +630,14 @@ impl StreamedParser {
                 Some(Ok(Token::Ident(name, _))) => name,
                 Some(Ok(tk)) => {
                     return Err(ParseError::ExpectedToken(
+                        self.file.clone(),
                         Token::Ident("PARAM_NAME".to_string(), LineInfo::default()),
                         tk,
                     ))
                 }
-                Some(Err(e)) => return Err(ParseError::LexError(e)),
+                Some(Err(e)) => return Err(e),
                 None => {
-                    return Err(ParseError::UnexpectedEOF(Token::Ident(
+                    return Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Ident(
                         "PARAM_NAME".to_string(),
                         LineInfo::default(),
                     )))
@@ -638,7 +649,7 @@ impl StreamedParser {
                     Some(Ok(node)) => node,
                     Some(Err(e)) => return Err(e),
                     None => {
-                        return Err(ParseError::UnexpectedEOF(Token::Ident(
+                        return Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Ident(
                             "PARAM_DEFAULT".to_string(),
                             LineInfo::default(),
                         )))
@@ -676,7 +687,7 @@ impl StreamedParser {
         loop {
             match self.expect_chars(&"}", true) {
                 Ok(_) => break,
-                Err(ParseError::ExpectedToken(_, _)) => (),
+                Err(ParseError::ExpectedToken(..)) => (),
                 Err(e) => return Err(e),
             }
 
@@ -684,7 +695,7 @@ impl StreamedParser {
                 Some(Ok(node)) => body.push(node),
                 Some(Err(e)) => return Err(e),
                 None => {
-                    return Err(ParseError::UnexpectedEOF(Token::Debug(
+                    return Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                         "STATEMENT".to_string(),
                     )))
                 }
@@ -697,7 +708,7 @@ impl StreamedParser {
     pub fn parse_primary_expr(&mut self) -> Option<Result<AstNode, ParseError>> {
         let token = match self.lexer.next_token()? {
             Ok(token) => token,
-            Err(e) => return Some(Err(ParseError::LexError(e))),
+            Err(e) => return Some(Err(e)),
         };
 
         let mut left = match token {
@@ -714,7 +725,7 @@ impl StreamedParser {
                 }
 
                 let Some(next) = self.next_ast_node() else {
-                    return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                    return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                         "EXPRESSION".to_string(),
                     ))));
                 };
@@ -731,7 +742,7 @@ impl StreamedParser {
                         Ok(_) => self.parse_call_expr(next.clone()),
                     };
                 } else {
-                    return Some(Err(ParseError::InvalidToken(Token::Char(c, line_info))));
+                    return Some(Err(ParseError::InvalidToken(self.file.clone(), Token::Char(c, line_info))));
                 }
 
                 next
@@ -756,7 +767,7 @@ impl StreamedParser {
 
         if self.expect_chars(&"[", true).is_ok() {
             let Some(Ok(node)) = self.next_ast_node() else {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                     "INDEX".to_string(),
                 ))));
             };
@@ -819,13 +830,14 @@ impl StreamedParser {
                     Some(Ok(Token::Ident(begin, _))) => begin,
                     Some(Ok(tk)) => {
                         return Err(ParseError::ExpectedToken(
+                            self.file.clone(),
                             Token::Ident("".to_string(), LineInfo::default()),
                             tk,
                         ))
                     }
-                    Some(Err(e)) => return Err(ParseError::LexError(e)),
+                    Some(Err(e)) => return Err(e),
                     None => {
-                        return Err(ParseError::UnexpectedEOF(Token::Debug(
+                        return Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                             "PATH_SEG".to_string(),
                         )))
                     }
@@ -845,7 +857,7 @@ impl StreamedParser {
 
             let next = match next {
                 Some(Ok(Token::Ident(begin, _))) => begin,
-                Some(Err(e)) => return Some(Err(ParseError::LexError(e))),
+                Some(Err(e)) => return Some(Err(e)),
                 _ => break,
             };
 
@@ -868,13 +880,14 @@ impl StreamedParser {
                     Some(Ok(Token::Number(begin, _))) => begin.to_string(),
                     Some(Ok(tk)) => {
                         return Err(ParseError::ExpectedToken(
+                            self.file.clone(),
                             Token::Ident("".to_string(), LineInfo::default()),
                             tk,
                         ))
                     }
-                    Some(Err(e)) => return Err(ParseError::LexError(e)),
+                    Some(Err(e)) => return Err(e),
                     None => {
-                        return Err(ParseError::UnexpectedEOF(Token::Debug(
+                        return Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                             "SEGMENT".to_string(),
                         )))
                     }
@@ -895,7 +908,7 @@ impl StreamedParser {
             let next = match next {
                 Some(Ok(Token::Ident(begin, _))) => begin,
                 Some(Ok(Token::Number(begin, _))) => begin.to_string(),
-                Some(Err(e)) => return Some(Err(ParseError::LexError(e))),
+                Some(Err(e)) => return Some(Err(e)),
                 _ => break,
             };
 
@@ -916,7 +929,7 @@ impl StreamedParser {
         };
 
         match tk {
-            Err(e) => return Some(Err(ParseError::LexError(e))),
+            Err(e) => return Some(Err(e)),
             _ => (),
         };
 
@@ -944,7 +957,7 @@ impl StreamedParser {
 
         let tk = match tk {
             Ok(tk) => tk,
-            Err(e) => return Some(Err(ParseError::LexError(e))),
+            Err(e) => return Some(Err(e)),
         };
 
         let Token::Char(op, _) = tk else {
@@ -959,7 +972,7 @@ impl StreamedParser {
             self.lexer.next_token().unwrap().unwrap();
 
             let Some(right) = self.parse_exponential_expr() else {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                     "EXPRESSION".to_string(),
                 ))));
             };
@@ -988,7 +1001,7 @@ impl StreamedParser {
 
         let tk = match tk {
             Ok(tk) => tk,
-            Err(e) => return Some(Err(ParseError::LexError(e))),
+            Err(e) => return Some(Err(e)),
         };
 
         let Token::Char(op, _) = tk else {
@@ -999,7 +1012,7 @@ impl StreamedParser {
             self.lexer.next_token().unwrap().unwrap();
 
             let Some(right) = self.parse_multiplicative_expr() else {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                     "EXPRESSION".to_string(),
                 ))));
             };
@@ -1027,7 +1040,7 @@ impl StreamedParser {
         };
 
         let Ok(tk) = tk else {
-            return Some(Err(ParseError::LexError(tk.err().unwrap())));
+            return Some(Err(tk.err().unwrap()));
         };
 
         let Token::Char(op, _) = tk else {
@@ -1038,7 +1051,7 @@ impl StreamedParser {
             self.lexer.next_token().unwrap().unwrap();
 
             let Some(right) = self.parse_additive_expr() else {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                     "EXPRESSION".to_string(),
                 ))));
             };
@@ -1063,7 +1076,7 @@ impl StreamedParser {
 
         if let Ok(op) = self.expect_chars(&"==", true) {
             let Some(right) = self.parse_comparative_expr() else {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                     "EXPRESSION".to_string(),
                 ))));
             };
@@ -1077,7 +1090,7 @@ impl StreamedParser {
             }
         } else if let Ok(op) = self.expect_chars(&"!=", true) {
             let Some(right) = self.parse_comparative_expr() else {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                     "EXPRESSION".to_string(),
                 ))));
             };
@@ -1091,7 +1104,7 @@ impl StreamedParser {
             }
         } else if let Ok(op) = self.expect_chars(&"||", true) {
             let Some(right) = self.parse_comparative_expr() else {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                     "EXPRESSION".to_string(),
                 ))));
             };
@@ -1105,7 +1118,7 @@ impl StreamedParser {
             }
         } else if let Ok(op) = self.expect_chars(&"&&", true) {
             let Some(right) = self.parse_comparative_expr() else {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                     "EXPRESSION".to_string(),
                 ))));
             };
@@ -1132,14 +1145,15 @@ impl StreamedParser {
 
         let name = match self.lexer.next_token() {
             None => {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                     "PATH".to_string(),
                 ))))
             }
-            Some(Err(e)) => return Some(Err(ParseError::LexError(e))),
+            Some(Err(e)) => return Some(Err(e)),
             Some(Ok(Token::Ident(name, _))) => name,
             Some(Ok(tk)) => {
                 return Some(Err(ParseError::ExpectedToken(
+                    self.file.clone(),
                     Token::Ident("NAME".to_string(), LineInfo::default()),
                     tk,
                 )))
@@ -1150,7 +1164,7 @@ impl StreamedParser {
 
         let value = match self.next_ast_node() {
             None => {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                     "EXPRESSION".to_string(),
                 ))))
             }
@@ -1173,7 +1187,7 @@ impl StreamedParser {
             Some(Ok(_)) => unreachable!(),
             Some(Err(e)) => return Some(Err(e)),
             None => {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                     "PATH".to_string(),
                 ))))
             }
@@ -1189,7 +1203,7 @@ impl StreamedParser {
             Some(Ok(cond)) => cond,
             Some(Err(e)) => return Some(Err(e)),
             None => {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                     "EXPRESSION".to_string(),
                 ))))
             }
@@ -1224,10 +1238,10 @@ impl StreamedParser {
 
         let name = match self.lexer.next_token() {
             Some(Ok(Token::Ident(name, ..))) => name,
-            Some(Ok(tk)) => return Some(Err(ParseError::InvalidToken(tk))),
-            Some(Err(e)) => return Some(Err(ParseError::LexError(e))),
+            Some(Ok(tk)) => return Some(Err(ParseError::InvalidToken(self.file.clone(), tk))),
+            Some(Err(e)) => return Some(Err(e)),
             None => {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                     "FN_NAME".to_string(),
                 ))))
             }
@@ -1289,9 +1303,9 @@ impl StreamedParser {
         
         let stmt = match self.lexer.peek_next_token() {
             Some(Ok(Token::Ident(s, _))) => s,
-            Some(Ok(tk)) => return Some(Err(ParseError::InvalidToken(tk))),
-            Some(Err(e)) => return Some(Err(ParseError::LexError(e))),
-            None => return Some(Err(ParseError::UnexpectedEOF(Token::Debug("STMT".into()))))
+            Some(Ok(tk)) => return Some(Err(ParseError::InvalidToken(self.file.clone(), tk))),
+            Some(Err(e)) => return Some(Err(e)),
+            None => return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug("STMT".into()))))
         };
 
         match &*stmt {
@@ -1306,10 +1320,10 @@ impl StreamedParser {
         
         let name = match self.lexer.next_token() {
             Some(Ok(Token::Ident(name, ..))) => name,
-            Some(Ok(tk)) => return Some(Err(ParseError::InvalidToken(tk))),
-            Some(Err(e)) => return Some(Err(ParseError::LexError(e))),
+            Some(Ok(tk)) => return Some(Err(ParseError::InvalidToken(self.file.clone(), tk))),
+            Some(Err(e)) => return Some(Err(e)),
             None => {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                     "FN_NAME".to_string(),
                 ))))
             }
@@ -1347,14 +1361,15 @@ impl StreamedParser {
 
         let name = match self.lexer.next_token() {
             None => {
-                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                     "PATH".to_string(),
                 ))))
             }
-            Some(Err(e)) => return Some(Err(ParseError::LexError(e))),
+            Some(Err(e)) => return Some(Err(e)),
             Some(Ok(Token::Ident(name, _))) => name,
             Some(Ok(tk)) => {
                 return Some(Err(ParseError::ExpectedToken(
+                    self.file.clone(),
                     Token::Ident("NAME".to_string(), LineInfo::default()),
                     tk,
                 )))
@@ -1384,9 +1399,9 @@ impl StreamedParser {
 
         let var = match self.lexer.next_token() {
             Some(Ok(Token::Ident(v, _))) => v,
-            Some(Ok(tk)) => return Some(Err(ParseError::InvalidToken(tk))),
-            Some(Err(e)) => return Some(Err(ParseError::LexError(e))),
-            None => return Some(Err(ParseError::UnexpectedEOF(Token::Debug("VAR".to_string())))),
+            Some(Ok(tk)) => return Some(Err(ParseError::InvalidToken(self.file.clone(), tk))),
+            Some(Err(e)) => return Some(Err(e)),
+            None => return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug("VAR".to_string())))),
         };
 
         self.expect_ident(&"in", true).unwrap();

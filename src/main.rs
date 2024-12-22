@@ -41,7 +41,7 @@ pub mod errors;
 const F_NAME: &str = "/Users/geez/RustroverProjects/mosaic/examples/bench.mosaic";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /*let reader = CharReader::new(File::new("./examples/hello.msc".to_string()).unwrap());
+    let reader = CharReader::new(File::new("./examples/hello.msc".to_string()).unwrap());
     let lexer = StreamedLexer::new(reader);
     let parser = StreamedParser::new(lexer);
 
@@ -72,7 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Rc::new(NonZeroUsize::new(33).unwrap()),
         Rc::new(NonZeroUsize::new(1).unwrap()),
         Rc::new(NonZeroUsize::new(1).unwrap()),
-    )).unwrap());*/*/
+    )).unwrap());*/
     
     Ok(())
 }
