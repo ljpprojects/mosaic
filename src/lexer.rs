@@ -1,23 +1,23 @@
-#![forbid(unsafe_code)]
-
 use crate::reader::CharReader;
 use crate::states::{LexerState, WithState};
 use crate::tokens::{LineInfo, Token};
 use std::cell::{Cell, RefCell};
-use std::error::Error;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display};
 use std::num::NonZeroUsize;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::str::FromStr;
+use crate::errors::CompilationError;
+use crate::utils::IndirectionTrait;
 
 /// This is equal to amount spaces a tab character is equal to.
 /// This is important because without it the character position system does not work.
 /// Can be overridden via the config key 'formatting.tab_space_count', or the '--tab-space-count' option.
 ///
-/// `mosaic run file.mosaic --tab-space-count 2`
+/// `mosaic build file.msc --tab-space-count 2`
 /// or
 ///
-/// **config.mosaic.toml**
+/// **config.toml**
 /// ```toml
 /// [formatting]
 /// tab_space_count = 2
@@ -32,35 +32,7 @@ pub fn is_mosaic_ident_part(c: &char) -> bool {
     c.is_alphanumeric() || ['_', '$'].contains(c)
 }
 
-#[derive(Debug, Clone)]
-pub enum LexError {
-    InvalidChar(char, LineInfo),
-    UnfinishedString(LineInfo),
-    TooManyLines,
-}
-
-impl Display for LexError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LexError::InvalidChar(c, line_info) => {
-                write!(f, "LexError: Invalid character {c} at {line_info}")
-            }
-
-            LexError::UnfinishedString(line_info) => {
-                write!(f, "LexError: Unfinished string at {line_info}")
-            }
-
-            LexError::TooManyLines => write!(f, "LexError: Too many lines in source file"),
-        }
-    }
-}
-
-// macro example
-/*
-    ptr_as_mut!(stream)
-*/
-
-impl Error for LexError {}
+type LexError = Box<CompilationError>;
 
 /// This is the lexer for the Mosaic programming language.
 /// Like the CharReader struct, it returns tokens individually, allowing for better performance,
@@ -69,6 +41,7 @@ impl Error for LexError {}
 #[derive(PartialEq)]
 pub struct StreamedLexer {
     pub(crate) reader: CharReader,
+    file: PathBuf,
     pos: u64,
     current_char: usize,
     current_line: usize,
@@ -79,6 +52,7 @@ impl Clone for StreamedLexer {
     fn clone(&self) -> Self {
         StreamedLexer {
             reader: self.reader.clone(),
+            file: self.file.clone(),
             pos: self.pos,
             current_char: self.current_char,
             current_line: self.current_line,
@@ -127,8 +101,11 @@ impl WithState for StreamedLexer {
 
 impl StreamedLexer {
     pub fn new(reader: CharReader) -> StreamedLexer {
+        let file = reader.reader.path().to_path_buf();
+        
         Self {
             reader,
+            file,
             pos: 0,
             current_char: 1,
             current_line: 1,
@@ -190,7 +167,7 @@ impl StreamedLexer {
                 c,
                 LineInfo::new_one_char(
                     Rc::from(NonZeroUsize::new(columnc.get()).unwrap()),
-                    Rc::from(NonZeroUsize::new(columnc.get()).unwrap()),
+                    Rc::from(NonZeroUsize::new(linec.get()).unwrap()),
                 ),
             ))),
 
@@ -210,12 +187,12 @@ impl StreamedLexer {
 
             '\n' => {
                 if let None = linec.get().checked_add(1) {
-                    return Some(Err(LexError::TooManyLines));
+                    return Some(Err(Box::new(CompilationError::TooManyLines(self.file.clone()))));
                 } else {
                     linec.set(linec.get() + 1);
                 }
 
-                columnc.set(columnc.get() + 1);
+                columnc.set(1);
 
                 self.is_first = true;
 
@@ -234,9 +211,9 @@ impl StreamedLexer {
 
                 loop {
                     let Some(next_c) = next_char(true) else {
-                        return Some(Err(LexError::UnfinishedString(LineInfo::new_one_char(
+                        return Some(Err(Box::new(CompilationError::UnfinishedString(self.file.clone(), LineInfo::new_one_char(
                             beginc, beginl,
-                        ))));
+                        )))));
                     };
 
                     if next_c == '"' {
@@ -268,7 +245,7 @@ impl StreamedLexer {
                 let linfo = LineInfo::new_one_char(beginc, beginl);
                 
                 if peek_char().unwrap() != '\'' {
-                    return Some(Err(LexError::InvalidChar(peek_char().unwrap(), linfo)));
+                    return Some(Err(Box::new(CompilationError::InvalidChar(self.file.clone(), peek_char().unwrap(), linfo))));
                 }
                 
                 next_char(true);
@@ -278,9 +255,9 @@ impl StreamedLexer {
 
             _ => {
                 if c.is_whitespace() {
-                    columnc.set(columnc.get() + 1);
+                    //columnc.set(columnc.get() + 1);
 
-                    return self.next_token();
+                    unsafe { (self as *mut Self).as_mut().unwrap().next_token() }
                 } else if is_mosaic_ident_start(&c) {
                     let beginc = Rc::from(NonZeroUsize::new(columnc.get()).unwrap());
                     let beginl = Rc::from(NonZeroUsize::new(linec.get()).unwrap());
@@ -305,12 +282,12 @@ impl StreamedLexer {
 
                     buffer.get_mut().clear();
 
-                    let endc = Rc::from(beginc.checked_add(ident.len()).unwrap());
+                    let endc = Rc::from(NonZeroUsize::new(columnc.get()).unwrap());
 
-                    return Some(Ok(Token::Ident(
+                    Some(Ok(Token::Ident(
                         ident,
-                        LineInfo::new(beginc, endc, beginl.clone(), beginl),
-                    )));
+                        LineInfo::new(beginc, endc.map(|n| n.checked_add(1).unwrap()), beginl.clone(), beginl),
+                    )))
                 } else if c.is_numeric() {
                     let beginc = Rc::from(NonZeroUsize::new(columnc.get()).unwrap());
                     let beginl = Rc::from(NonZeroUsize::new(linec.get()).unwrap());
@@ -347,19 +324,20 @@ impl StreamedLexer {
                     let endc = Rc::from(NonZeroUsize::new(columnc.get()).unwrap());
                     let endl = Rc::from(NonZeroUsize::new(linec.get()).unwrap());
 
-                    return Some(Ok(Token::Number(
+                    Some(Ok(Token::Number(
                         num,
                         LineInfo::new(beginc, endc, beginl, endl),
-                    )));
+                    )))
+                } else {
+                    Some(Err(Box::new(CompilationError::InvalidChar(
+                        self.file.clone(),
+                        c,
+                        LineInfo::new_one_char(
+                            Rc::from(NonZeroUsize::new(columnc.get()).unwrap()),
+                            Rc::from(NonZeroUsize::new(linec.get()).unwrap()),
+                        ),
+                    ))))
                 }
-
-                Some(Err(LexError::InvalidChar(
-                    c,
-                    LineInfo::new_one_char(
-                        Rc::from(NonZeroUsize::new(columnc.get()).unwrap()),
-                        Rc::from(NonZeroUsize::new(linec.get()).unwrap()),
-                    ),
-                )))
             }
         }
     }

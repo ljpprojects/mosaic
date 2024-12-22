@@ -1,9 +1,13 @@
 #![forbid(unsafe_code)]
 
+use std::{fs, io};
+use std::io::Read;
 use crate::file::File;
 use crate::states::{ReaderState, WithState};
 use std::os::unix::fs::FileExt;
 use std::rc::Rc;
+use cranelift_object::object::ReadCacheOps;
+use crate::tokens::LineInfo;
 
 #[derive(Debug, PartialEq)]
 pub struct CharReader {
@@ -61,5 +65,75 @@ impl CharReader {
         self.reader.file().read_exact_at(&mut buf, self.pos).ok()?;
 
         Some(buf[0] as char)
+    }
+
+    // TODO: Support multi-line snippets
+    pub fn get_snippet(&self, info: &LineInfo) -> io::Result<String> {
+        let mut buf = vec![];
+        let mut snippet = String::new();
+        
+        let mut file = fs::File::open(self.reader.path().to_string_lossy().to_string())?;
+
+        file.read_to_end(&mut buf)?;
+
+        let buf = String::from_utf8(buf).unwrap();
+        let lines = buf.lines().collect::<Vec<_>>();
+
+        for (i, line) in lines.iter().enumerate() {
+            if i < info.begin_line() - 1 {
+                continue
+            }
+
+            if i >= info.end_line() {
+                break
+            }
+
+            for (i, char) in line.to_string().chars().enumerate() {
+                if i < info.begin_char() - 1 {
+                    continue
+                }
+
+                if i >= info.end_char() - 1 {
+                    break
+                }
+
+                snippet.push(char);
+            }
+        }
+
+        Ok(snippet)
+    }
+}
+
+mod tests {
+    use std::num::{NonZero, NonZeroUsize};
+    use std::path::PathBuf;
+    use colored::Colorize;
+    use super::*;
+
+    #[test]
+    fn read_snippet() {
+        let reader = CharReader::new(File::new(PathBuf::from("examples/hello.msc").to_string_lossy().to_string()).unwrap());
+
+        print!("{}", reader.get_snippet(&LineInfo::new(
+            Rc::new(NonZeroUsize::new(1).unwrap()),
+            Rc::new(NonZeroUsize::new(19).unwrap()),
+            Rc::new(NonZeroUsize::new(1).unwrap()),
+            Rc::new(NonZeroUsize::new(1).unwrap()),
+        )).unwrap());
+
+        print!("{}", reader.get_snippet(&LineInfo::new(
+            Rc::new(NonZeroUsize::new(19).unwrap()),
+            Rc::new(NonZeroUsize::new(22).unwrap()),
+            Rc::new(NonZeroUsize::new(1).unwrap()),
+            Rc::new(NonZeroUsize::new(1).unwrap()),
+        )).unwrap().red().italic().bold());
+
+        println!("{}", reader.get_snippet(&LineInfo::new(
+            Rc::new(NonZeroUsize::new(22).unwrap()),
+            Rc::new(NonZeroUsize::new(33).unwrap()),
+            Rc::new(NonZeroUsize::new(1).unwrap()),
+            Rc::new(NonZeroUsize::new(1).unwrap()),
+        )).unwrap());
     }
 }

@@ -13,7 +13,7 @@ impl Linker {
         
         let link_command = if std::env::var("TEST").unwrap() == "1" {
             format!(
-                "gcc -O3 -pie -arch arm64 -dead_strip -flto -dylib -o {DIST} {MODS} {MAIN}",
+                "gcc -O3 -pie -arch arm64 -dead_strip -flto -o {DIST} {MODS} {MAIN}",
                 DIST = dist.to_str().unwrap(),
                 MODS = module.prev_includes.iter().flat_map(|(m, a)| {
                     let mut m = m.clone();
@@ -30,7 +30,7 @@ impl Linker {
             )
         } else {
             format!(
-                "gcc -O3 -pie -dead_strip -flto -dylib -o {DIST} {MODS} {MAIN}",
+                "gcc -O3 -pie -dead_strip -flto -o {DIST} {MODS} {MAIN}",
                 DIST = dist.to_str().unwrap(),
                 MODS = module.prev_includes.iter().flat_map(|(m, a)| {
                     let mut m = m.clone();

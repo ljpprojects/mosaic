@@ -13,15 +13,19 @@
 extern crate test;
 extern crate core;
 
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use std::rc::Rc;
+use colored::Colorize;
 use cranelift_native;
+use lang_c::driver::{parse, Config};
 use crate::compiler::cranelift::CraneliftGenerator;
-use crate::compiler::cranelift::errors::CraneliftError;
 use crate::compiler::cranelift::linker::Linker;
 use crate::file::File;
 use crate::lexer::StreamedLexer;
 use crate::parser::StreamedParser;
 use crate::reader::CharReader;
+use crate::tokens::LineInfo;
 
 pub mod compiler;
 pub mod file;
@@ -32,29 +36,43 @@ pub mod states;
 pub mod tokens;
 pub mod utils;
 pub mod cli;
+pub mod errors;
 
 const F_NAME: &str = "/Users/geez/RustroverProjects/mosaic/examples/bench.mosaic";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /*
-    let reader = CharReader::new(File::new("./examples/hello.msc".to_string()).unwrap());
+    /*let reader = CharReader::new(File::new("./examples/hello.msc".to_string()).unwrap());
     let lexer = StreamedLexer::new(reader);
     let parser = StreamedParser::new(lexer);
 
     let mut cg = CraneliftGenerator::new(parser, cranelift_native::builder()?, "bench".into());
 
-    cg.compile(true, None);
-    */
+    let gen = cg.compile(true, None);
     
-    let file = PathBuf::from("test.msc");
-    
-    println!("{}", CraneliftError::UnknownModule(file.clone(), vec!["test".to_string()].into_boxed_slice()));
+    Linker::link(gen);
 
-    println!();
-    println!("{}", CraneliftError::UndefinedVariable(file.clone(), "foo".into()));
+    /*let reader = CharReader::new(File::new(PathBuf::from("examples/hello.msc").to_string_lossy().to_string()).unwrap());
 
-    println!();
-    println!("{}", CraneliftError::DualDefinition(file.clone(), "bar".into()));
+    print!("{}", reader.get_snippet(&LineInfo::new(
+        Rc::new(NonZeroUsize::new(1).unwrap()),
+        Rc::new(NonZeroUsize::new(19).unwrap()),
+        Rc::new(NonZeroUsize::new(1).unwrap()),
+        Rc::new(NonZeroUsize::new(1).unwrap()),
+    )).unwrap());
+
+    print!("{}", reader.get_snippet(&LineInfo::new(
+        Rc::new(NonZeroUsize::new(19).unwrap()),
+        Rc::new(NonZeroUsize::new(22).unwrap()),
+        Rc::new(NonZeroUsize::new(1).unwrap()),
+        Rc::new(NonZeroUsize::new(1).unwrap()),
+    )).unwrap().red().bold());
+
+    println!("{}", reader.get_snippet(&LineInfo::new(
+        Rc::new(NonZeroUsize::new(22).unwrap()),
+        Rc::new(NonZeroUsize::new(33).unwrap()),
+        Rc::new(NonZeroUsize::new(1).unwrap()),
+        Rc::new(NonZeroUsize::new(1).unwrap()),
+    )).unwrap());*/*/
     
     Ok(())
 }

@@ -4,22 +4,21 @@ pub mod linker;
 pub mod trace;
 pub mod meta;
 pub mod builders;
-pub mod errors;
 
 use crate::utils::IndirectionTrait;
 use std::cmp::PartialEq;
 use crate::compiler::cranelift::module::CraneliftModule;
-use crate::compiler::cranelift::types::{CraneliftType as Type, TypeGenerator};
+use crate::compiler::cranelift::types::{CraneliftType as Type, CraneliftType, TypeGenerator};
 use crate::file::File;
 use crate::lexer::StreamedLexer;
 use crate::parser::{AstNode, Modifier, ParseBlock, ParseType, StreamedParser};
 use crate::reader::CharReader;
 use crate::utils::Indirection;
 use cranelift_codegen::control::ControlPlane;
-use cranelift_codegen::ir::{AbiParam, Block, Function, GlobalValue, InstBuilder, MemFlags, Signature, UserFuncName, Value};
+use cranelift_codegen::ir::{AbiParam, Function, GlobalValue, InstBuilder, MemFlags, Signature, UserFuncName, Value};
 use cranelift_codegen::isa::{Builder, CallConv, OwnedTargetIsa};
 use cranelift_codegen::{ir, settings, Context};
-use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
+use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{default_libcall_names, DataDescription, Linkage, Module};
 use cranelift_native;
 use cranelift_object::{ObjectBuilder, ObjectModule};
@@ -117,7 +116,37 @@ impl CraneliftGenerator {
         }
     }
 
-    pub fn compile_body_expr(&mut self, expr: &AstNode, func: &mut FunctionBuilder, trace: &mut Trace) -> (Value, Type) {
+    pub fn compile_prefix_op(&mut self, op: &String, right: &AstNode, func: &mut FunctionBuilder, trace: &Trace) -> (Value, Type) {
+        match &**op {
+            "&" => {
+                let (right, ty) = self.compile_body_expr(right, func, trace);
+                
+                if matches!(ty, CraneliftType::Null) {
+                    return (func.ins().iconst(self.isa.pointer_type(), 0), CraneliftType::CPtr(Indirection::new(CraneliftType::Null)));
+                }
+
+                let mut sig = Signature::new(self.call_conv);
+
+                sig.params.push(AbiParam::new(Type::Int32.into_cranelift(&self.isa)));
+                sig.returns.push(AbiParam::new(self.isa.pointer_type()));
+
+                let core_msc_alloc = self.module.declare_function("core_msc_manmalloc", Linkage::Import, &sig).unwrap();
+                let core_msc_alloc_fn = self.module.declare_func_in_func(core_msc_alloc, func.func);
+
+                let size = func.ins().iconst(Type::Int32.into_cranelift(&self.isa), ty.size_bytes(&self.isa) as i64);
+
+                let ptr = func.ins().call(core_msc_alloc_fn, &[size]);
+                let ptr = func.inst_results(ptr)[0];
+
+                func.ins().store(MemFlags::trusted().with_endianness(self.isa.endianness()), right, ptr, 0);
+
+                (ptr, Type::CPtr(Indirection::new(ty)))
+            }
+            _ => todo!("Handle error here")
+        }
+    }
+
+    pub fn compile_body_expr(&mut self, expr: &AstNode, func: &mut FunctionBuilder, trace: &Trace) -> (Value, Type) {
         match expr {
             AstNode::NumberLiteral(i) if i.fract() == 0f64 && trace.context == ContextKind::Idx => {
                 (func.ins().iconst(ir::types::I64, Imm64::new(*i as i64)), Type::Int64)
@@ -133,8 +162,8 @@ impl CraneliftGenerator {
             AstNode::BooleanLiteral(_) => (func.ins().iconst(ir::types::I8, Imm64::new(0)), Type::Bool),
             AstNode::NullLiteral => (func.ins().iconst(ir::types::I8, Imm64::new(0)), Type::Null),
             AstNode::Identifier(i) => self.var_builder.get_var(func, i).unwrap(),
-            AstNode::InfixOp(_, _, _) => todo!(),
-            AstNode::PrefixOp(_, _) => todo!(),
+            AstNode::InfixOp(l, o, r) => todo!("Implement {l} {o} {r}"),
+            AstNode::PrefixOp(op, r) => self.compile_prefix_op(op, r, func, trace),
             AstNode::PostfixOp(_, _) => todo!(),
             AstNode::Path(_) => todo!(),
             AstNode::MemberExpr(_) => todo!(),
@@ -160,10 +189,11 @@ impl CraneliftGenerator {
                 let mut value_args = vec![];
                 
                 for arg in args.iter() {
+                    println!("ARG {arg}");
                     value_args.push(self.compile_body_expr(arg, func, trace).0);
                 }
 
-                let fn_meta = get_fn!(self, name).unwrap().first().unwrap();
+                let fn_meta = get_fn!(self, name).expect(&*format!("You sold: no function {name}")).first().unwrap();
 
                 let fid = self.module.declare_function(name, Linkage::Import, &fn_meta.sig)
                     .unwrap();
@@ -190,7 +220,7 @@ impl CraneliftGenerator {
         }
     }
     
-    pub fn compile_body(&mut self, body: &[AstNode], func: &mut FunctionBuilder, trace: &mut Trace) {
+    pub fn compile_body(&mut self, body: &[AstNode], func: &mut FunctionBuilder, trace: &Trace) {
         for stmt in body {
             match stmt {
                 AstNode::DefStmt { name, def_type, value } => {
@@ -198,6 +228,11 @@ impl CraneliftGenerator {
                     let ty = self.tg.compile_type(def_type, &self.isa);
 
                     self.var_builder.create_var(func, val, (ty.clone(), ty.into_cranelift(&self.isa)), name.clone());
+                }
+                AstNode::ExternDef { name, def_type } => {
+                    let ty = self.tg.compile_type(def_type, &self.isa);
+
+                    self.var_builder.declare_var(func, (ty.clone(), ty.into_cranelift(&self.isa)), name.clone());
                 }
                 AstNode::IncludeStmt(_) => {}
                 AstNode::IfStmt { .. } => {}
@@ -208,6 +243,7 @@ impl CraneliftGenerator {
                     let mut sig = Signature::new(self.call_conv);
 
                     sig.params.push(AbiParam::new(self.isa.pointer_type()));
+                    sig.returns.push(AbiParam::new(Type::Null.into_cranelift(&self.isa)));
 
                     let core_msc_free = self.module.declare_function("core_msc_free", Linkage::Import, &sig).unwrap();
                     let core_msc_free_fn = self.module.declare_func_in_func(core_msc_free, func.func);
@@ -296,6 +332,10 @@ impl CraneliftGenerator {
         let string_dat = self.module.declare_data(&*format!("str${}", self.def_counter), Linkage::Local, false, false).unwrap();
 
         self.def_counter += 1;
+
+        let string = string.replace("\\n", "\n").replace("\\t", "\t");
+        let string = string.replace("\\\"", "\"").replace("\\\\", "\\");
+        let string = string.replace("\\0", "\0");
 
         let mut desc = DataDescription::new();
         desc.define([string.as_bytes(), &[0u8]].concat().to_vec().into_boxed_slice());
@@ -404,7 +444,7 @@ impl CraneliftGenerator {
                 let mut msc_path =
                     PathBuf::from(format!("{search_path}/{}.msc", p.last().unwrap()));
                 let mut obj_path: Option<_> =
-                    Some(PathBuf::from(format!("{S}/{}.dylib", p.last().unwrap(), S = search_path.clone())));
+                    Some(PathBuf::from(format!("{S}/{}.o", p.last().unwrap(), S = search_path.clone())));
 
                 // Attempt lookup in installed modules directory (~/.msc/mods/)
                 if fs::File::open(msc_path.clone()).is_err() {
@@ -415,7 +455,7 @@ impl CraneliftGenerator {
                         p.last().unwrap()
                     ));
                     obj_path = Some(PathBuf::from(format!(
-                        "{home}/.msc/mods/{search_path}/{}.dylib",
+                        "{home}/.msc/mods/{search_path}/{}.o",
                         p.last().unwrap()
                     )));
                 }

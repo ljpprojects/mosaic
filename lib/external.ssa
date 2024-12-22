@@ -1,0 +1,5 @@
+export function w $print(l %tmp.1) {
+@start
+	%tmp.2 =w call $puts(l %tmp.1)
+	ret %tmp.2
+}

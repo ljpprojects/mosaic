@@ -8,6 +8,8 @@ use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
 use std::str::FromStr;
 use std::string::ToString;
+use cranelift_codegen::CompileError;
+use crate::errors::CompilationError;
 
 pub const ADDITIVE_OPS: &[&str] = &["+", "-"];
 pub const MULTIPLICATIVE_OPS: &[&str] = &["*", "/", "%"];
@@ -119,30 +121,33 @@ impl Display for TypeBound {
 #[derive(Debug, Clone)]
 pub enum AstNode {
     // --- EXPRESSIONS --- //
-    NumberLiteral(f64),
-    ByteLiteral(u8),
-    StringLiteral(String),
-    ArrayLiteral(Box<[AstNode]>),
-    BooleanLiteral(bool),
-    NullLiteral,
-    Identifier(String),
-    InfixOp(Rc<AstNode>, String, Rc<AstNode>),
-    PrefixOp(String, Indirection<AstNode>),
-    PostfixOp(Rc<AstNode>, String),
-    Path(Box<[String]>),
-    MemberExpr(Box<[String]>),
-    IdxAccess(Indirection<AstNode>, Indirection<AstNode>),
+    NumberLiteral(LineInfo, f64),
+    ByteLiteral(LineInfo, u8),
+    StringLiteral(LineInfo, String),
+    ArrayLiteral(LineInfo, Box<[AstNode]>),
+    BooleanLiteral(LineInfo, bool),
+    NullLiteral(LineInfo),
+    Identifier(LineInfo, String),
+    InfixOp(LineInfo, Rc<AstNode>, String, Rc<AstNode>),
+    PrefixOp(LineInfo, String, Indirection<AstNode>),
+    PostfixOp(LineInfo, Rc<AstNode>, String),
+    Path(LineInfo, Box<[String]>),
+    MemberExpr(LineInfo, Box<[String]>),
+    IdxAccess(LineInfo, Indirection<AstNode>, Indirection<AstNode>),
     CallExpr {
+        line_info: LineInfo,
         callee: Rc<AstNode>,
         args: Box<[AstNode]>,
     },
-    AsExpr(Rc<AstNode>, ParseType),
+    AsExpr(LineInfo, Rc<AstNode>, ParseType),
     IfExpr {
+        line_info: LineInfo,
         cond: Rc<AstNode>,
         block: ParseBlock,
         else_clause: ParseBlock,
     },
     ForInExpr {
+        line_info: LineInfo,
         var: String,
         of: Indirection<AstNode>,
         block: ParseBlock,
@@ -152,7 +157,7 @@ pub enum AstNode {
         ret_type: ParseType,
 
         /// Box<\[(name, type, default)\]>
-        args: Box<[(String, ParseType, Option<AstNode>)]>,
+        args: Box<[(LineInfo, String, ParseType, Option<AstNode>)]>,
 
         type_generics: HashMap<String, Option<TypeBound>>,
         code: ParseBlock,
@@ -161,25 +166,33 @@ pub enum AstNode {
 
     // --- Statements --- //
     DefStmt {
+        name_info: LineInfo,
         name: String,
         def_type: ParseType,
         value: Rc<AstNode>,
     },
 
     /// self.0 is always an AstNode::Path
-    IncludeStmt(Box<[String]>),
+    IncludeStmt(LineInfo, Box<[String]>),
 
     IfStmt {
+        line_info: LineInfo,
         cond: Rc<AstNode>,
         block: ParseBlock,
     },
 
     ExternFn {
+        line_info: LineInfo,
         name: String,
         ret_type: ParseType,
 
         /// Box<\[(name, type, default)\]>
-        args: Box<[(String, ParseType, Option<AstNode>)]>,
+        args: Box<[(LineInfo, String, ParseType, Option<AstNode>)]>,
+    },
+    
+    ExternDef {
+        name: String,
+        def_type: ParseType
     },
 
     ReturnStmt(Indirection<AstNode>),
@@ -235,6 +248,10 @@ impl Display for AstNode {
                 ret_type,
                 args,
             } => write!(f, "extern fn {name}({args:?}) -> {ret_type}"),
+            AstNode::ExternDef {
+                name,
+                def_type,
+            } => write!(f, "extern def {def_type} {name}"),
             AstNode::Program(p) => write!(
                 f,
                 "{}",
@@ -250,47 +267,7 @@ impl Display for AstNode {
     }
 }
 
-#[derive(Clone)]
-pub enum ParseError {
-    /// Expected: Token, Found: Token
-    ExpectedToken(Token, Token),
-
-    /// Expecting: AstNode
-    UnexpectedEOF(Token),
-
-    LexError(LexError),
-
-    InvalidNode(Box<AstNode>),
-
-    InvalidToken(Token),
-
-    Forbidden(String),
-}
-
-impl Display for ParseError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            ParseError::UnexpectedEOF(tk) => {
-                write!(f, "Unexpected EOF during parsing (expecting {tk:?}).")
-            }
-            ParseError::ExpectedToken(token, expected) => {
-                write!(f, "Expected token '{expected:?}', got '{token:?}'")
-            }
-            ParseError::LexError(err) => write!(f, "Lex error: {err:?}"),
-            ParseError::InvalidNode(node) => write!(f, "Invalid node: {node:?}"),
-            ParseError::InvalidToken(token) => write!(f, "Invalid token: {token:?}"),
-            ParseError::Forbidden(msg) => write!(f, "Forbidden: {msg}"),
-        }
-    }
-}
-
-impl Debug for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{self}")
-    }
-}
-
-impl Error for ParseError {}
+type ParseError = CompilationError;
 
 #[derive(Debug, PartialEq)]
 pub struct StreamedParser {
@@ -747,9 +724,7 @@ impl StreamedParser {
                 };
 
                 if PREFIX_OPS.contains(&c.to_string().as_str()) {
-                    c.to_string();
-
-                    Indirection::new(next.clone());
+                    return Some(Ok(AstNode::PrefixOp(c.to_string(), Indirection::new(next))))
                 } else if c == '(' {
                     return match self.expect_char(&')', true) {
                         Err(e) => Some(Err(e)),
@@ -1309,10 +1284,26 @@ impl StreamedParser {
         }))
     }
 
-    pub fn parse_extern_fn_stmt(&mut self) -> Option<Result<AstNode, ParseError>> {
+    pub fn parse_extern_stmt(&mut self) -> Option<Result<AstNode, ParseError>> {
         self.expect_ident(&"extern", true).unwrap();
-        self.expect_ident(&"fn", true).unwrap();
+        
+        let stmt = match self.lexer.peek_next_token() {
+            Some(Ok(Token::Ident(s, _))) => s,
+            Some(Ok(tk)) => return Some(Err(ParseError::InvalidToken(tk))),
+            Some(Err(e)) => return Some(Err(ParseError::LexError(e))),
+            None => return Some(Err(ParseError::UnexpectedEOF(Token::Debug("STMT".into()))))
+        };
 
+        match &*stmt {
+            "def" => self.parse_extern_def_stmt(),
+            "fn" => self.parse_extern_fn_stmt(),
+            stmt => unimplemented!("extern {stmt}s.")
+        }
+    }
+
+    pub fn parse_extern_fn_stmt(&mut self) -> Option<Result<AstNode, ParseError>> {
+        self.expect_ident(&"fn", true).unwrap();
+        
         let name = match self.lexer.next_token() {
             Some(Ok(Token::Ident(name, ..))) => name,
             Some(Ok(tk)) => return Some(Err(ParseError::InvalidToken(tk))),
@@ -1343,6 +1334,36 @@ impl StreamedParser {
             name,
             ret_type,
             args,
+        }))
+    }
+
+    pub fn parse_extern_def_stmt(&mut self) -> Option<Result<AstNode, ParseError>> {
+        self.expect_ident(&"def", true).unwrap();
+
+        let def_type = match self.parse_type() {
+            Ok(def_type) => def_type,
+            Err(e) => return Some(Err(e)),
+        };
+
+        let name = match self.lexer.next_token() {
+            None => {
+                return Some(Err(ParseError::UnexpectedEOF(Token::Debug(
+                    "PATH".to_string(),
+                ))))
+            }
+            Some(Err(e)) => return Some(Err(ParseError::LexError(e))),
+            Some(Ok(Token::Ident(name, _))) => name,
+            Some(Ok(tk)) => {
+                return Some(Err(ParseError::ExpectedToken(
+                    Token::Ident("NAME".to_string(), LineInfo::default()),
+                    tk,
+                )))
+            }
+        };
+
+        Some(Ok(AstNode::ExternDef {
+            name,
+            def_type
         }))
     }
 
@@ -1394,7 +1415,7 @@ impl StreamedParser {
                 "include" => self.parse_include_stmt(),
                 "if" => self.parse_if_expr(),
                 "fn" => self.parse_fn_expr(),
-                "extern" => self.parse_extern_fn_stmt(),
+                "extern" => self.parse_extern_stmt(),
                 "return" => self.parse_return_stmt(),
                 "for" => self.parse_for_in_expr(),
                 _ => self.parse_comparative_expr(),

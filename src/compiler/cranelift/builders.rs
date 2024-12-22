@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 use cranelift_codegen::entity::EntityRef;
 use cranelift_codegen::ir;
-use cranelift_codegen::ir::Value;
+use cranelift_codegen::ir::{Type, Value};
 use cranelift_frontend::{FunctionBuilder, Variable};
+use crate::compiler::cranelift::types::CraneliftType;
 
 pub struct VariableBuilder {
     index: usize,
     variables: HashMap<String, (usize, Variable, crate::compiler::cranelift::types::CraneliftType)>,
 }
-
 impl VariableBuilder {
     pub(crate) fn new() -> Self {
         Self {
@@ -17,14 +17,25 @@ impl VariableBuilder {
         }
     }
 
-    pub(crate) fn create_var(&mut self, builder: &mut FunctionBuilder, value: Value, ty: (crate::compiler::cranelift::types::CraneliftType, ir::Type), name: String) -> Variable {
+    pub fn declare_var(&mut self, builder: &mut FunctionBuilder, ty: (CraneliftType, Type), name: String) -> Variable {
         let variable = Variable::new(self.index);
 
-        let _ = builder.try_declare_var(variable, ty.1);
-        builder.def_var(variable, value);
+        builder.declare_var(variable, ty.1);
 
         self.variables.insert(name, (self.index, variable, ty.0));
 
+        self.index += 1;
+
+        variable
+    }
+
+    pub fn create_var(&mut self, builder: &mut FunctionBuilder, value: Value, ty: (CraneliftType, ir::Type), name: String) -> Variable {
+        let variable = Variable::new(self.index);
+        
+        builder.declare_var(variable, ty.1);
+        builder.def_var(variable, value);
+        
+        self.variables.insert(name, (self.index, variable, ty.0));
         self.index += 1;
 
         variable

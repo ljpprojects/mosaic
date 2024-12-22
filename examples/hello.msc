@@ -1,5 +1,10 @@
-extern fn printf(*i8 s) -> null
+include core::alloc
+include std::io
 
-fn main() {
-	printf("Hello, World!")
+fn main() -> i32 {
+	def *i8 msg -> readln()
+
+	println(msg)
+
+	return 0
 }
