@@ -16,7 +16,7 @@ use crate::reader::CharReader;
 use crate::utils::Indirection;
 use cranelift_codegen::control::ControlPlane;
 use cranelift_codegen::ir::{AbiParam, Function, GlobalValue, InstBuilder, MemFlags, Signature, UserFuncName, Value};
-use cranelift_codegen::isa::{Builder, CallConv, OwnedTargetIsa};
+use cranelift_codegen::isa::{Builder, CallConv, OwnedTargetIsa, TargetFrontendConfig};
 use cranelift_codegen::{ir, settings, Context};
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{default_libcall_names, DataDescription, Linkage, Module};
@@ -113,6 +113,24 @@ impl CraneliftGenerator {
             tg: TypeGenerator::new(),
             included_modules: vec![],
             auto_frees: vec![],
+        }
+    }
+
+    pub fn compile_cmp_op(&mut self, op: &String, left: &AstNode, right: &AstNode, func: &mut FunctionBuilder, trace: &Trace) -> (Value, Type) {
+        match &**op {
+            "==" => {
+                let (left, lty) = self.compile_body_expr(left, func, trace);
+                let (right, rty) = self.compile_body_expr(right, func, trace);
+                
+                if lty != rty {
+                    return (func.ins().iconst(ir::types::I8, 0), Type::Bool)
+                }
+                
+                let ty_size = func.ins().iconst(ir::types::I64, lty.size_bytes(&self.isa) as i64);
+                
+                (func.call_memcmp(self.isa.frontend_config(), left, right, ty_size), CraneliftType::Bool)
+            }
+            _ => todo!("Handle error here")
         }
     }
 

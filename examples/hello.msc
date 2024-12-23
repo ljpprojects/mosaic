@@ -1,16 +1,8 @@
+include std::string
 include std::io
 
-extern fn popen(*i8 cmd, *i8 mode) -> *null
-extern fn pclose(*null file) -> null
-extern fn fgets(*i8 buf, i32 size, *null file) -> *null
-
 fn main() -> i32 {
-	def *null fp -> popen("/bin/echo Hello, World!", "r")
-	def *i8 line -> ""
+    println(astrcat("Hello,", " World!"))
 
-	fgets(line, 32, fp)
-
-	println(line)
-
-	return 0
+    return 0
 }

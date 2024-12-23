@@ -6,7 +6,7 @@ use cranelift_codegen::isa::OwnedTargetIsa;
 use crate::parser::{AstNode, ParseType};
 use crate::utils::Indirection;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum CraneliftType {
     Int8,
     Int16,
