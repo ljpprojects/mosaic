@@ -133,6 +133,7 @@ impl TypeGenerator {
                 ("i32".into(), CraneliftType::UInt32),
                 ("i64".into(), CraneliftType::UInt64),
                 ("null".into(), CraneliftType::Null),
+                ("bool".into(), CraneliftType::Bool),
             ]),
         }
     }
