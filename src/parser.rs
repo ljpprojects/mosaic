@@ -172,6 +172,18 @@ pub enum AstNode {
         def_type: ParseType,
         value: Rc<AstNode>,
     },
+    
+    WhileStmt {
+        cond: Rc<AstNode>,
+        code: ParseBlock,
+    },
+
+    StructStmt {
+        name: String,
+        generics: HashMap<String, Option<TypeBound>>,
+        fields: HashMap<String, (Box<[Modifier]>, ParseType, Option<AstNode>)>,
+        methods: HashMap<String, (ParseType, Box<[(String, ParseType, Option<AstNode>)]>, HashMap<String, Option<TypeBound>>, ParseBlock, Box<[Modifier]>)>
+    },
 
     /// self.0 is always an AstNode::Path
     IncludeStmt(/*LineInfo, */Box<[String]>),
@@ -200,11 +212,13 @@ pub enum AstNode {
 
     // --- SPECIAL --- //
     Program(Box<[AstNode]>),
+    Macro(String, Box<[AstNode]>),
 }
 
 impl Display for AstNode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            AstNode::StructStmt { .. } => write!(f, "couldn't be bothered"),
             AstNode::NumberLiteral(n) => write!(f, "{n}"),
             AstNode::StringLiteral(s) => write!(f, "\"{s}\""),
             AstNode::ArrayLiteral(arr) => write!(f, "{arr:?}"),
@@ -253,6 +267,10 @@ impl Display for AstNode {
                 name,
                 def_type,
             } => write!(f, "extern def {def_type} {name}"),
+            AstNode::WhileStmt {
+                cond,
+                ..
+            } => write!(f, "while {cond} {{ ... }}"),
             AstNode::Program(p) => write!(
                 f,
                 "{}",
@@ -263,7 +281,8 @@ impl Display for AstNode {
             ),
             AstNode::ReturnStmt(v) => write!(f, "return {v}"),
             AstNode::ForInExpr { var, of, block } => write!(f, "for {var} in {of} {{\n{block}\n}}"),
-            AstNode::ByteLiteral(b) => write!(f, "'{C}'", C = *b as char)
+            AstNode::ByteLiteral(b) => write!(f, "'{C}'", C = *b as char),
+            AstNode::Macro(name, args) => write!(f, "@{name}(${A})", A = args.iter().map(|a| a.to_string()).collect::<Vec<_>>().join(", "))
         }
     }
 }
@@ -717,6 +736,37 @@ impl StreamedParser {
             }
 
             Token::Char(c, line_info) => {
+                if c == '@' {
+                    let name = match self.lexer.next_token() {
+                        Some(Ok(Token::Ident(name, _))) => name,
+                        Some(Ok(tk)) => return Some(Err(ParseError::ExpectedToken(self.file.clone(), Token::Debug("MACRO_NAME".into()), tk))),
+                        Some(Err(e)) => return Some(Err(e)),
+                        None => return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug("MACRO_NAME".into()))))
+                    };
+
+                    self.expect_chars(&"(", true);
+                    
+                    return if let Some(Ok(Token::Char(c, _))) = self.lexer.peek_next_token() {
+                        if c == ')' {
+                            self.lexer.next_token();
+
+                            Some(Ok(AstNode::Macro(name, vec![].into_boxed_slice())))
+                        } else {
+                            let args = match self.parse_list(None) {
+                                Ok(args) => args,
+                                Err(e) => return Some(Err(e)),
+                            };
+
+                            match self.expect_chars(&")", true) {
+                                Ok(_) => Some(Ok(AstNode::Macro(name, args.into_boxed_slice()))),
+                                Err(e) => Some(Err(e)),
+                            }
+                        }
+                    } else {
+                        Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug("MACRO_ARGS".into()))))
+                    };
+                }
+                
                 if c == '[' {
                     return match self.parse_array_expr()? {
                         Ok(node) => Some(Ok(node)),
@@ -1075,7 +1125,7 @@ impl StreamedParser {
         };
 
         if let Ok(op) = self.expect_chars(&"==", true) {
-            let Some(right) = self.parse_comparative_expr() else {
+            let Some(right) = self.parse_assignment_expr() else {
                 return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                     "EXPRESSION".to_string(),
                 ))));
@@ -1089,7 +1139,7 @@ impl StreamedParser {
                 Err(e) => return Some(Err(e)),
             }
         } else if let Ok(op) = self.expect_chars(&"!=", true) {
-            let Some(right) = self.parse_comparative_expr() else {
+            let Some(right) = self.parse_assignment_expr() else {
                 return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                     "EXPRESSION".to_string(),
                 ))));
@@ -1103,7 +1153,7 @@ impl StreamedParser {
                 Err(e) => return Some(Err(e)),
             }
         } else if let Ok(op) = self.expect_chars(&"||", true) {
-            let Some(right) = self.parse_comparative_expr() else {
+            let Some(right) = self.parse_assignment_expr() else {
                 return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                     "EXPRESSION".to_string(),
                 ))));
@@ -1117,7 +1167,7 @@ impl StreamedParser {
                 Err(e) => return Some(Err(e)),
             }
         } else if let Ok(op) = self.expect_chars(&"&&", true) {
-            let Some(right) = self.parse_comparative_expr() else {
+            let Some(right) = self.parse_assignment_expr() else {
                 return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
                     "EXPRESSION".to_string(),
                 ))));
@@ -1130,6 +1180,54 @@ impl StreamedParser {
 
                 Err(e) => return Some(Err(e)),
             }
+        } else if let Ok(op) = self.expect_chars(&"<", true) {
+            let Some(right) = self.parse_assignment_expr() else {
+                return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
+                    "EXPRESSION".to_string(),
+                ))));
+            };
+
+            match right {
+                Ok(right) => {
+                    left = AstNode::InfixOp(Rc::from(left), op.to_string(), Rc::from(right))
+                }
+
+                Err(e) => return Some(Err(e)),
+            }
+        } else if let Ok(op) = self.expect_chars(&">", true) {
+            let Some(right) = self.parse_assignment_expr() else {
+                return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug(
+                    "EXPRESSION".to_string(),
+                ))));
+            };
+
+            match right {
+                Ok(right) => {
+                    left = AstNode::InfixOp(Rc::from(left), op.to_string(), Rc::from(right))
+                }
+
+                Err(e) => return Some(Err(e)),
+            }
+        }
+
+        Some(Ok(left))
+    }
+
+    pub fn parse_assignment_expr(&mut self) -> Option<Result<AstNode, ParseError>> {
+        let mut left = match self.parse_comparative_expr()? {
+            Ok(left) => left,
+            Err(e) => return Some(Err(e))
+        };
+
+        if self.expect_chars(&"=", false).is_ok() && self.expect_chars(&"==", false).is_err() {
+            self.expect_chars(&"=", true).unwrap();
+
+            let right = match self.next_ast_node()? {
+                Ok(left) => left,
+                Err(e) => return Some(Err(e))
+            };
+
+            left = AstNode::InfixOp(Rc::new(left), "=".into(), Rc::new(right));
         }
 
         Some(Ok(left))
@@ -1394,6 +1492,26 @@ impl StreamedParser {
         Some(Ok(AstNode::ReturnStmt(Indirection::new(value))))
     }
 
+    pub fn parse_while_expr(&mut self) -> Option<Result<AstNode, ParseError>> {
+        self.expect_ident(&"while", true).unwrap();
+
+        let cond = match self.next_ast_node() {
+            Some(Ok(n)) => n,
+            Some(Err(e)) => return Some(Err(e)),
+            None => return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug("WHILE_COND".to_string())))),
+        };
+
+        let block = match self.parse_block_expr() {
+            Ok(b) => b,
+            Err(e) => return Some(Err(e))
+        };
+
+        Some(Ok(AstNode::WhileStmt {
+            cond: Indirection::new(cond),
+            code: block,
+        }))
+    }
+
     pub fn parse_for_in_expr(&mut self) -> Option<Result<AstNode, ParseError>> {
         self.expect_ident(&"for", true).unwrap();
 
@@ -1423,6 +1541,78 @@ impl StreamedParser {
         }))
     }
 
+    pub fn parse_struct(&mut self) -> Option<Result<AstNode, ParseError>> {
+        self.expect_ident(&"struct", true);
+
+        let name = match self.lexer.next_token() {
+            Some(Ok(Token::Ident(name, _))) => name,
+            Some(Ok(tk)) => return Some(Err(ParseError::ExpectedToken(
+                self.file.clone(),
+                Token::Ident("".into(), LineInfo::default()),
+                tk
+            ))),
+            Some(Err(e)) => return Some(Err(e)),
+            None => return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug("STRUCT_NAME".into()))))
+        };
+        
+        self.expect_chars(&"{", true);
+        
+        let mut fields: HashMap<String, (Box<[Modifier]>, ParseType, Option<AstNode>)> = HashMap::new();
+        
+        while self.expect_ident(&"def", true).is_ok() {
+            let def_type = match self.parse_type() {
+                Ok(def_type) => def_type,
+                Err(e) => return Some(Err(e)),
+            };
+            
+            let name = match self.lexer.next_token() {
+                Some(Ok(Token::Ident(name, _))) => name,
+                Some(Ok(tk)) => return Some(Err(ParseError::ExpectedToken(
+                    self.file.clone(),
+                    Token::Ident("".into(), LineInfo::default()),
+                    tk
+                ))),
+                Some(Err(e)) => return Some(Err(e)),
+                None => return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), Token::Debug("FIELD_NAME".into()))))
+            };
+
+            let mut modifiers = vec![];
+
+            while let Some(Ok(Token::Ident(m, _))) = self.lexer.peek_next_token() {
+                let Ok(m) = Modifier::from_str(&*m) else {
+                    break
+                };
+
+                modifiers.push(m);
+
+                self.lexer.next_token().unwrap().unwrap();
+            }
+            
+            self.expect_chars(&"->", true).is_ok();
+            
+            let default = match self.next_ast_node()? {
+                Ok(AstNode::Identifier(n)) if n == "init" => None,
+                Ok(n) => Some(n),
+                Err(e) => return Some(Err(e))
+            };
+            
+            fields.insert(name, (modifiers.into_boxed_slice(), def_type, default));
+        }
+        
+        let mut methods = HashMap::new();
+        
+        while let Ok(AstNode::FnExpr { name, ret_type, args, type_generics, code, modifiers }) = self.parse_fn_expr().unwrap() {
+            methods.insert(name, (ret_type, args, type_generics, code, modifiers));
+        };
+        
+        Some(Ok(AstNode::StructStmt {
+            name,
+            generics: Default::default(),
+            fields,
+            methods,
+        }))
+    }
+
     pub fn next_ast_node(&mut self) -> Option<Result<AstNode, ParseError>> {
         if let Some(Ok(Token::Ident(ident, _))) = self.lexer.peek_next_token() {
             match ident.as_str() {
@@ -1433,10 +1623,12 @@ impl StreamedParser {
                 "extern" => self.parse_extern_stmt(),
                 "return" => self.parse_return_stmt(),
                 "for" => self.parse_for_in_expr(),
-                _ => self.parse_comparative_expr(),
+                "struct" => self.parse_struct(),
+                "while" => self.parse_while_expr(),
+                _ => self.parse_assignment_expr(),
             }
         } else {
-            self.parse_comparative_expr()
+            self.parse_assignment_expr()
         }
     }
 

@@ -6,8 +6,9 @@ use cranelift_codegen::isa::OwnedTargetIsa;
 use crate::parser::{AstNode, ParseType};
 use crate::utils::Indirection;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum CraneliftType {
+    Any,
     Int8,
     Int16,
     Int32,
@@ -32,6 +33,34 @@ pub enum CraneliftType {
     
     // *:0[u8]
     UCStr,
+}
+
+impl PartialEq for CraneliftType {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Any, _) => true,
+            (Self::Int8, Self::Int8) => true,
+            (Self::Int16, Self::Int16) => true,
+            (Self::Int32, Self::Int32) => true,
+            (Self::Int64, Self::Int64) => true,
+            (Self::UInt8, Self::UInt8) => true,
+            (Self::UInt16, Self::UInt16) => true,
+            (Self::UInt32, Self::UInt32) => true,
+            (Self::UInt64, Self::UInt64) => true,
+            (Self::Bool, Self::Bool) => true,
+            (Self::Null, Self::Null) => true,
+            (Self::CPtr(ty), Self::CPtr(ty2)) => ty == ty2,
+            (Self::CStr, Self::CPtr(ty)) if ty.deref() == &Self::Int8 => true,
+            (Self::CPtr(ty), Self::CStr) if ty.deref() == &Self::Int8 => true,
+            (Self::UCStr, Self::CPtr(ty)) if ty.deref() == &Self::UInt8 => true,
+            (Self::CPtr(ty), Self::UCStr) if ty.deref() == &Self::UInt8 => true,
+            (Self::Float32, Self::Float32) => true,
+            (Self::Float64, Self::Float64) => true,
+            (Self::FuncPtr { ret_type, arg_types }, Self::FuncPtr { ret_type: ret_type2, arg_types: arg_types2 }) => ret_type == ret_type2 && arg_types == arg_types2,
+            (Self::Slice(ty, size), Self::Slice(ty2, size2)) => ty == ty2 && size == size2,
+            _ => false
+        }
+    }
 }
 
 impl CraneliftType {
@@ -69,6 +98,7 @@ impl CraneliftType {
     
     pub fn into_cranelift(self, isa: &OwnedTargetIsa) -> Type {
         match self {
+            Self::Any => panic!("Cannot use 'any' type in actual code"),
             Self::Int8 | Self::UInt8 => types::I8,
             Self::Int16 | Self::UInt16 => types::I16,
             Self::Int32 | Self::UInt32 => types::I32,
@@ -82,6 +112,7 @@ impl CraneliftType {
     
     pub fn size_bytes(&self, isa: &OwnedTargetIsa) -> u8 {
         match self {
+            Self::Any => panic!("Cannot get size of type 'any'."),
             Self::Int8 | Self::UInt8 => 1,
             Self::Int16 | Self::UInt16 => 2,
             Self::Int32 | Self::UInt32 => 4,
@@ -134,6 +165,7 @@ impl TypeGenerator {
                 ("i64".into(), CraneliftType::UInt64),
                 ("null".into(), CraneliftType::Null),
                 ("bool".into(), CraneliftType::Bool),
+                ("any".into(), CraneliftType::Any)
             ]),
         }
     }

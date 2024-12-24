@@ -47,9 +47,11 @@ impl VariableBuilder {
         builder.def_var(variable.1, value)
     }
 
-    pub(crate) fn get_var(&self, builder: &mut FunctionBuilder, name: &String) -> Option<(Value, crate::compiler::cranelift::types::CraneliftType)> {
+    pub(crate) fn get_var(&self, builder: &mut FunctionBuilder, name: &String) -> Option<(Value, CraneliftType)> {
         let variable = self.variables.get(name)?;
+        
+        println!("{name}");
 
-        Some((builder.use_var(variable.1), variable.2.clone()))
+        Some((builder.try_use_var(variable.1).ok()?, variable.2.clone()))
     }
 }

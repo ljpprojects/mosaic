@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::fmt::{write, Debug, Display, Formatter};
 use std::path::PathBuf;
 use colored::Colorize;
@@ -28,7 +29,10 @@ pub enum CompilationError {
     UnknownModule(PathBuf, Box<[String]>),
     UndefinedVariable(PathBuf, String),
     DualDefinition(PathBuf, String),
+    UndefinedOperator(PathBuf, String),
 }
+
+impl Error for CompilationError {}
 
 impl Debug for CompilationError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -162,6 +166,11 @@ impl Display for CompilationError {
                     " = ".italic().yellow(),
                     "VALUE".italic().yellow(),
                 )
+            }
+
+            CompilationError::UndefinedOperator(file, op) => {
+                writeln!(f, "  {}{}", "Compilation error in file ".bold().bright_red(), file.to_string_lossy().bold().bright_red())?;
+                writeln!(f, "    {}{}{}", "Undefined operator ".bold(), op.italic().bold(), " .".bold())
             }
         }
     }

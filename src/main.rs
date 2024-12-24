@@ -5,7 +5,6 @@
 #![feature(unsized_locals)]
 #![feature(associated_type_defaults)]
 #![feature(sized_type_properties)]
-#![feature(strict_provenance)]
 #![allow(invalid_reference_casting)]
 #![allow(incomplete_features)]
 #![allow(refining_impl_trait)]
@@ -18,7 +17,6 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use colored::Colorize;
 use cranelift_native;
-use lang_c::driver::{parse, Config};
 use crate::compiler::cranelift::CraneliftGenerator;
 use crate::compiler::cranelift::linker::Linker;
 use crate::file::File;
@@ -47,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut cg = CraneliftGenerator::new(parser, cranelift_native::builder()?, "bench".into());
 
-    let gen = cg.compile(true, None);
+    let gen = cg.compile(true, None)?;
     
     Linker::link(gen);
 
