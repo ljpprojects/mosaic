@@ -1,4 +1,5 @@
 use std::ops::Deref;
+use crate::compiler::cranelift::types::CraneliftType;
 use crate::utils::Indirection;
 
 #[derive(Clone, PartialEq)]
@@ -8,6 +9,8 @@ pub enum ContextKind {
     CallArg,
     Return,
     Idx,
+    Def(CraneliftType),
+    Normal
 }
 
 #[derive(Clone)]

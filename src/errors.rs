@@ -2,17 +2,14 @@ use std::error::Error;
 use std::fmt::{write, Debug, Display, Formatter};
 use std::path::PathBuf;
 use colored::Colorize;
+use crate::compiler::traits::CompilationType;
 use crate::file::File;
 use crate::parser::AstNode;
 use crate::reader::CharReader;
 use crate::tokens::{LineInfo, Token};
 
-pub struct LocationInfo {
-    
-}
-
 #[derive(Clone)]
-pub enum CompilationError {
+pub enum CompilationError<'a> {
     /**** Lex errors ****/
     InvalidChar(PathBuf, char, LineInfo),
     UnfinishedString(PathBuf, LineInfo),
@@ -30,18 +27,19 @@ pub enum CompilationError {
     UndefinedVariable(PathBuf, String),
     DualDefinition(PathBuf, String),
     UndefinedOperator(PathBuf, String),
+    MismatchedTypeInDef(PathBuf, String, &'a dyn CompilationType, &'a dyn CompilationType)
 }
 
-impl Error for CompilationError {}
+impl Error for CompilationError<'_> {}
 
-impl Debug for CompilationError {
+impl<TY: CompilationType> Debug for CompilationError<TY> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self}")
     }
 }
 
-impl Display for CompilationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<TY: CompilationType> Display for CompilationError<TY> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             CompilationError::InvalidChar(file, char, line_info) => {
                 writeln!(f, "  {}{}", "Lexing error in file ".bold().bright_red(), file.to_string_lossy().bold().bright_red())?;
@@ -171,6 +169,11 @@ impl Display for CompilationError {
             CompilationError::UndefinedOperator(file, op) => {
                 writeln!(f, "  {}{}", "Compilation error in file ".bold().bright_red(), file.to_string_lossy().bold().bright_red())?;
                 writeln!(f, "    {}{}{}", "Undefined operator ".bold(), op.italic().bold(), " .".bold())
+            }
+
+            CompilationError::MismatchedTypeInDef(file, name, expected, got) => {
+                writeln!(f, "  {}{}", "Compilation error in file ".bold().bright_red(), file.to_string_lossy().bold().bright_red())?;
+                writeln!(f, "    {}{}{}{}{}{}", "Mismatched type ".bold(), got.to_string().italic().bold(), "in ".bold(), name.italic().bold(), "; expected type ".bold(), expected.to_string().italic().bold())
             }
         }
     }

@@ -12,7 +12,7 @@ or at [the Mosaic website](https://msc.ljpprojects.org/docs/).
 I wanted to experiment with creating a compiled language.
 The choice of backend — QBE — was random.
 
-## Supported Targets
+## Supported Targets (tested)
 * `aarch64-apple-darwin`
 * `x86_64-apple-darwin`
 

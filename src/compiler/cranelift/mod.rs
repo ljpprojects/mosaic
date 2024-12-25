@@ -34,7 +34,10 @@ use cranelift_codegen::settings::Configurable;
 use crate::compiler::cranelift::builders::VariableBuilder;
 use crate::compiler::cranelift::meta::FunctionMeta;
 use crate::compiler::cranelift::trace::{ContextKind, Trace};
-use crate::errors::CompilationError;
+use crate::compiler::traits::CompilationType;
+use crate::errors::CompilationError as CError;
+
+type CompilationError = CError<CraneliftType>;
 
 macro_rules! get_fn {
     ($self: expr, $name:expr) => {
@@ -141,7 +144,7 @@ impl CraneliftGenerator {
                 } else {
                     func.ins().icmp(IntCC::SignedGreaterThan, left, right)
                 };
-                
+
                 Ok((res, Type::Bool))
             }
             "<" => {
@@ -174,6 +177,18 @@ impl CraneliftGenerator {
 
                 Ok((res, ty))
             }
+            "*" => {
+                let (left, lty) = self.compile_body_expr(left, func, trace)?;
+                let (right, _rty) = self.compile_body_expr(right, func, trace)?;
+
+                let (res, ty) = if matches!(lty, Type::Float32) || matches!(lty, Type::Float64) {
+                    (func.ins().fmul(left, right), Type::Float64)
+                } else {
+                    (func.ins().imul(left, right), Type::Int64)
+                };
+
+                Ok((res, ty))
+            }
             _ => self.compile_cmp_op(op, left, right, func, trace)
         }
     }
@@ -192,7 +207,7 @@ impl CraneliftGenerator {
                 sig.params.push(AbiParam::new(Type::Int32.into_cranelift(&self.isa)));
                 sig.returns.push(AbiParam::new(self.isa.pointer_type()));
 
-                let core_msc_alloc = self.module.declare_function("core_msc_manmalloc", Linkage::Import, &sig).unwrap();
+                let core_msc_alloc = self.module.declare_function("manmalloc", Linkage::Import, &sig).unwrap();
                 let core_msc_alloc_fn = self.module.declare_func_in_func(core_msc_alloc, func.func);
 
                 let size = func.ins().iconst(Type::Int32.into_cranelift(&self.isa), ty.size_bytes(&self.isa) as i64);
@@ -214,7 +229,13 @@ impl CraneliftGenerator {
                 Ok((func.ins().iconst(ir::types::I64, Imm64::new(*i as i64)), Type::Int64))
             }
             AstNode::NumberLiteral(i) if i.fract() == 0f64 => {
-                Ok((func.ins().iconst(ir::types::I32, Imm64::new(*i as i64)), Type::Int32))
+                let ty = if let ContextKind::Def(ty) = &trace.context {
+                    ty.clone()
+                } else {
+                    Type::Int32
+                };
+                
+                Ok((func.ins().iconst(ir::types::I32, Imm64::new(*i as i64)), ty))
             }
             AstNode::NumberLiteral(i) => Ok((func.ins().f64const(*i), Type::Float64)),
             AstNode::ByteLiteral(b) => Ok((func.ins().iconst(ir::types::I8, Imm64::new(*b as i64)), Type::Int8)),
@@ -224,13 +245,13 @@ impl CraneliftGenerator {
             AstNode::BooleanLiteral(_) => Ok((func.ins().iconst(ir::types::I8, Imm64::new(0)), Type::Bool)),
             AstNode::NullLiteral => Ok((func.ins().iconst(ir::types::I8, Imm64::new(0)), Type::Null)),
             AstNode::Identifier(i) => Ok(self.var_builder.get_var(func, i).unwrap()),
-            AstNode::InfixOp(l, o, r) => self.compile_num_op(o, l, r, func, trace),
-            AstNode::PrefixOp(op, r) => self.compile_prefix_op(op, r, func, trace),
+            AstNode::InfixOp(l, o, r) => self.compile_num_op(o, l, r, func, &trace.nested_ctx(ContextKind::Normal)),
+            AstNode::PrefixOp(op, r) => self.compile_prefix_op(op, r, func, &trace.nested_ctx(ContextKind::Normal)),
             AstNode::PostfixOp(_, _) => todo!(),
             AstNode::Path(_) => todo!(),
             AstNode::MemberExpr(_) => todo!(),
             AstNode::IdxAccess(of, idx) => {
-                let (of, ty) = self.compile_body_expr(of, func, trace)?;
+                let (of, ty) = self.compile_body_expr(of, func, &trace.nested_ctx(ContextKind::Normal))?;
                 let (idx, _) = self.compile_body_expr(idx, func, &mut trace.nested_ctx(ContextKind::Idx))?;
 
                 println!("IDX {idx} OF {of}");
@@ -252,7 +273,7 @@ impl CraneliftGenerator {
                 
                 for arg in args.iter() {
                     println!("ARG {arg}");
-                    value_args.push(self.compile_body_expr(arg, func, trace)?.0);
+                    value_args.push(self.compile_body_expr(arg, func, &trace.nested_ctx(ContextKind::Normal))?.0);
                 }
 
                 let fn_meta = get_fn!(self, name).expect(&*format!("You sold: no function {name}")).first().unwrap();
@@ -275,55 +296,77 @@ impl CraneliftGenerator {
                 
                 Ok((ret, fn_meta.return_type.clone()))
             },
-            AstNode::AsExpr(_, _) => todo!(),
-            AstNode::IfExpr { .. } => todo!(),
+            AstNode::AsExpr(val, ty) => {
+                let (val, vty) = self.compile_body_expr(val, func, &trace.nested_ctx(ContextKind::Normal))?;
+                let ty = self.tg.compile_type(ty, &self.isa);
+                
+                let (Type::CPtr(_), Type::CPtr(_)) = (vty, ty.clone()) else {
+                    todo!()
+                };
+
+                Ok((val, ty))
+            },
             AstNode::ForInExpr { .. } => todo!(),
             node => unimplemented!("Compile node {node}")
         }
     }
-    
+
     pub fn compile_while_expr(&mut self, cond: &AstNode, code: &ParseBlock, func: &mut FunctionBuilder, trace: &Trace) -> Result<(), CompilationError> {
         let cond_block = func.create_block();
         let body_block = func.create_block();
         let end_block = func.create_block();
-        
+
+        func.ins().jump(cond_block, &[]);
         func.switch_to_block(cond_block);
-        
+
         let (cond, _) = self.compile_body_expr(cond, func, trace)?;
         func.ins().brif(cond, body_block, &[], end_block, &[]);
-        
+
         func.switch_to_block(body_block);
-        
+
         let ParseBlock::Plain(code) = code;
         self.compile_body(code.as_ref(), func, trace)?;
         func.ins().jump(cond_block, &[]);
-        
+
         func.switch_to_block(end_block);
 
         func.seal_block(cond_block);
         func.seal_block(body_block);
         func.seal_block(end_block);
-        
+
         Ok(())
     }
     
-    pub fn compile_body(&mut self, body: &[AstNode], func: &mut FunctionBuilder, trace: &Trace) -> Result<(), CompilationError> {
-        for stmt in body {
-            match stmt {
+    pub fn compile_body(&mut self, body: &[AstNode], func: &mut FunctionBuilder, trace: &Trace) -> Result<Option<(Value, Type)>, CompilationError> {
+        let mut r = None;
+
+        for (i, stmt) in body.iter().enumerate() {
+            if i == body.len() - 1 {
+
+            }
+
+            let res = match stmt {
                 AstNode::DefStmt { name, def_type, value } => {
-                    let (val, _) = self.compile_body_expr(value, func, trace)?;
                     let ty = self.tg.compile_type(def_type, &self.isa);
+                    let (val, _) = self.compile_body_expr(value, func, &trace.nested_ctx(ContextKind::Def(ty.clone())))?;
 
                     self.var_builder.create_var(func, val, (ty.clone(), ty.into_cranelift(&self.isa)), name.clone());
+
+                    None
                 }
                 AstNode::ExternDef { name, def_type } => {
                     let ty = self.tg.compile_type(def_type, &self.isa);
 
                     self.var_builder.declare_var(func, (ty.clone(), ty.into_cranelift(&self.isa)), name.clone());
+
+                    None
                 }
-                AstNode::IncludeStmt(_) => {}
-                AstNode::IfStmt { .. } => {}
-                AstNode::ExternFn { name, ret_type, args } => self.compile_extern_fn(name, ret_type, args)?,
+                AstNode::IncludeStmt(_) => todo!(),
+                AstNode::ExternFn { name, ret_type, args } => {
+                    self.compile_extern_fn(name, ret_type, args)?;
+                    None
+                },
+                AstNode::IfExpr { cond, block, else_clause } => self.compile_if_expr(cond.as_ref(), block, else_clause, func, trace)?,
                 AstNode::ReturnStmt(v) => {
                     let (val, _) = self.compile_body_expr(v, func, trace)?;
 
@@ -344,19 +387,29 @@ impl CraneliftGenerator {
                             println!("auto_free REM {auto_free} OF {}: {}", trace.symbol, self.auto_frees.len());
                         }
                     }
-                    
+
                     func.ins().return_(&[val]);
                     func.seal_all_blocks();
+
+                    None
                 }
-                AstNode::Program(_) => {},
-                AstNode::WhileStmt { cond, code } => self.compile_while_expr(cond.as_ref(), code, func, trace)?,
-                _ => { 
-                    self.compile_body_expr(stmt, func, trace)?;
-                }
+                AstNode::WhileStmt { cond, code } => {
+                    self.compile_while_expr(cond.as_ref(), code, func, trace)?;
+                    None
+                },
+                AstNode::IfStmt { cond, block } => {
+                    self.compile_if_stmt(cond.as_ref(), block, func, trace)?;
+                    None
+                },
+                _ => Some(self.compile_body_expr(stmt, func, trace)?)
+            };
+
+            if i == body.len() - 1 {
+                r = res
             }
         };
         
-        Ok(())
+        Ok(r)
     }
     
     pub fn compile_extern_fn(&mut self, name: &String, ret_type: &ParseType, args: &Box<[(String, ParseType, Option<AstNode>)]>) -> Result<(), CompilationError> {
@@ -610,5 +663,94 @@ impl CraneliftGenerator {
             tg: self.tg,
             out_file,
         })
+    }
+
+    fn compile_if_expr(&mut self, cond: &AstNode, code: &ParseBlock, else_code: &ParseBlock, func: &mut FunctionBuilder, trace: &Trace) -> Result<Option<(Value, CraneliftType)>, CompilationError> {
+        let success_block = func.create_block();
+        let else_block = func.create_block();
+        let end_block = func.create_block();
+
+        let (cond, _) = self.compile_body_expr(cond, func, trace)?;
+
+        func.ins().brif(cond, success_block, &[], else_block, &[]);
+
+        /**** success ****/
+
+        func.switch_to_block(success_block);
+
+        let ParseBlock::Plain(code) = code;
+
+        // TODO: If statements with else clauses
+        let Some((res, res_ty)) = self.compile_body(code.as_ref(), func, trace)? else {
+            func.ins().jump(end_block, &[]);
+
+            /**** failure ****/
+
+            func.switch_to_block(else_block);
+
+            let ParseBlock::Plain(else_code) = else_code;
+            self.compile_body(else_code.as_ref(), func, trace)?;
+
+            func.ins().jump(end_block, &[]);
+
+            func.switch_to_block(end_block);
+
+            func.seal_block(success_block);
+            func.seal_block(else_block);
+            func.seal_block(end_block);
+
+            return Ok(None)
+        };
+        
+        func.append_block_param(end_block, res_ty.clone().into_cranelift(&self.isa));
+
+        func.ins().jump(end_block, &[res]);
+
+        /**** failure ****/
+
+        func.switch_to_block(else_block);
+
+        let ParseBlock::Plain(else_code) = else_code;
+        let (res, _) = self.compile_body(else_code.as_ref(), func, trace)?.unwrap();
+
+        func.ins().jump(end_block, &[res]);
+
+        func.switch_to_block(end_block);
+
+        func.seal_block(success_block);
+        func.seal_block(else_block);
+        func.seal_block(end_block);
+
+        let result = func.block_params(end_block)[0];
+
+        Ok(Some((result, res_ty)))
+    }
+
+    // TODO: If statements \w else clauses
+    fn compile_if_stmt(&mut self, cond: &AstNode, code: &ParseBlock, func: &mut FunctionBuilder, trace: &Trace) -> Result<(), CompilationError> {
+        let success_block = func.create_block();
+        let else_block = func.create_block();
+        let end_block = func.create_block();
+
+        let (cond, _) = self.compile_body_expr(cond, func, trace)?;
+
+        func.ins().brif(cond, success_block, &[], else_block, &[]);
+
+        /**** success ****/
+
+        func.switch_to_block(success_block);
+
+        let ParseBlock::Plain(code) = code;
+
+        // TODO: If statements with else clauses
+        self.compile_body(code.as_ref(), func, trace)?;
+        func.ins().jump(end_block, &[]);
+        func.switch_to_block(end_block);
+
+        func.seal_block(success_block);
+        func.seal_block(else_block);
+        func.seal_block(end_block);
+
+        Ok(())
     }
 }
