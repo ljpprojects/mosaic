@@ -1,8 +1,11 @@
-include std::string
 include std::io
 
-fn main() -> i32 {
-    println(astrcat("Hello,", " World!"))
+# struct Foo {
+# 	def x: i32 = init
+# }
 
-    return 0
+fn main() -> i32 {
+	println("Hello, World")
+
+	return 0
 }
