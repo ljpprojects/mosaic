@@ -1,4 +1,5 @@
 #![feature(ptr_as_ref_unchecked)]
+#![feature(arbitrary_self_types)]
 #![feature(test)]
 #![feature(f128)]
 #![feature(let_chains)]
@@ -10,24 +11,24 @@
 #![allow(incomplete_features)]
 #![allow(refining_impl_trait)]
 
-extern crate test;
 extern crate core;
+extern crate test;
 
-use std::num::NonZeroUsize;
-use std::path::PathBuf;
-use std::rc::Rc;
-use colored::Colorize;
-use cranelift_native;
-use lang_c::driver::{parse, Config};
-use crate::compiler::cranelift::CraneliftGenerator;
+use std::str::FromStr;
+use cranelift_codegen::isa;
+use cranelift_codegen::isa::IsaBuilder;
 use crate::compiler::cranelift::linker::Linker;
+use crate::compiler::cranelift::CraneliftGenerator;
 use crate::file::File;
 use crate::lexer::StreamedLexer;
 use crate::parser::StreamedParser;
 use crate::reader::CharReader;
-use crate::tokens::LineInfo;
+use cranelift_native;
+use target_lexicon::Triple;
 
+pub mod cli;
 pub mod compiler;
+pub mod errors;
 pub mod file;
 pub mod lexer;
 pub mod parser;
@@ -35,44 +36,24 @@ pub mod reader;
 pub mod states;
 pub mod tokens;
 pub mod utils;
-pub mod cli;
-pub mod errors;
 
-const F_NAME: &str = "/Users/geez/RustroverProjects/mosaic/examples/bench.mosaic";
+const F_NAME: &str = "/Users/geez/RustroverProjects/mosaic/examples/hello.msc";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let reader = CharReader::new(File::new("./examples/hello.msc".to_string()).unwrap());
+    let reader = CharReader::new(File::new(F_NAME.to_string()).unwrap());
     let lexer = StreamedLexer::new(reader);
     let parser = StreamedParser::new(lexer);
 
-    let mut cg = CraneliftGenerator::new(parser, cranelift_native::builder()?, "bench".into());
+    let cg = CraneliftGenerator::new(parser, isa::lookup(Triple::from_str("aarch64-linux-gnu").unwrap())?);
 
-    let gen = cg.compile(true, None);
-    
-    Linker::link(gen);
+    match cg.compile(true, None) {
+        Ok(gen) => Linker::link(gen),
+        Err(errors) => {
+            for err in errors {
+                eprintln!("{err}")
+            }
+        }
+    }
 
-    /*let reader = CharReader::new(File::new(PathBuf::from("examples/hello.msc").to_string_lossy().to_string()).unwrap());
-
-    print!("{}", reader.get_snippet(&LineInfo::new(
-        Rc::new(NonZeroUsize::new(1).unwrap()),
-        Rc::new(NonZeroUsize::new(19).unwrap()),
-        Rc::new(NonZeroUsize::new(1).unwrap()),
-        Rc::new(NonZeroUsize::new(1).unwrap()),
-    )).unwrap());
-
-    print!("{}", reader.get_snippet(&LineInfo::new(
-        Rc::new(NonZeroUsize::new(19).unwrap()),
-        Rc::new(NonZeroUsize::new(22).unwrap()),
-        Rc::new(NonZeroUsize::new(1).unwrap()),
-        Rc::new(NonZeroUsize::new(1).unwrap()),
-    )).unwrap().red().bold());
-
-    println!("{}", reader.get_snippet(&LineInfo::new(
-        Rc::new(NonZeroUsize::new(22).unwrap()),
-        Rc::new(NonZeroUsize::new(33).unwrap()),
-        Rc::new(NonZeroUsize::new(1).unwrap()),
-        Rc::new(NonZeroUsize::new(1).unwrap()),
-    )).unwrap());*/
-    
     Ok(())
 }

@@ -1,9 +1,9 @@
+use crate::compiler::cranelift::types::TypeGenerator;
+use crate::compiler::cranelift::FunctionMeta;
+use cranelift_object::ObjectProduct;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Formatter};
 use std::path::PathBuf;
-use cranelift_object::ObjectProduct;
-use crate::compiler::cranelift::FunctionMeta;
-use crate::compiler::cranelift::types::TypeGenerator;
 
 pub struct CraneliftModule {
     pub product: ObjectProduct,

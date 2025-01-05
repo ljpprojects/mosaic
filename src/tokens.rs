@@ -1,8 +1,8 @@
+use crate::utils::IndirectionTrait;
 use std::fmt::{Debug, Display, Formatter};
 use std::num::{NonZero, NonZeroUsize};
 use std::ops::Range;
 use std::rc::Rc;
-use crate::utils::IndirectionTrait;
 
 #[derive(PartialEq)]
 pub struct LineInfo {
@@ -75,26 +75,26 @@ impl LineInfo {
             end_line: line,
         }
     }
-    
+
     pub fn to_ranges(&self) -> (Range<usize>, Range<usize>) {
         (
             self.start_char.get()..self.end_char.get(),
             self.start_line.get()..self.end_line.get(),
         )
     }
-    
+
     pub fn begin_line(&self) -> usize {
         self.start_line.get()
     }
-    
+
     pub fn end_line(&self) -> usize {
         self.end_line.get()
     }
-    
+
     pub fn begin_char(&self) -> usize {
         self.start_char.get()
     }
-    
+
     pub fn end_char(&self) -> usize {
         self.end_char.get()
     }

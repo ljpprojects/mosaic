@@ -1,10 +1,8 @@
-use std::alloc::{dealloc, Layout};
 use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 use std::rc::Rc;
-use crate::parser::ParseType;
 
 pub enum OneOf<A, B> {
     First(A),
@@ -113,16 +111,28 @@ impl<T> MutRc<T> {
         &mut inner.data
     }
 
-    fn as_mut<'a>(&mut self) -> &'a mut T {
+    pub fn as_mut(&mut self) -> &mut T {
         let inner = unsafe { self.ptr.as_mut() };
 
         &mut inner.data
     }
 
-    pub fn as_ref<'a>(&self) -> &'a T {
+    pub fn as_ref(&self) -> &T {
         let inner = unsafe { self.ptr.as_ref() };
 
         &inner.data
+    }
+
+    pub fn borrow_mut(&self) -> &mut T {
+        let inner = unsafe { self.ptr.as_ptr().as_mut() }.unwrap();
+
+        &mut inner.data
+    }
+
+    pub fn get(self) -> T {
+        let inner = unsafe { self.ptr.read() };
+
+        inner.data
     }
 }
 
@@ -170,19 +180,19 @@ pub type Indirection<T> = Rc<T>;
 impl<T> IndirectionTrait<T> for Indirection<T> {
     fn map<U, F: FnOnce(&T) -> U>(self, f: F) -> Indirection<U> {
         let res = f(self.as_ref());
-        
+
         Indirection::new(res)
     }
 }
 
-#[must_use="This function should be used sparingly."]
+#[must_use = "This function should be used sparingly."]
 pub struct UseSparingly<T>(T);
 
 impl<T> UseSparingly<T> {
     pub(crate) fn new(t: T) -> UseSparingly<T> {
         UseSparingly(t)
     }
-    
+
     pub fn acknowledge(self) -> T {
         self.0
     }

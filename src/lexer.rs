@@ -1,14 +1,13 @@
+use crate::errors::CompilationError;
 use crate::reader::CharReader;
 use crate::states::{LexerState, WithState};
 use crate::tokens::{LineInfo, Token};
+use crate::utils::IndirectionTrait;
 use std::cell::{Cell, RefCell};
-use std::fmt::{Display};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::str::FromStr;
-use crate::errors::CompilationError;
-use crate::utils::IndirectionTrait;
 
 /// This is equal to amount spaces a tab character is equal to.
 /// This is important because without it the character position system does not work.
@@ -37,8 +36,7 @@ type LexError = CompilationError;
 /// This is the lexer for the Mosaic programming language.
 /// Like the CharReader struct, it returns tokens individually, allowing for better performance,
 /// especially for large files.
-#[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct StreamedLexer {
     pub(crate) reader: CharReader,
     file: PathBuf,
@@ -102,7 +100,7 @@ impl WithState for StreamedLexer {
 impl StreamedLexer {
     pub fn new(reader: CharReader) -> StreamedLexer {
         let file = reader.reader.path().to_path_buf();
-        
+
         Self {
             reader,
             file,
@@ -211,9 +209,10 @@ impl StreamedLexer {
 
                 loop {
                     let Some(next_c) = next_char(true) else {
-                        return Some(Err(CompilationError::UnfinishedString(self.file.clone(), LineInfo::new_one_char(
-                            beginc, beginl,
-                        ))));
+                        return Some(Err(CompilationError::UnfinishedString(
+                            self.file.clone(),
+                            LineInfo::new_one_char(beginc, beginl),
+                        )));
                     };
 
                     if next_c == '"' {
@@ -235,19 +234,23 @@ impl StreamedLexer {
                     LineInfo::new(beginc, endc, beginl, endl),
                 )))
             }
-            
+
             '\'' => {
                 let beginc = Rc::from(NonZeroUsize::new(columnc.get()).unwrap());
                 let beginl = Rc::from(NonZeroUsize::new(linec.get()).unwrap());
-                
+
                 let c = next_char(true).unwrap() as u8;
-                
+
                 let linfo = LineInfo::new_one_char(beginc, beginl);
-                
+
                 if peek_char().unwrap() != '\'' {
-                    return Some(Err(CompilationError::InvalidChar(self.file.clone(), peek_char().unwrap(), linfo)));
+                    return Some(Err(CompilationError::InvalidChar(
+                        self.file.clone(),
+                        peek_char().unwrap(),
+                        linfo,
+                    )));
                 }
-                
+
                 next_char(true);
 
                 Some(Ok(Token::Byte(c, linfo)))
@@ -286,7 +289,12 @@ impl StreamedLexer {
 
                     Some(Ok(Token::Ident(
                         ident,
-                        LineInfo::new(beginc, endc.map(|n| n.checked_add(1).unwrap()), beginl.clone(), beginl),
+                        LineInfo::new(
+                            beginc,
+                            endc.map(|n| n.checked_add(1).unwrap()),
+                            beginl.clone(),
+                            beginl,
+                        ),
                     )))
                 } else if c.is_numeric() {
                     let beginc = Rc::from(NonZeroUsize::new(columnc.get()).unwrap());

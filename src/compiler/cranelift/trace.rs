@@ -1,5 +1,6 @@
-use std::ops::Deref;
+use crate::compiler::cranelift::types::CraneliftType;
 use crate::utils::Indirection;
+use std::ops::Deref;
 
 #[derive(Clone, PartialEq)]
 pub enum ContextKind {
@@ -8,6 +9,8 @@ pub enum ContextKind {
     CallArg,
     Return,
     Idx,
+    Def(CraneliftType),
+    Normal,
 }
 
 #[derive(Clone)]
@@ -15,11 +18,16 @@ pub struct Trace {
     pub parent: Option<Indirection<Trace>>,
     pub symbol: String,
     pub depth: usize,
-    pub context: ContextKind
+    pub context: ContextKind,
 }
 
 impl Trace {
-    pub fn new(parent: Option<Indirection<Trace>>, symbol: String, depth: usize, ctx: ContextKind) -> Self {
+    pub fn new(
+        parent: Option<Indirection<Trace>>,
+        symbol: String,
+        depth: usize,
+        ctx: ContextKind,
+    ) -> Self {
         Self {
             parent,
             symbol,
@@ -39,7 +47,7 @@ impl Trace {
 
     pub fn root(&self) -> Trace {
         let Some(cur) = self.parent.clone() else {
-            return self.clone()
+            return self.clone();
         };
 
         let mut cur = cur.deref();
