@@ -181,12 +181,17 @@ impl Display for CompilationError {
                     "Compilation error in file ".bold().bright_red(),
                     file.to_string_lossy().bold().bright_red()
                 )?;
+
+                let home = std::env::var("HOME").unwrap();
+                let search_path = modules.as_ref().split_last().unwrap().1.join("/");
+                
                 writeln!(
                     f,
-                    "    {}{}{}",
+                    "    {}{}{}{}",
                     "Module ".bold(),
                     module.italic().bold(),
-                    " not found.".bold()
+                    " not found.".bold(),
+                    format!("{home}/.msc/mods/{search_path}/{}.msc", modules.first().unwrap())
                 )?;
                 write!(
                     f,

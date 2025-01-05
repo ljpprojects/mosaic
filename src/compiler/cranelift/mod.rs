@@ -1056,6 +1056,8 @@ impl CraneliftGenerator {
                 }
 
                 if !msc_path.exists() {
+                    println!("MODULE NOT FOUND AT {msc_path:?}");
+                    
                     return Err(Box::new([CompilationError::UnknownModule(self.file_path.clone(), p.clone())]));
                 }
 
