@@ -1036,7 +1036,7 @@ impl CraneliftGenerator {
                 )));
 
                 // Attempt lookup in installed modules directory (~/.msc/mods/)
-                if fs::File::open(msc_path.clone()).is_err() {
+                if !msc_path.exists() {
                     let home = std::env::var("HOME").unwrap();
 
                     msc_path = PathBuf::from(format!(
@@ -1053,6 +1053,10 @@ impl CraneliftGenerator {
                     && !p.exists()
                 {
                     obj_path = None;
+                }
+
+                if !msc_path.exists() {
+                    return Err(Box::new([CompilationError::UnknownModule(self.file_path.clone(), p.clone())]));
                 }
 
                 // SHADOW CODEGEN
@@ -1074,12 +1078,6 @@ impl CraneliftGenerator {
 
                 self.tg.merge(&gen.tg);
                 self.included_modules.push(gen);
-
-                fs::File::open(msc_path.clone())
-                    .map_err(|_| {
-                        format!("{}::{}", search_path.replace("/", "::"), p.last().unwrap())
-                    })
-                    .unwrap();
 
                 Ok(())
             }
