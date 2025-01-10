@@ -10,9 +10,7 @@ include std::io
 # }
 
 fn main() -> i32 {
-	let ptr: *i32 = memalloc(4) as *i32
-
-	memfree(ptr)
+	println("Hello, World!")
 
 	return 0
 }

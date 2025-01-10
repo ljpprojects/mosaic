@@ -19,23 +19,23 @@ pub const PREFIX_OPS: &[&str] = &["!", "-", "+", "*", "&"];
 pub enum Modifier {
     /// Export the symbol this is used on
     Export,
-    
+
     /// The returned value will be freed at the end of the caller's scope (at a return stmt)
     AutoFree,
-    
+
     /// The returned value must be freed by the developer manually
     /// Functions marked with alloc should use this
     /// When the returned value is passed to a function with the dealloc modifier
     /// the compiler considers the value freed.
     MustFree,
-    
+
     /// Indicates to the compiler that this function deallocates memory.
     /// These functions should have one pointer argument.
     Dealloc,
-    
+
     /// Indicates to the compiler that this function allocates memory.
     /// This should be used with either must_free or auto_free.
-    Alloc
+    Alloc,
 }
 
 #[macro_export]

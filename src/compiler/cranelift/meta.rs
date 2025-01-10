@@ -1,8 +1,8 @@
 use crate::compiler::cranelift::types::CraneliftType;
 use crate::parser::Modifier;
 use cranelift_codegen::ir::{Block, Signature, Value};
-use std::collections::HashMap;
 use cranelift_frontend::Variable;
+use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
 pub struct FunctionMeta {
@@ -19,7 +19,7 @@ pub struct FunctionMeta {
 #[derive(Clone, Debug)]
 pub struct StructMeta {
     pub fields: HashMap<String, FieldMeta>,
-    pub methods: HashMap<String, Vec<FunctionMeta>>
+    pub methods: HashMap<String, Vec<FunctionMeta>>,
 }
 
 #[derive(Clone, Debug)]
@@ -33,14 +33,14 @@ pub struct FieldMeta {
 #[derive(Hash, Clone, Debug, PartialEq, Eq)]
 pub struct MustFreeMeta {
     pub(crate) value: Value,
-    pub(crate) returned_from: String
+    pub(crate) returned_from: String,
 }
 
 impl From<(Value, String)> for MustFreeMeta {
     fn from(value: (Value, String)) -> MustFreeMeta {
         Self {
             value: value.0,
-            returned_from: value.1
+            returned_from: value.1,
         }
     }
 }
@@ -51,7 +51,7 @@ pub struct VariableMeta {
     pub variable: Variable,
     pub last_assigned: Value,
     pub index: usize,
-    pub def_type: CraneliftType
+    pub def_type: CraneliftType,
 }
 
 impl From<(Value, usize, Variable, CraneliftType, bool)> for VariableMeta {
@@ -61,7 +61,7 @@ impl From<(Value, usize, Variable, CraneliftType, bool)> for VariableMeta {
             variable: value.2,
             last_assigned: value.0,
             index: value.1,
-            def_type:value.3,
+            def_type: value.3,
         }
     }
 }
