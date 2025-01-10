@@ -13,7 +13,7 @@ use std::str::FromStr;
 /// This is important because without it the character position system does not work.
 /// Can be overridden via the config key 'formatting.tab_space_count', or the '--tab-space-count' option.
 ///
-/// `mosaic build file.msc --tab-space-count 2`
+/// `mosaic-lang build file.msc --tab-space-count 2`
 /// or
 ///
 /// **config.toml**
