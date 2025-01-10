@@ -1,6 +1,6 @@
 [package]
 name = "mosaic"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 authors = ["Lucas Plumb"]
 keywords = ["compiler", "Mosaic"]
@@ -40,7 +40,6 @@ cranelift-object = "0.115.0"
 cranelift-native = "0.115.0"
 cranelift-frontend = "0.115.0"
 colored = "2.2.0"
-either = "1.13.0"
 
 # cranelift uses target-lexicon 0.12.16
 target-lexicon = "0.12.16"
