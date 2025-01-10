@@ -1,2 +1,13 @@
 /target
-/src/BEVM/target
+**/hello.cmp.o
+**/*.cmp.o
+**/*.o
+examples/hello
+**/mosaic.afdesign
+profile.json
+docs/src/.obsidian
+.DS_Store
+**/.DS_Store
+**/*.out
+.cargo
+.cargo/credentials.toml
