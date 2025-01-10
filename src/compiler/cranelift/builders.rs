@@ -7,10 +7,11 @@ use cranelift_codegen::isa::OwnedTargetIsa;
 use cranelift_frontend::{FunctionBuilder, Variable};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use crate::compiler::cranelift::meta::VariableMeta;
 
 pub struct VariableBuilder {
     index: usize,
-    scopes: Vec<HashMap<String, (usize, Variable, CraneliftType, bool)>>,
+    scopes: Vec<HashMap<String, VariableMeta>>,
     flags: MemFlags,
     isa: OwnedTargetIsa,
 }
@@ -61,7 +62,7 @@ impl VariableBuilder {
             builder.def_var(variable, ptr);
         }
 
-        self.scopes.last_mut().unwrap().insert(name.clone(), (self.index, variable, ty, constant));
+        self.scopes.last_mut().unwrap().insert(name.clone(), (value, self.index, variable, ty, constant).into());
 
         self.index += 1;
 
@@ -85,27 +86,27 @@ impl VariableBuilder {
             )]));
         };
 
-        let Some((_, variable, ty, constant)) = scope.get(name) else {
+        let Some(meta) = scope.get(name) else {
             return Err(Box::new([CompilationError::UndefinedVariable(
                 file,
                 name.clone(),
             )]));
         };
 
-        if *constant {
+        if meta.constant {
             return Err(Box::new([CompilationError::CannotMutate(file, name.clone())]));
         }
 
-        if ty != vty {
+        if meta.def_type != *vty {
             errors.push(CompilationError::MismatchedTypeInDef(
                 file,
                 name.clone(),
-                ty.clone(),
+                meta.def_type.clone(),
                 vty.clone(),
             ))
         }
 
-        let ptr = builder.use_var(*variable);
+        let ptr = builder.use_var(meta.variable);
 
         builder.ins().store(self.flags, *value, ptr, 0);
 
@@ -132,22 +133,56 @@ impl VariableBuilder {
             )]));
         };
 
-        let Some((_, variable, ty, constant)) = scope.get(name) else {
+        let Some(meta) = scope.get(name) else {
             return Err(Box::new([CompilationError::UndefinedVariable(
                 file,
                 name.clone(),
             )]));
         };
 
-        let val = if *constant {
-            builder.use_var(*variable)
+        let val = if meta.constant {
+            // since the value of a constant cannot change,
+            // the last assigned value is the current value.
+            meta.last_assigned
         } else {
-            let ptr = builder.use_var(*variable);
+            let ptr = builder.use_var(meta.variable);
             builder
                 .ins()
-                .load(ty.clone().into_cranelift(&self.isa), self.flags, ptr, 0)
+                .load(meta.def_type.clone().into_cranelift(&self.isa), self.flags, ptr, 0)
         };
 
-        Ok((val, ty.clone()))
+        Ok((val, meta.def_type.clone()))
+    }
+
+    pub fn get_var_ptr(
+        &self,
+        builder: &mut FunctionBuilder,
+        name: &String,
+        file: PathBuf,
+    ) -> Result<(Value, CraneliftType), Box<[CompilationError]>> {
+        let Some(scope) = self.scopes.iter().filter(|vars| vars.contains_key(name)).last() else {
+            return Err(Box::new([CompilationError::UndefinedVariable(
+                file,
+                name.clone(),
+            )]));
+        };
+
+        let Some(meta) = scope.get(name) else {
+            return Err(Box::new([CompilationError::UndefinedVariable(
+                file,
+                name.clone(),
+            )]));
+        };
+
+        let val = if meta.constant {
+            return Err(Box::new([CompilationError::CannotMakePointer(file, name.clone())]));
+        } else {
+            let ptr = builder.use_var(meta.variable);
+            builder
+                .ins()
+                .load(meta.def_type.clone().into_cranelift(&self.isa), self.flags, ptr, 0)
+        };
+
+        Ok((val, meta.def_type.clone()))
     }
 }

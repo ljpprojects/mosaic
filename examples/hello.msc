@@ -1,11 +1,18 @@
+include core::alloc
 include std::io
 
-# struct Foo {
-# 	def x: i32 = init
+# fn say_hello() -> null {
+# 	return println("Hello!")
+# }
+# 
+# fn do(fn() -> null task) -> null {
+# 	return task()
 # }
 
 fn main() -> i32 {
-	println("Hello, World")
+	let ptr: *i32 = memalloc(4) as *i32
+
+	memfree(ptr)
 
 	return 0
 }

@@ -13,7 +13,7 @@ impl Linker {
 
         let link_command = if std::env::var("TEST").unwrap() == "1" {
             format!(
-                "gcc -arch arm64 -Wl,-dead_strip,-O3,-pie -o {DIST} {MODS} {MAIN}",
+                "gcc -arch arm64 -Wl,-dead_strip,-O3,-pie -o {DIST} {MODS} io.o {MAIN}",
                 DIST = dist.to_str().unwrap(),
                 MODS = module
                     .prev_includes

@@ -5,6 +5,7 @@ use colored::Colorize;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::path::PathBuf;
+use crate::compiler::cranelift::meta::MustFreeMeta;
 
 #[derive(Clone)]
 pub enum CompilationError {
@@ -28,6 +29,9 @@ pub enum CompilationError {
     MismatchedTypeInDef(PathBuf, String, CraneliftType, CraneliftType),
     CannotMutate(PathBuf, String),
     UndefinedFunction(PathBuf, String),
+    InvalidCast(PathBuf, CraneliftType, CraneliftType),
+    CannotMakePointer(PathBuf, String),
+    NotFreed(PathBuf, MustFreeMeta)
 }
 
 impl Error for CompilationError {}
@@ -231,9 +235,9 @@ impl Display for CompilationError {
                     f,
                     "{}{}{}{}",
                     "    Try adding ",
-                    "def auto ".italic().yellow(),
+                    "let ".italic().yellow(),
                     name.italic().yellow(),
-                    " -> VALUE".italic().yellow(),
+                    ": TYPE = VALUE".italic().yellow(),
                 )
             }
 
@@ -332,6 +336,78 @@ impl Display for CompilationError {
                     "fn ".italic().yellow(),
                     name.italic().yellow(),
                     "(ARGS) -> RET_TY".italic().yellow(),
+                )
+            }
+            
+            CompilationError::InvalidCast(file, from, to) => {
+                writeln!(
+                    f,
+                    "  {}{}",
+                    "Compilation error in file ".bold().bright_red(),
+                    file.to_string_lossy().bold().bright_red()
+                )?;
+                
+                write!(
+                    f,
+                    "{}{}{}{}{}",
+                    "Invalid cast from type ".bold(),
+                    from.to_string().italic().bold(),
+                    " to ".bold(),
+                    to.to_string().italic().bold(),
+                    ".".bold()
+                )
+            }
+
+            CompilationError::CannotMakePointer(file, to) => {
+                writeln!(
+                    f,
+                    "  {}{}",
+                    "Compilation error in file ".bold().bright_red(),
+                    file.to_string_lossy().bold().bright_red()
+                )?;
+
+                writeln!(
+                    f,
+                    "{}{}{}",
+                    "Attempted to create a pointer (which is alwyas mutable) to an immutable variable ".bold(),
+                    to.to_string().italic().bold(),
+                    ".".bold()
+                )?;
+
+                write!(
+                    f,
+                    "{}{}{}{}{}{}",
+                    "    Try changing ",
+                    to.to_string().italic().bold(),
+                    "'s definition to: ".bold(),
+                    "mut ".italic().yellow(),
+                    to.italic().yellow(),
+                    ": TYPE = VAL".italic().yellow(),
+                )
+            }
+            
+            CompilationError::NotFreed(file, item) => {
+                writeln!(
+                    f,
+                    "  {}{}",
+                    "Compilation error in file ".bold().bright_red(),
+                    file.to_string_lossy().bold().bright_red()
+                )?;
+                
+                writeln!(
+                    f,
+                    "{}{}{}",
+                    "Value returned from function ".bold(),
+                    item.returned_from.italic().bold(),
+                    " was not freed.".bold()
+                )?;
+                
+                write!(
+                    f,
+                    "{}{}{}",
+                    "Note: Required value to be freed because of explicit ",
+                    "must_free ".italic(),
+                    "modifier."
                 )
             }
         }

@@ -22,6 +22,34 @@
             }
           },
           {
+            "id": "02b893a85b46ec75",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Functions.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Functions"
+            }
+          },
+          {
+            "id": "986d5b91d4fc6840",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Structs.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Structs"
+            }
+          },
+          {
             "id": "41b2eac1ea0c22ab",
             "type": "leaf",
             "state": {
@@ -39,12 +67,14 @@
             "id": "f925ae68530dbb2e",
             "type": "leaf",
             "state": {
-              "type": "release-notes",
+              "type": "markdown",
               "state": {
-                "currentVersion": "1.7.7"
+                "file": "Mosaic.md",
+                "mode": "source",
+                "source": false
               },
               "icon": "lucide-file",
-              "title": "Release Notes 1.7.7"
+              "title": "Mosaic"
             }
           }
         ],
@@ -104,7 +134,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 201.5
   },
   "right": {
     "id": "e3e73e10ac6979f6",
@@ -189,8 +219,10 @@
       "command-palette:Open command palette": false
     }
   },
-  "active": "f925ae68530dbb2e",
+  "active": "986d5b91d4fc6840",
   "lastOpenFiles": [
+    "Functions.md",
+    "Structs.md",
     "Mosaic.md",
     "Build System.md"
   ]

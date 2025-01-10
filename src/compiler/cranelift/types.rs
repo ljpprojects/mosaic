@@ -9,7 +9,7 @@ use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::rc::Rc;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq)]
 pub enum CraneliftType {
     Any,
     Int8,

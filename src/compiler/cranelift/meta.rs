@@ -2,6 +2,7 @@ use crate::compiler::cranelift::types::CraneliftType;
 use crate::parser::Modifier;
 use cranelift_codegen::ir::{Block, Signature, Value};
 use std::collections::HashMap;
+use cranelift_frontend::Variable;
 
 #[derive(Clone, Debug)]
 pub struct FunctionMeta {
@@ -27,4 +28,40 @@ pub struct FieldMeta {
     field_type: CraneliftType,
     modifiers: Box<[Modifier]>,
     default: Option<Value>,
+}
+
+#[derive(Hash, Clone, Debug, PartialEq, Eq)]
+pub struct MustFreeMeta {
+    pub(crate) value: Value,
+    pub(crate) returned_from: String
+}
+
+impl From<(Value, String)> for MustFreeMeta {
+    fn from(value: (Value, String)) -> MustFreeMeta {
+        Self {
+            value: value.0,
+            returned_from: value.1
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VariableMeta {
+    pub constant: bool,
+    pub variable: Variable,
+    pub last_assigned: Value,
+    pub index: usize,
+    pub def_type: CraneliftType
+}
+
+impl From<(Value, usize, Variable, CraneliftType, bool)> for VariableMeta {
+    fn from(value: (Value, usize, Variable, CraneliftType, bool)) -> Self {
+        Self {
+            constant: value.4,
+            variable: value.2,
+            last_assigned: value.0,
+            index: value.1,
+            def_type:value.3,
+        }
+    }
 }

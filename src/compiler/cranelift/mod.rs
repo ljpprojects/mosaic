@@ -8,7 +8,7 @@ pub mod value;
 
 use crate::compiler::analyser::PreoptEngine;
 use crate::compiler::cranelift::builders::VariableBuilder;
-use crate::compiler::cranelift::meta::{FunctionMeta, StructMeta};
+use crate::compiler::cranelift::meta::{FunctionMeta, MustFreeMeta, StructMeta};
 use crate::compiler::cranelift::module::CraneliftModule;
 use crate::compiler::cranelift::trace::{ContextKind, Trace};
 use crate::compiler::cranelift::types::{CraneliftType as Type, CraneliftType, TypeGenerator};
@@ -19,11 +19,12 @@ use crate::lexer::StreamedLexer;
 use crate::parser::{AstNode, Modifier, ParseBlock, ParseType, StreamedParser};
 use crate::reader::CharReader;
 use crate::utils::Indirection;
+use colored::Colorize;
 use cranelift_codegen::entity::EntityRef;
 use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
 use cranelift_codegen::ir::immediates::Imm64;
-use cranelift_codegen::ir::{AbiParam, Block, Function, GlobalValue, InstBuilder, MemFlags, Signature, StackSlotData, UserFuncName, Value};
-use cranelift_codegen::isa::{Builder, CallConv, IsaBuilder, OwnedTargetIsa};
+use cranelift_codegen::ir::{AbiParam, Block, ConstantData, Function, GlobalValue, InstBuilder, MemFlags, Signature, UserFuncName, Value};
+use cranelift_codegen::isa::{Builder, CallConv, OwnedTargetIsa};
 use cranelift_codegen::settings::Configurable;
 use cranelift_codegen::{ir, isa, settings, Context};
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
@@ -35,8 +36,6 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::ops::Deref;
 use std::path::PathBuf;
-use colored::Colorize;
-use cranelift_codegen::ir::entities::AnyEntity::StackSlot;
 
 macro_rules! get_fn {
     ($self: expr, $name:expr) => {
@@ -79,7 +78,11 @@ pub struct CraneliftGenerator {
     included_modules: Vec<CraneliftModule>,
     /// Every value that should be auto-freed at the end of a scope,
     /// where auto_frees.last() = the current auto-free items.
-    auto_frees: Vec<Vec<Value>>,
+    auto_frees: Vec<HashSet<Value>>,
+    
+    allocator_fns: HashSet<String>,
+    deallocator_fns: HashSet<String>,
+    must_frees: HashSet<MustFreeMeta>,
 }
 
 impl CraneliftGenerator {
@@ -131,6 +134,9 @@ impl CraneliftGenerator {
             tg: TypeGenerator::new(),
             included_modules: vec![],
             auto_frees: vec![],
+            allocator_fns: HashSet::new(),
+            deallocator_fns: HashSet::new(),
+            must_frees: HashSet::new(),
         }
     }
 
@@ -168,29 +174,10 @@ impl CraneliftGenerator {
                     .iconst(ir::types::I64, lty.size_bytes(&self.isa) as i64);
 
                 if lty.is_pointer() {
-                    assert!(rty.is_pointer());
-
-                    // comparing strings
-                    /*if matches!(lty.inner().unwrap(), Type::Int8) {
-                        let mut sig = Signature::new(self.isa.default_call_conv());
-
-                        sig.params.push(AbiParam::new(Type::CStr.into_cranelift(&self.isa)));
-                        sig.params.push(AbiParam::new(Type::CStr.into_cranelift(&self.isa)));
-                        sig.returns.push(AbiParam::new(Type::Bool.into_cranelift(&self.isa)));
-
-                        let strcmp = self.module.declare_function("strcmp", Linkage::Import, &sig).unwrap();
-                        let strcmp_fn = self.module.declare_func_in_func(strcmp, func.func);
-
-                        let eq = func.ins().call(strcmp_fn, &[left, right]);
-                        let eq = func.inst_results(eq)[0];
-
-                        Ok((func.ins().bxor_imm(eq, 1), Type::Bool))
-                    } else {*/
                     Ok((
                         func.call_memcmp(self.isa.frontend_config(), left, right, ty_size),
                         Type::Bool,
                     ))
-                    //}
                 } else if lty.is_numeric() {
                     Ok((
                         if matches!(lty, Type::Float32) || matches!(lty, Type::Float64) {
@@ -205,6 +192,46 @@ impl CraneliftGenerator {
                 } else {
                     todo!()
                 }
+            }
+            "!=" => {
+                let (left, lty) = self.compile_body_expr(left, func, trace)?;
+                let (right, rty) = self.compile_body_expr(right, func, trace)?;
+
+                if !lty.cmp_eq(&rty) {
+                    return Ok((func.ins().iconst(ir::types::I8, 0), Type::Bool));
+                }
+
+                let ty_size = func
+                    .ins()
+                    .iconst(ir::types::I64, lty.size_bytes(&self.isa) as i64);
+
+                if lty.is_pointer() {
+                    let eq = func.call_memcmp(self.isa.frontend_config(), left, right, ty_size);
+                    
+                    Ok((
+                        func.ins().bnot(eq),
+                        Type::Bool,
+                    ))
+                } else if lty.is_numeric() || matches!(lty, Type::Bool) {
+                    Ok((
+                        if matches!(lty, Type::Float32) || matches!(lty, Type::Float64) {
+                            func.ins().fcmp(FloatCC::NotEqual, left, right)
+                        } else {
+                            func.ins().icmp(IntCC::NotEqual, left, right)
+                        },
+                        Type::Bool,
+                    ))
+                } else if matches!(lty, Type::Bool) {
+                    Ok((func.ins().icmp(IntCC::NotEqual, left, right), Type::Bool))
+                } else {
+                    todo!()
+                }
+            }
+            "&&" => {
+                let (left, _) = self.compile_body_expr(left, func, trace)?;
+                let (right, _) = self.compile_body_expr(right, func, trace)?;
+                
+                Ok((func.ins().band(left, right), Type::Bool))
             }
             ">" => {
                 let (left, lty) = self.compile_body_expr(left, func, trace)?;
@@ -338,6 +365,12 @@ impl CraneliftGenerator {
                 Ok((func.ins().bxor_imm(right, 1), Type::Bool))
             }
             "&" => {
+                if let AstNode::Identifier(name) = right {
+                    let (ptr, ty) = self.var_builder.get_var_ptr(func, name, self.file_path.clone())?;
+
+                    return Ok((ptr, Type::CPtr(Indirection::new(ty))))
+                }
+                
                 let (right, ty) = self.compile_body_expr(right, func, trace)?;
 
                 if matches!(ty, CraneliftType::Null) {
@@ -369,9 +402,9 @@ impl CraneliftGenerator {
 
                 // Make sure the allocated pointer is freed
                 if let Some(scope) = self.auto_frees.last_mut() {
-                    scope.push(ptr.clone())
+                    scope.insert(ptr.clone());
                 } else {
-                    self.auto_frees.push(vec![ptr.clone()]);
+                    self.auto_frees.push([ptr.clone()].into());
                 }
 
                 func.ins().store(
@@ -495,10 +528,24 @@ impl CraneliftGenerator {
 
                 if fn_meta.modifiers.contains(&Modifier::AutoFree) {
                     if self.auto_frees.len() == 0 {
-                        self.auto_frees.push(vec![]);
+                        self.auto_frees.push(HashSet::new());
                     }
 
-                    self.auto_frees.last_mut().unwrap().push(ret.clone());
+                    self.auto_frees.last_mut().unwrap().insert(ret.clone());
+                } else if fn_meta.modifiers.contains(&Modifier::MustFree) {
+                    self.must_frees.insert((ret.clone(), name.clone()).into());
+                }
+                
+                if value_args.len() != 0 && fn_meta.modifiers.contains(&Modifier::Dealloc) {
+                    for item in self.must_frees.clone() {
+                        if item.value != ret.clone() {
+                            continue
+                        }
+
+                        self.must_frees.remove(&item);
+                        
+                        break
+                    }
                 }
 
                 Ok((ret, fn_meta.return_type.clone()))
@@ -523,7 +570,7 @@ impl CraneliftGenerator {
 
                         Ok((casted, to))
                     }
-                    _ => todo!("{vty:?} as {ty}"),
+                    (from, to) => Err(Box::new([CompilationError::InvalidCast(self.file_path.clone(), from, to)])),
                 }
             }
             AstNode::ForInExpr { .. } => todo!(),
@@ -576,7 +623,6 @@ impl CraneliftGenerator {
 
         for (i, stmt) in body.iter().enumerate() {
             let res = match stmt {
-                // TODO: Make distinction between let and mut statements
                 AstNode::LetStmt {
                     name,
                     def_type,
@@ -905,14 +951,22 @@ impl CraneliftGenerator {
 
         let mut func =
             Function::with_name_signature(UserFuncName::user(0, fid.index() as u32), sig.clone());
-        let binding = unsafe { self.builder_ctx.as_ptr().as_mut() }.unwrap();
-        let mut fn_builder = FunctionBuilder::new(&mut func, &mut *binding);
+        
+        let mut ctx = FunctionBuilderContext::new();
+        
+        let mut fn_builder = FunctionBuilder::new(&mut func, &mut ctx);
 
         let mut auto_free_idx = None;
 
         if modifiers.contains(&Modifier::AutoFree) {
-            self.auto_frees.push(vec![]);
+            self.auto_frees.push(HashSet::new());
             auto_free_idx = Some(self.auto_frees.len() - 1);
+        }
+        
+        if modifiers.contains(&Modifier::Alloc) {
+            self.allocator_fns.insert(name.clone());
+        } else if modifiers.contains(&Modifier::Dealloc) {
+            self.deallocator_fns.insert(name.clone());
         }
 
         let arg_meta = args
@@ -1009,7 +1063,17 @@ impl CraneliftGenerator {
 
         let mut context = Context::for_function(func.clone());
 
-        println!("FN {name}");
+        if &**name == "main" {
+            if self.must_frees.len() != 0 {
+                let mut errors = vec![];
+                
+                for item in self.must_frees.iter() {
+                    errors.push(CompilationError::NotFreed(self.file_path.clone(), item.clone()))
+                }
+                
+                return Err(errors.into_boxed_slice())
+            }
+        }
 
         self.module.define_function(fid, &mut context).unwrap();
 
