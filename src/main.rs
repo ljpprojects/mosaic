@@ -23,7 +23,7 @@ pub mod states;
 pub mod tokens;
 pub mod utils;
 
-const F_NAME: &str = "/Users/geez/RustroverProjects/mosaic/examples/hello.msc";
+const F_NAME: &str = "/Users/geez/RustroverProjects/mosaic-lang/examples/hello.msc";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let reader = CharReader::new(File::new(F_NAME.to_string()).unwrap());

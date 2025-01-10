@@ -11,3 +11,4 @@ docs/src/.obsidian
 **/*.out
 .cargo
 .cargo/credentials.toml
+.idea
