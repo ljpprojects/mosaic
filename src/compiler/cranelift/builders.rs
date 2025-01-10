@@ -1,3 +1,4 @@
+use crate::compiler::cranelift::meta::VariableMeta;
 use crate::compiler::cranelift::types::CraneliftType;
 use crate::compiler::traits::CompilationType;
 use crate::errors::CompilationError;
@@ -7,7 +8,6 @@ use cranelift_codegen::isa::OwnedTargetIsa;
 use cranelift_frontend::{FunctionBuilder, Variable};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use crate::compiler::cranelift::meta::VariableMeta;
 
 pub struct VariableBuilder {
     index: usize,
@@ -25,9 +25,7 @@ impl VariableBuilder {
         }
     }
 
-    pub fn create_scope(
-        &mut self,
-    ) {
+    pub fn create_scope(&mut self) {
         self.scopes.push(HashMap::new());
     }
 
@@ -44,7 +42,7 @@ impl VariableBuilder {
 
         if constant {
             builder.declare_var(variable, ty.clone().into_cranelift(&self.isa));
-            
+
             builder.def_var(variable, value);
         } else {
             builder.declare_var(variable, self.isa.pointer_type());
@@ -62,7 +60,10 @@ impl VariableBuilder {
             builder.def_var(variable, ptr);
         }
 
-        self.scopes.last_mut().unwrap().insert(name.clone(), (value, self.index, variable, ty, constant).into());
+        self.scopes.last_mut().unwrap().insert(
+            name.clone(),
+            (value, self.index, variable, ty, constant).into(),
+        );
 
         self.index += 1;
 
@@ -79,7 +80,12 @@ impl VariableBuilder {
     ) -> Result<(), Box<[CompilationError]>> {
         let mut errors = vec![];
 
-        let Some(scope) = self.scopes.iter().filter(|vars| vars.contains_key(name)).last() else {
+        let Some(scope) = self
+            .scopes
+            .iter()
+            .filter(|vars| vars.contains_key(name))
+            .last()
+        else {
             return Err(Box::new([CompilationError::UndefinedVariable(
                 file,
                 name.clone(),
@@ -94,7 +100,10 @@ impl VariableBuilder {
         };
 
         if meta.constant {
-            return Err(Box::new([CompilationError::CannotMutate(file, name.clone())]));
+            return Err(Box::new([CompilationError::CannotMutate(
+                file,
+                name.clone(),
+            )]));
         }
 
         if meta.def_type != *vty {
@@ -113,11 +122,13 @@ impl VariableBuilder {
         Ok(())
     }
 
-    pub fn has_var(
-        &self,
-        name: &String,
-    ) -> bool {
-        self.scopes.iter().filter(|vars| vars.contains_key(name)).collect::<Vec<_>>().len() > 0
+    pub fn has_var(&self, name: &String) -> bool {
+        self.scopes
+            .iter()
+            .filter(|vars| vars.contains_key(name))
+            .collect::<Vec<_>>()
+            .len()
+            > 0
     }
 
     pub fn get_var(
@@ -126,7 +137,12 @@ impl VariableBuilder {
         name: &String,
         file: PathBuf,
     ) -> Result<(Value, CraneliftType), Box<[CompilationError]>> {
-        let Some(scope) = self.scopes.iter().filter(|vars| vars.contains_key(name)).last() else {
+        let Some(scope) = self
+            .scopes
+            .iter()
+            .filter(|vars| vars.contains_key(name))
+            .last()
+        else {
             return Err(Box::new([CompilationError::UndefinedVariable(
                 file,
                 name.clone(),
@@ -146,9 +162,12 @@ impl VariableBuilder {
             meta.last_assigned
         } else {
             let ptr = builder.use_var(meta.variable);
-            builder
-                .ins()
-                .load(meta.def_type.clone().into_cranelift(&self.isa), self.flags, ptr, 0)
+            builder.ins().load(
+                meta.def_type.clone().into_cranelift(&self.isa),
+                self.flags,
+                ptr,
+                0,
+            )
         };
 
         Ok((val, meta.def_type.clone()))
@@ -160,7 +179,12 @@ impl VariableBuilder {
         name: &String,
         file: PathBuf,
     ) -> Result<(Value, CraneliftType), Box<[CompilationError]>> {
-        let Some(scope) = self.scopes.iter().filter(|vars| vars.contains_key(name)).last() else {
+        let Some(scope) = self
+            .scopes
+            .iter()
+            .filter(|vars| vars.contains_key(name))
+            .last()
+        else {
             return Err(Box::new([CompilationError::UndefinedVariable(
                 file,
                 name.clone(),
@@ -175,12 +199,18 @@ impl VariableBuilder {
         };
 
         let val = if meta.constant {
-            return Err(Box::new([CompilationError::CannotMakePointer(file, name.clone())]));
+            return Err(Box::new([CompilationError::CannotMakePointer(
+                file,
+                name.clone(),
+            )]));
         } else {
             let ptr = builder.use_var(meta.variable);
-            builder
-                .ins()
-                .load(meta.def_type.clone().into_cranelift(&self.isa), self.flags, ptr, 0)
+            builder.ins().load(
+                meta.def_type.clone().into_cranelift(&self.isa),
+                self.flags,
+                ptr,
+                0,
+            )
         };
 
         Ok((val, meta.def_type.clone()))

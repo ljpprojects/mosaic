@@ -12,6 +12,10 @@ categories = ["compilers"]
 publish = true
 repository = "https://github.com/ljp-projects/mosaic"
 
+[[bin]]
+name = "msc"
+path = "src/main.rs"
+
 [profile.dev]
 incremental = true
 panic = "unwind"
@@ -40,6 +44,7 @@ cranelift-object = "0.115.0"
 cranelift-native = "0.115.0"
 cranelift-frontend = "0.115.0"
 colored = "2.2.0"
+clap = { version = "4.5.23", features = ["derive"] }
 
 # cranelift uses target-lexicon 0.12.16
 target-lexicon = "0.12.16"

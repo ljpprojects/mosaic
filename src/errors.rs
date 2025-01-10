@@ -1,3 +1,4 @@
+use crate::compiler::cranelift::meta::MustFreeMeta;
 use crate::compiler::cranelift::types::CraneliftType;
 use crate::parser::AstNode;
 use crate::tokens::{LineInfo, Token};
@@ -5,7 +6,6 @@ use colored::Colorize;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::path::PathBuf;
-use crate::compiler::cranelift::meta::MustFreeMeta;
 
 #[derive(Clone)]
 pub enum CompilationError {
@@ -31,7 +31,7 @@ pub enum CompilationError {
     UndefinedFunction(PathBuf, String),
     InvalidCast(PathBuf, CraneliftType, CraneliftType),
     CannotMakePointer(PathBuf, String),
-    NotFreed(PathBuf, MustFreeMeta)
+    NotFreed(PathBuf, MustFreeMeta),
 }
 
 impl Error for CompilationError {}
@@ -188,14 +188,17 @@ impl Display for CompilationError {
 
                 let home = std::env::var("HOME").unwrap();
                 let search_path = modules.as_ref().split_last().unwrap().1.join("/");
-                
+
                 writeln!(
                     f,
                     "    {}{}{}{}",
                     "Module ".bold(),
                     module.italic().bold(),
                     " not found.".bold(),
-                    format!("{home}/.msc/mods/{search_path}/{}.msc", modules.first().unwrap())
+                    format!(
+                        "{home}/.msc/mods/{search_path}/{}.msc",
+                        modules.first().unwrap()
+                    )
                 )?;
                 write!(
                     f,
@@ -338,7 +341,7 @@ impl Display for CompilationError {
                     "(ARGS) -> RET_TY".italic().yellow(),
                 )
             }
-            
+
             CompilationError::InvalidCast(file, from, to) => {
                 writeln!(
                     f,
@@ -346,7 +349,7 @@ impl Display for CompilationError {
                     "Compilation error in file ".bold().bright_red(),
                     file.to_string_lossy().bold().bright_red()
                 )?;
-                
+
                 write!(
                     f,
                     "{}{}{}{}{}",
@@ -385,7 +388,7 @@ impl Display for CompilationError {
                     ": TYPE = VAL".italic().yellow(),
                 )
             }
-            
+
             CompilationError::NotFreed(file, item) => {
                 writeln!(
                     f,
@@ -393,7 +396,7 @@ impl Display for CompilationError {
                     "Compilation error in file ".bold().bright_red(),
                     file.to_string_lossy().bold().bright_red()
                 )?;
-                
+
                 writeln!(
                     f,
                     "{}{}{}",
@@ -401,7 +404,7 @@ impl Display for CompilationError {
                     item.returned_from.italic().bold(),
                     " was not freed.".bold()
                 )?;
-                
+
                 write!(
                     f,
                     "{}{}{}",
