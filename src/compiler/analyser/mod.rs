@@ -5,16 +5,16 @@ use std::ops::Deref;
 
 pub use preopt::PreoptEngine;
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum UsageKind {
     Assignment,
     Get,
-    Call,
+    Call(Vec<AstNode>),
     Definition,
 }
 
 #[derive(Debug)]
-struct UsageIntrinsic {
+pub struct UsageIntrinsic {
     pub name: String,
     pub kind: UsageKind,
 }
@@ -25,7 +25,7 @@ impl UsageIntrinsic {
     }
 }
 
-fn get_usages_of(symbol: &String, code: &[AstNode]) -> Vec<UsageIntrinsic> {
+pub fn get_usages_of(symbol: &String, code: &[AstNode]) -> Vec<UsageIntrinsic> {
     let mut usages = Vec::new();
 
     // We want to look through the following nodes:
@@ -62,7 +62,7 @@ fn get_usages_of(symbol: &String, code: &[AstNode]) -> Vec<UsageIntrinsic> {
                 if let AstNode::Identifier(name) = callee.deref()
                     && name == symbol
                 {
-                    usages.push(UsageIntrinsic::new(symbol.clone(), UsageKind::Call));
+                    usages.push(UsageIntrinsic::new(symbol.clone(), UsageKind::Call(args.to_vec())));
                 }
 
                 usages.extend(get_usages_of(symbol, args));

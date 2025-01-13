@@ -1,5 +1,7 @@
 #![feature(let_chains)]
 #![feature(exitcode_exit_method)]
+#![feature(slice_pattern)]
+
 extern crate core;
 
 use crate::cli::{Args, Command};
@@ -25,12 +27,12 @@ pub mod states;
 pub mod tokens;
 pub mod utils;
 
-const F_NAME: &str = "/Users/geez/RustroverProjects/mosaic-lang/examples/hello.msc";
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
+    
+    let Command::Build { file, .. } = args.command.clone();
 
-    let reader = CharReader::new(File::new(F_NAME.to_string()).unwrap());
+    let reader = CharReader::new(File::new(file).unwrap());
     let lexer = StreamedLexer::new(reader);
     let parser = StreamedParser::new(lexer);
 

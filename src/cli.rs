@@ -22,7 +22,11 @@ pub enum Command {
 
         #[arg(long = "shell-path", default_value = "/bin/sh")]
         shell_path: String,
+        
+        #[arg(long = "no-implicit-functions")]
+        no_implicit_functions: bool,
     },
+    
 }
 
 #[derive(Parser, Debug, Clone, PartialEq, Eq)]

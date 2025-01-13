@@ -45,7 +45,7 @@ impl From<(Value, String)> for MustFreeMeta {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct VariableMeta {
     pub constant: bool,
     pub variable: Variable,

@@ -32,6 +32,7 @@ pub enum CompilationError {
     InvalidCast(PathBuf, CraneliftType, CraneliftType),
     CannotMakePointer(PathBuf, String),
     NotFreed(PathBuf, MustFreeMeta),
+    InvalidSignature(PathBuf, String, CraneliftType, Vec<CraneliftType>)
 }
 
 impl Error for CompilationError {}
@@ -411,6 +412,28 @@ impl Display for CompilationError {
                     "Note: Required value to be freed because of explicit ",
                     "must_free ".italic(),
                     "modifier."
+                )
+            }
+
+            CompilationError::InvalidSignature(file, name, ret, args) => {
+                writeln!(
+                    f,
+                    "  {}{}",
+                    "Compilation error in file ".bold().bright_red(),
+                    file.to_string_lossy().bold().bright_red()
+                )?;
+
+                write!(
+                    f,
+                    "{}{}{}{}{}{}{}{}",
+                    "Invalid signature `".bold(),
+                    "fn(".italic().bold(),
+                    args.iter().map(|t| t.to_string()).collect::<Vec<_>>().join(", ").italic().bold(),
+                    ") -> ".italic().bold(),
+                    ret.to_string().italic().bold(),
+                    "` for function ".bold(),
+                    name.italic().bold(),
+                    ".".bold()
                 )
             }
         }

@@ -10,7 +10,7 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::string::ToString;
 
-pub const ADDITIVE_OPS: &[&str] = &["+", "-", "="];
+pub const ADDITIVE_OPS: &[&str] = &["+", "-", "=" /* *vine boom* */];
 pub const MULTIPLICATIVE_OPS: &[&str] = &["*", "/", "%"];
 pub const EXPONENTIAL_OPS: &[&str] = &["^"];
 pub const PREFIX_OPS: &[&str] = &["!", "-", "+", "*", "&"];
@@ -23,8 +23,8 @@ pub enum Modifier {
     /// The returned value will be freed at the end of the caller's scope (at a return stmt)
     AutoFree,
 
-    /// The returned value must be freed by the developer manually
-    /// Functions marked with alloc should use this
+    /// The developer must free the returned value manually.
+    /// Functions marked with alloc should use this or auto_free.
     /// When the returned value is passed to a function with the dealloc modifier
     /// the compiler considers the value freed.
     MustFree,
@@ -36,6 +36,10 @@ pub enum Modifier {
     /// Indicates to the compiler that this function allocates memory.
     /// This should be used with either must_free or auto_free.
     Alloc,
+    
+    /// Indicates to the compiler that this function should not be mangled.
+    /// This is always used on main functions.
+    NoMangle,
 }
 
 #[macro_export]
@@ -58,12 +62,13 @@ impl FromStr for Modifier {
             "mustfree" | "must_free" => Ok(Modifier::MustFree),
             "alloc" | "allocates" => Ok(Modifier::Alloc),
             "dealloc" | "deallocates" => Ok(Modifier::Dealloc),
+            "nomangle" | "no_mangle" => Ok(Modifier::NoMangle),
             m => Err(format!("Invalid modifier {m}")),
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum ParseType {
     IdentType(String),
     ArrayType {
@@ -106,7 +111,7 @@ impl Display for ParseType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParseBlock {
     Plain(Box<[AstNode]>),
 }
@@ -126,7 +131,7 @@ impl Display for ParseBlock {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TypeBound {
     Iterator(Indirection<ParseType>),
     Not(Indirection<TypeBound>),
@@ -151,7 +156,7 @@ impl Display for TypeBound {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AstNode {
     // --- EXPRESSIONS --- //
     NumberLiteral(/*LineInfo, */ f64),

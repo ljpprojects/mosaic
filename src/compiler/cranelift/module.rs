@@ -1,4 +1,4 @@
-use crate::compiler::cranelift::types::TypeGenerator;
+use crate::compiler::cranelift::types::{CraneliftType, TypeGenerator};
 use crate::compiler::cranelift::FunctionMeta;
 use cranelift_object::ObjectProduct;
 use std::collections::{HashMap, HashSet};
@@ -11,7 +11,8 @@ pub struct CraneliftModule {
     pub name: String,
     pub prev_includes: HashSet<(PathBuf, Option<PathBuf>)>,
     pub mosaic_file: PathBuf,
-    pub functions: HashMap<String, Vec<FunctionMeta>>,
+    pub functions: HashMap<String, FunctionMeta>,
+    pub function_variants: HashMap<String, Vec<(CraneliftType, Vec<CraneliftType>)>>,
     pub tg: TypeGenerator,
     pub out_file: PathBuf,
 }
@@ -28,7 +29,11 @@ impl Debug for CraneliftModule {
 }
 
 impl CraneliftModule {
-    pub fn lookup_func(&self, name: &String) -> Option<&Vec<FunctionMeta>> {
+    pub fn lookup_func(&self, name: &String) -> Option<&FunctionMeta> {
         self.functions.get(name)
+    }
+    
+    pub fn lookup_func_variants(&self, name: &String) -> Option<&Vec<(CraneliftType, Vec<CraneliftType>)>> {
+        self.function_variants.get(name)
     }
 }

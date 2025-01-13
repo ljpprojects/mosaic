@@ -1,16 +1,7 @@
-include core::alloc
 include std::io
 
-# fn say_hello() -> null {
-# 	return println("Hello!")
-# }
-# 
-# fn do(fn() -> null task) -> null {
-# 	return task()
-# }
-
-fn main() -> i32 {
-	println("Hello, World!")
+fn main() no_mangle -> i32 {
+	println("Hello, World!\0" as *i8)
 
 	return 0
 }
