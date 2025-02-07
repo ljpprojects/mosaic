@@ -1,4 +1,16 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
+
+#[derive(Clone, Debug, Copy, PartialEq, Eq, ValueEnum)]
+pub enum EmitKind {
+    #[value(name = "bin")]
+    Binary,
+
+    #[value(name = "static")]
+    StaticLib,
+
+    #[value(name = "dynamic")]
+    DynamicLib,
+}
 
 #[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -22,11 +34,21 @@ pub enum Command {
 
         #[arg(long = "shell-path", default_value = "/bin/sh")]
         shell_path: String,
+
+        #[arg(long = "shell-eval-flag", default_value = "-c")]
+        shell_eval_flag: String,
         
         #[arg(long = "no-implicit-functions")]
         no_implicit_functions: bool,
+
+        #[arg(short = 'q', long = "quiet")]
+        quiet: bool,
+        
+        #[arg(long = "emit")]
+        emit: EmitKind,
     },
-    
+
+    Finish,
 }
 
 #[derive(Parser, Debug, Clone, PartialEq, Eq)]

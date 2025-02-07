@@ -1,4 +1,9 @@
+#![allow(clippy::unwrap_used)]
+#![allow(clippy::expect_used)]
+
+use crate::compiler::cranelift::CraneliftGenerator;
 use crate::compiler::traits::CompilationType;
+use crate::errors::CompilationError;
 use crate::parser::{AstNode, ParseType, TypeBound};
 use crate::utils::Indirection;
 use crate::utils::IndirectionTrait;
@@ -8,8 +13,6 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::rc::Rc;
-use crate::compiler::cranelift::CraneliftGenerator;
-use crate::errors::CompilationError;
 
 #[derive(Clone, Debug)]
 pub enum CraneliftType {
@@ -32,7 +35,8 @@ pub enum CraneliftType {
         arg_types: Vec<Indirection<Self>>,
     },
     CPtr(Indirection<Self>),
-    Slice(Indirection<Self>, usize),
+    FatPtr(Indirection<Self>),
+    Slice(Indirection<Self>, u32),
 
     // *:0[i8]
     CStr,
@@ -56,9 +60,7 @@ impl PartialEq for CraneliftType {
             (Self::Bool, Self::Bool) => true,
             (Self::Null, Self::Null) => true,
             (Self::CPtr(ty), Self::CPtr(ty2)) => ty == ty2,
-            (Self::CStr, Self::CPtr(ty)) if ty.deref() == &Self::Int8 => true,
-            (Self::CPtr(ty), Self::CStr) if ty.deref() == &Self::Int8 => true,
-            (Self::UCStr, Self::CPtr(ty)) if ty.deref() == &Self::UInt8 => true,
+            (Self::FatPtr(ty), Self::FatPtr(ty2)) => ty == ty2,
             (Self::CPtr(ty), Self::UCStr) if ty.deref() == &Self::UInt8 => true,
             (Self::Float32, Self::Float32) => true,
             (Self::Float64, Self::Float64) => true,
@@ -81,7 +83,9 @@ impl PartialEq for CraneliftType {
 impl CraneliftType {
     pub fn into_cranelift(self, isa: &OwnedTargetIsa) -> Type {
         match self {
-            Self::Generic(name, _) => panic!("The compiler has not evaluated the generic type '{name}'. This is a bug."),
+            Self::Generic(name, _) => {
+                panic!("The compiler has not evaluated the generic type '{name}'. This is a bug.")
+            }
             Self::Any => panic!("Cannot use 'any' type unless it is behind a pointer."),
             Self::Int8 | Self::UInt8 => types::I8,
             Self::Int16 | Self::UInt16 => types::I16,
@@ -90,7 +94,7 @@ impl CraneliftType {
             Self::Float32 => types::F32,
             Self::Float64 => types::F64,
             Self::Null | Self::Bool => types::I8,
-            Self::FuncPtr { .. } | Self::CPtr(_) | Self::Slice(_, _) | Self::CStr | Self::UCStr => {
+            Self::FuncPtr { .. } | Self::CPtr(_) | Self::Slice(..) | Self::CStr | Self::UCStr | Self::FatPtr(_) => {
                 isa.pointer_type()
             }
         }
@@ -100,7 +104,9 @@ impl CraneliftType {
 impl Display for CraneliftType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            CraneliftType::Generic(name, ..) => panic!("The compiler has not evaluated the generic type '{name}'. This is a bug."),
+            CraneliftType::Generic(name, ..) => {
+                panic!("The compiler has not evaluated the generic type '{name}'. This is a bug.")
+            }
             CraneliftType::Any => write!(f, "any"),
             CraneliftType::Int8 => write!(f, "i8"),
             CraneliftType::Int16 => write!(f, "i16"),
@@ -116,6 +122,7 @@ impl Display for CraneliftType {
             CraneliftType::Bool => write!(f, "bool"),
             CraneliftType::FuncPtr { .. } => write!(f, "fn(...) -> ..."),
             CraneliftType::CPtr(i) => write!(f, "*{i}"),
+            CraneliftType::FatPtr(i) => write!(f, "*[{i}]"),
             CraneliftType::Slice(i, l) => write!(f, "*{l}[{i}]"),
             CraneliftType::CStr => write!(f, "*:0[i8]"),
             CraneliftType::UCStr => write!(f, "*:0[u8]"),
@@ -125,8 +132,7 @@ impl Display for CraneliftType {
 
 impl CompilationType for CraneliftType {
     fn is_numeric(&self) -> bool {
-        match self {
-            Self::Int8
+        matches!(self, Self::Int8
             | Self::Int16
             | Self::Int32
             | Self::Int64
@@ -135,28 +141,34 @@ impl CompilationType for CraneliftType {
             | Self::UInt32
             | Self::UInt64
             | Self::Float32
-            | Self::Float64 => true,
-            _ => false,
+            | Self::Float64)
+    }
+
+    fn to_unsigned(&self) -> Option<Self> {
+        match self {
+            Self::Int8 => Some(Self::Int8),
+            Self::Int16 => Some(Self::Int16),
+            Self::Int32 => Some(Self::Int32),
+            Self::Int64 => Some(Self::Int64),
+            _ => None,
         }
+    }
+
+    fn is_signed(&self) -> bool {
+        matches!(self, Self::Int8
+            | Self::Int16
+            | Self::Int32
+            | Self::Int64
+            | Self::Float32
+            | Self::Float64)
     }
 
     fn is_pointer(&self) -> bool {
-        match self {
-            Self::CPtr(_) | Self::FuncPtr { .. } | Self::CStr | Self::Slice(..) | Self::UCStr => {
-                true
-            }
-            _ => false,
-        }
+        matches!(self, Self::CPtr(_) | Self::FuncPtr { .. } | Self::CStr | Self::Slice(..) | Self::UCStr | Self::FatPtr(_))
     }
 
     fn is_c_abi(&self) -> bool {
-        match self {
-            Self::Float32 | Self::Float64 => true,
-            Self::Int8 | Self::Int16 | Self::Int32 | Self::Int64 => true,
-            Self::UInt8 | Self::UInt16 | Self::UInt32 | Self::UInt64 => true,
-            Self::CPtr(_) | Self::CStr | Self::UCStr | Self::FuncPtr { .. } => true,
-            _ => false,
-        }
+        matches!(self, Self::Float32 | Self::Float64 | Self::Int8 | Self::Int16 | Self::Int32 | Self::Int64 | Self::UInt8 | Self::UInt16 | Self::UInt32 | Self::UInt64 | Self::CPtr(_) | Self::CStr | Self::UCStr | Self::FuncPtr { .. })
     }
 
     fn into_c_abi(self) -> Self {
@@ -169,7 +181,9 @@ impl CompilationType for CraneliftType {
 
     fn size_bytes(&self, isa: &OwnedTargetIsa) -> u8 {
         match self {
-            Self::Generic(name, ..) => panic!("The compiler has not evaluated the generic type '{name}'. This is a bug."),
+            Self::Generic(name, ..) => {
+                panic!("The compiler has not evaluated the generic type '{name}'. This is a bug.")
+            }
             Self::Any => panic!("Cannot get size of type 'any'."),
             Self::Int8 | Self::UInt8 => 1,
             Self::Int16 | Self::UInt16 => 2,
@@ -178,7 +192,7 @@ impl CompilationType for CraneliftType {
             Self::Float32 => 4,
             Self::Float64 => 8,
             Self::Null | Self::Bool => 1,
-            Self::FuncPtr { .. } | Self::CPtr(_) | Self::Slice(_, _) | Self::CStr | Self::UCStr => {
+            Self::FuncPtr { .. } | Self::CPtr(_) | Self::Slice(..) | Self::CStr | Self::UCStr | Self::FatPtr(_) => {
                 isa.pointer_bytes()
             }
         }
@@ -188,33 +202,13 @@ impl CompilationType for CraneliftType {
         self.size_bytes(isa) * 8
     }
 
-    fn align_bytes(&self, isa: &OwnedTargetIsa) -> u8 {
-        match self {
-            Self::Generic(name, ..) => panic!("The compiler has not evaluated the generic type '{name}'. This is a bug."),
-            Self::Any => panic!("Cannot get size of type 'any'."),
-            Self::Int8 | Self::UInt8 => 1,
-            Self::Int16 | Self::UInt16 => 2,
-            Self::Int32 | Self::UInt32 => 4,
-            Self::Int64 | Self::UInt64 => 8,
-            Self::Float32 => 4,
-            Self::Float64 => 8,
-            Self::Null | Self::Bool => 1,
-            Self::FuncPtr { .. } | Self::CPtr(_) | Self::Slice(_, _) | Self::CStr | Self::UCStr => {
-                isa.pointer_bytes()
-            }
-        }
-    }
-
-    fn align_bits(&self, isa: &OwnedTargetIsa) -> u8 {
-        self.size_bytes(isa) * 8
-    }
-
     fn inner(&self) -> Option<Self> {
         match self {
             CraneliftType::CPtr(i) => Some(i.deref().clone()),
             CraneliftType::Slice(i, _) => Some(i.deref().clone()),
             CraneliftType::CStr => Some(Self::Int8),
             CraneliftType::UCStr => Some(Self::UInt8),
+            CraneliftType::FatPtr(i) => Some(i.deref().clone()),
             _ => None,
         }
     }
@@ -233,17 +227,42 @@ impl CompilationType for CraneliftType {
             || (self == other)
     }
 
-    fn matches_bound(&self, bound: TypeBound, gen: &CraneliftGenerator, allowed_tgs: &HashMap<String, Option<TypeBound>>) -> Result<bool, Box<[CompilationError]>> {
+    fn iterable(&self) -> bool {
+        matches!(self, Self::Slice(..) | Self::CStr | Self::UCStr | Self::FatPtr(..))
+    }
+    
+    fn matches_bound(
+        &self,
+        bound: TypeBound,
+        gen: &CraneliftGenerator,
+        allowed_tgs: &HashMap<String, Option<TypeBound>>,
+    ) -> Result<bool, Box<[CompilationError]>> {
         match bound {
             TypeBound::Iterator(ref ty) => {
-                match self {
-                    Self::Slice(t, ..) => Ok(t.deref().clone() == gen.tg.compile_type(ty.deref(), &gen.isa, allowed_tgs)),
-                    Self::CStr => Ok(Self::Int8 == gen.tg.compile_type(ty.deref(), &gen.isa, allowed_tgs)),
-                    Self::UCStr =>  Ok(Self::UInt8 == gen.tg.compile_type(ty.deref(), &gen.isa, allowed_tgs)),
-                    _ => Ok(false)
+                if !self.iterable() {
+                    return Ok(false);
                 }
-            }
-            TypeBound::Not(t) => self.matches_bound(t.deref().clone(), gen, allowed_tgs).map(|b| !b),
+                
+                match self {
+                    Self::Slice(t, ..) => {
+                        Ok(t.deref().clone() == gen.tg.compile_type(ty.deref(), &gen.isa, allowed_tgs))
+                    }
+                    Self::CStr => {
+                        Ok(Self::Int8 == gen.tg.compile_type(ty.deref(), &gen.isa, allowed_tgs))
+                    }
+                    Self::UCStr => {
+                        Ok(Self::UInt8 == gen.tg.compile_type(ty.deref(), &gen.isa, allowed_tgs))
+                    }
+                    
+                    Self::FatPtr(_) => {
+                        Ok(Self::UInt8 == gen.tg.compile_type(ty.deref(), &gen.isa, allowed_tgs))
+                    }
+                    _ => Ok(false),
+                }
+            },
+            TypeBound::Not(t) => self
+                .matches_bound(t.deref().clone(), gen, allowed_tgs)
+                .map(|b| !b),
             TypeBound::Compound(bounds) => {
                 for bound in bounds {
                     let matches = self.matches_bound(bound, gen, allowed_tgs)?;
@@ -253,13 +272,19 @@ impl CompilationType for CraneliftType {
                 }
 
                 Ok(true)
-            },
+            }
         }
     }
 }
 
 pub struct TypeGenerator {
     types: HashMap<String, CraneliftType>,
+}
+
+impl Default for TypeGenerator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TypeGenerator {
@@ -291,6 +316,13 @@ impl TypeGenerator {
         self.types.insert(name, ty);
     }
 
+    pub fn get_type(&self, name: &String) -> CraneliftType {
+        self.types
+            .get(name)
+            .expect(&*format!("Unknown type '{name}'"))
+            .clone()
+    }
+
     pub fn compile_type_no_tgs(&self, ty: &ParseType, isa: &OwnedTargetIsa) -> CraneliftType {
         match ty {
             ParseType::IdentType(i) => self
@@ -301,22 +333,31 @@ impl TypeGenerator {
             ParseType::ArrayType { .. } => {
                 panic!("Array types are obsolete; use slice types instead.")
             }
-            ParseType::PointerType(i) => {
-                CraneliftType::CPtr(i.clone().map(|t| self.compile_type(&t, isa, &HashMap::default())))
-            }
-            ParseType::FatPointerType(i, l) => {
-                CraneliftType::Slice(i.clone().map(|t| self.compile_type(&t, isa, &HashMap::default())), *l as usize)
-            }
+            ParseType::PointerType(i) => CraneliftType::CPtr(
+                i.clone()
+                    .map(|t| self.compile_type(&t, isa, &HashMap::default())),
+            ),
+            ParseType::FatPointerType(i) => CraneliftType::FatPtr(
+                i.clone()
+                    .map(|t| self.compile_type(&t, isa, &HashMap::default())),
+            ),
+            ParseType::Slice(i, l) => CraneliftType::Slice(
+                i.clone()
+                    .map(|t| self.compile_type(&t, isa, &HashMap::default())),
+                *l,
+            ),
             ParseType::TerminatedSlice(i, t) => {
                 assert!(matches!(t.deref(), AstNode::NumberLiteral(_)));
 
-                if let AstNode::NumberLiteral(n) = t.deref()
-                    && *n != 0f64
-                {
-                    panic!("Only null-terminated slices are supported.")
+                if let AstNode::NumberLiteral(n) = t.deref() {
+                    if *n != 0f64 {
+                        panic!("Only null-terminated slices are supported.")
+                    }
                 };
 
-                let ty = i.clone().map(|t| self.compile_type(t, isa, &HashMap::default()));
+                let ty = i
+                    .clone()
+                    .map(|t| self.compile_type(t, isa, &HashMap::default()));
 
                 match ty.deref() {
                     CraneliftType::Int8 => CraneliftType::CStr,
@@ -339,9 +380,16 @@ impl TypeGenerator {
         }
     }
 
-    pub fn compile_type(&self, ty: &ParseType, isa: &OwnedTargetIsa, tgs: &HashMap<String, Option<TypeBound>>) -> CraneliftType {
+    pub fn compile_type(
+        &self,
+        ty: &ParseType,
+        isa: &OwnedTargetIsa,
+        tgs: &HashMap<String, Option<TypeBound>>,
+    ) -> CraneliftType {
         match ty {
-            ParseType::IdentType(i) if tgs.contains_key(i) => CraneliftType::Generic(i.clone(), tgs.get(i).unwrap().clone()),
+            ParseType::IdentType(i) if tgs.contains_key(i) => {
+                CraneliftType::Generic(i.clone(), tgs.get(i).unwrap().clone())
+            }
             ParseType::IdentType(i) => self
                 .types
                 .get(i)
@@ -353,16 +401,21 @@ impl TypeGenerator {
             ParseType::PointerType(i) => {
                 CraneliftType::CPtr(i.clone().map(|t| self.compile_type(&t, isa, tgs)))
             }
-            ParseType::FatPointerType(i, l) => {
-                CraneliftType::Slice(i.clone().map(|t| self.compile_type(&t, isa, tgs)), *l as usize)
-            }
+            ParseType::FatPointerType(i) => CraneliftType::FatPtr(
+                i.clone()
+                    .map(|t| self.compile_type(&t, isa, &HashMap::default())),
+            ),
+            ParseType::Slice(i, l) => CraneliftType::Slice(
+                i.clone().map(|t| self.compile_type(&t, isa, tgs)),
+                *l,
+            ),
             ParseType::TerminatedSlice(i, t) => {
                 assert!(matches!(t.deref(), AstNode::NumberLiteral(_)));
 
-                if let AstNode::NumberLiteral(n) = t.deref()
-                    && *n != 0f64
-                {
-                    panic!("Only null-terminated slices are supported.")
+                if let AstNode::NumberLiteral(n) = t.deref() {
+                    if *n != 0f64 {
+                        panic!("Only null-terminated slices are supported.")
+                    }
                 };
 
                 let ty = i.clone().map(|t| self.compile_type(t, isa, tgs));

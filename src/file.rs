@@ -29,7 +29,10 @@ impl<P: AsRef<Path> + Clone + PartialEq> File<P> {
     }
 
     pub fn file(&self) -> std::fs::File {
-        self.file.try_clone().unwrap()
+        match self.file.try_clone() {
+            Ok(f) => f,
+            Err(e) => panic!("{}", e),
+        }
     }
 }
 
@@ -37,7 +40,10 @@ impl<P: AsRef<Path> + Clone + PartialEq> Clone for File<P> {
     fn clone(&self) -> Self {
         Self {
             path: self.path.clone(),
-            file: self.file.try_clone().unwrap(),
+            file: match self.file.try_clone() {
+                Ok(f) => f,
+                Err(e) => panic!("{}", e),
+            },
         }
     }
 }

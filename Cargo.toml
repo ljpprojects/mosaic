@@ -12,6 +12,9 @@ categories = ["compilers"]
 publish = true
 repository = "https://github.com/ljp-projects/mosaic"
 
+[workspace]
+members = ["mosaic-pm"]
+
 [[bin]]
 name = "msc"
 path = "src/main.rs"
@@ -36,12 +39,36 @@ incremental = true
 debug-assertions = false
 debug = "line-tables-only"
 panic = "abort"
+rpath = true
+strip = "all"
+
+[profile.release.package."*"]
+overflow-checks = false
+opt-level = 3
+incremental = true
+debug-assertions = false
+debug = "line-tables-only"
+
+[profile.release.build-override]
+overflow-checks = false
+opt-level = 3
+incremental = true
+debug-assertions = false
+debug = "line-tables-only"
+
 
 [dependencies]
-cranelift-codegen = { version = "0.115.0", features = ["all-arch"] }
-cranelift-module = "0.115.0"
-cranelift-object = "0.115.0"
-cranelift-native = "0.115.0"
-cranelift-frontend = "0.115.0"
-colored = "2.2.0"
+cranelift-codegen = "0.116.1"
+cranelift-module = "0.116.1"
+cranelift-object = "0.116.1"
+cranelift-native = "0.116.1"
+cranelift-frontend = "0.116.1"
+colored = "3.0.0"
 clap = { version = "4.5.23", features = ["derive"] }
+either = "1.13.0"
+octocrab = "0.43.0"
+tokio = { version = "1.43.0", features = ["rt", "rt-multi-thread", "macros"] }
+http-body-util = "0.1.2"
+tar = "0.4.43"
+flate2 = "1.0.35"
+capnp = "0.20.3"

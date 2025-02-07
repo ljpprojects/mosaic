@@ -9,13 +9,14 @@ pub trait CompilationType: ToString + Display + Sized + Clone + PartialEq {
     fn is_numeric(&self) -> bool;
     fn is_pointer(&self) -> bool;
     fn is_c_abi(&self) -> bool;
+    fn is_signed(&self) -> bool;
+    
     fn into_c_abi(self) -> Self;
+    
+    fn to_unsigned(&self) -> Option<Self>;
 
     fn size_bytes(&self, isa: &OwnedTargetIsa) -> u8;
     fn size_bits(&self, isa: &OwnedTargetIsa) -> u8;
-
-    fn align_bytes(&self, isa: &OwnedTargetIsa) -> u8;
-    fn align_bits(&self, isa: &OwnedTargetIsa) -> u8;
 
     fn inner(&self) -> Option<Self>;
 
@@ -23,6 +24,7 @@ pub trait CompilationType: ToString + Display + Sized + Clone + PartialEq {
 
     fn cmp_eq(&self, other: &Self) -> bool;
     fn matches_bound(&self, bound: TypeBound, generator: &CraneliftGenerator, allowed_tgs: &HashMap<String, Option<TypeBound>>) -> Result<bool, Box<[CompilationError]>>;
+    fn iterable(&self) -> bool;
 }
 
 pub trait TypeGenerator<T: CompilationType> {

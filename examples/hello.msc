@@ -1,7 +1,0 @@
-include std::io
-
-fn main() no_mangle -> i32 {
-	println("Hello, World!\0" as *i8)
-
-	return 0
-}

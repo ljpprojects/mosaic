@@ -49,19 +49,17 @@ impl From<(Value, String)> for MustFreeMeta {
 pub struct VariableMeta {
     pub constant: bool,
     pub variable: Variable,
-    pub last_assigned: Value,
     pub index: usize,
     pub def_type: CraneliftType,
 }
 
-impl From<(Value, usize, Variable, CraneliftType, bool)> for VariableMeta {
-    fn from(value: (Value, usize, Variable, CraneliftType, bool)) -> Self {
+impl From<(usize, Variable, CraneliftType, bool)> for VariableMeta {
+    fn from(value: (usize, Variable, CraneliftType, bool)) -> Self {
         Self {
-            constant: value.4,
-            variable: value.2,
-            last_assigned: value.0,
-            index: value.1,
-            def_type: value.3,
+            constant: value.3,
+            variable: value.1,
+            index: value.0,
+            def_type: value.2,
         }
     }
 }

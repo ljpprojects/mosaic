@@ -1,11 +1,13 @@
 use crate::compiler::cranelift::meta::MustFreeMeta;
 use crate::compiler::cranelift::types::CraneliftType;
-use crate::parser::AstNode;
+use crate::parser::{AstNode, MacroArgKind, ParseType};
 use crate::tokens::{LineInfo, Token};
 use colored::Colorize;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::path::PathBuf;
+use either::Either;
+use crate::compiler::cranelift::trace::Trace;
 
 #[derive(Clone)]
 pub enum CompilationError {
@@ -16,23 +18,33 @@ pub enum CompilationError {
 
     /**** Parse errors ****/
     ExpectedToken(PathBuf, Token, Token),
-    UnexpectedEOF(PathBuf, Token),
+    UnexpectedEOF(PathBuf, String),
     InvalidNode(PathBuf, AstNode),
     InvalidToken(PathBuf, Token),
     Forbidden(PathBuf, String),
+    UnknownNodeType(PathBuf, String, String),
+    UndefinedMacro(PathBuf, String),
+    InvalidMacroArg {
+        file: PathBuf,
+        arg_idx: usize,
+        arg_name: String,
+        expected: MacroArgKind,
+        macro_name: String,
+        got_node: Either<AstNode, ParseType>,
+    },
 
     /**** Compilation errors ****/
-    UnknownModule(PathBuf, Box<[String]>),
-    UndefinedVariable(PathBuf, String),
-    DualDefinition(PathBuf, String),
-    UndefinedOperator(PathBuf, String),
-    MismatchedTypeInDef(PathBuf, String, CraneliftType, CraneliftType),
-    CannotMutate(PathBuf, String),
-    UndefinedFunction(PathBuf, String),
-    InvalidCast(PathBuf, CraneliftType, CraneliftType),
-    CannotMakePointer(PathBuf, String),
-    NotFreed(PathBuf, MustFreeMeta),
-    InvalidSignature(PathBuf, String, CraneliftType, Vec<CraneliftType>)
+    UnknownModule(PathBuf, Trace, Box<[String]>),
+    UndefinedVariable(PathBuf, Trace, String),
+    DualDefinition(PathBuf, Trace, String),
+    UndefinedOperator(PathBuf, Trace, String),
+    MismatchedTypeInDef(PathBuf, Trace, String, CraneliftType, CraneliftType),
+    CannotMutate(PathBuf, Trace, String),
+    UndefinedFunction(PathBuf, Trace, String),
+    InvalidCast(PathBuf, Trace, CraneliftType, CraneliftType),
+    CannotMakePointer(PathBuf, Trace, String),
+    NotFreed(PathBuf, Trace, MustFreeMeta),
+    InvalidSignature(PathBuf, Trace, String, CraneliftType, Vec<CraneliftType>)
 }
 
 impl Error for CompilationError {}
@@ -168,7 +180,7 @@ impl Display for CompilationError {
                     "Parsing error in file ".bold().bright_red(),
                     file.to_string_lossy().bold().bright_red()
                 )?;
-                writeln!(
+                write!(
                     f,
                     "    {}{}{}",
                     "Unexpected EOF; expected token ".bold(),
@@ -176,8 +188,76 @@ impl Display for CompilationError {
                     ".".bold()
                 )
             }
+            
+            CompilationError::UnknownNodeType(file, macro_name, node_type) => {
+                writeln!(
+                    f,
+                    "  {}{}",
+                    "Parsing error in file ".bold().bright_red(),
+                    file.to_string_lossy().bold().bright_red()
+                )?;
 
-            CompilationError::UnknownModule(file, modules) => {
+                write!(
+                    f,
+                    "    {}{}{}{}{}",
+                    "Invalid node type ".bold(),
+                    node_type.italic().bold(),
+                    " in macro ".bold(),
+                    macro_name.italic().bold(),
+                    ".".bold()
+                )
+            }
+
+            CompilationError::UndefinedMacro(file, macro_name) => {
+                writeln!(
+                    f,
+                    "  {}{}",
+                    "Parsing error in file ".bold().bright_red(),
+                    file.to_string_lossy().bold().bright_red()
+                )?;
+
+                write!(
+                    f,
+                    "    {}{}{}",
+                    "Undefined macro ".bold(),
+                    macro_name.italic().bold(),
+                    ".".bold()
+                )
+            }
+
+            CompilationError::InvalidMacroArg {
+                file, arg_idx, arg_name, expected, macro_name, got_node
+            } => {
+                writeln!(
+                    f,
+                    "  {}{}",
+                    "Parsing error in file ".bold().bright_red(),
+                    file.to_string_lossy().bold().bright_red()
+                )?;
+
+                writeln!(
+                    f,
+                    "    {}{}{}{}{}{}{}",
+                    "Invalid macro argument for ".bold(),
+                    macro_name.italic().bold(),
+                    " at index ".bold(),
+                    arg_idx.to_string().italic().bold(),
+                    " (".bold(),
+                    arg_name.italic().bold(),
+                    ").".bold(),
+                )?;
+
+                write!(
+                    f,
+                    "{}{}{}{}.",
+                    "Expected a node matching ",
+                    expected.to_string().italic(),
+                    ", but got ",
+                    got_node.to_string().italic()
+                )
+            }
+
+            CompilationError::UnknownModule(file, trace, modules) => {
                 let module = modules.join("::");
 
                 writeln!(
@@ -187,8 +267,15 @@ impl Display for CompilationError {
                     file.to_string_lossy().bold().bright_red()
                 )?;
 
-                let home = std::env::var("HOME").unwrap();
-                let search_path = modules.as_ref().split_last().unwrap().1.join("/");
+                let Ok(home) = std::env::var("HOME") else {
+                    panic!("Expected a HOME variable.")
+                };
+                
+                let Some(tmp) = modules.as_ref().split_last() else {
+                    unreachable!()
+                };
+                
+                let search_path = tmp.1.join("/");
 
                 writeln!(
                     f,
@@ -198,7 +285,7 @@ impl Display for CompilationError {
                     " not found.".bold(),
                     format!(
                         "{home}/.msc/mods/{search_path}/{}.msc",
-                        modules.first().unwrap()
+                        modules[0]
                     )
                 )?;
                 write!(
@@ -206,13 +293,13 @@ impl Display for CompilationError {
                     "{}{}{}{}{}{}{}",
                     "    Maybe you need to install a module via ",
                     "mosaic install ".italic().yellow(),
-                    modules.first().unwrap().bold().italic().yellow(),
+                    modules[0].bold().italic().yellow(),
                     " or check ",
-                    modules.first().unwrap().bold(),
+                    modules[0].bold(),
                     "'s documentation at ",
                     format!(
                         "https://msc.ljpprojects.org/module/{}",
-                        modules.first().unwrap()
+                        modules[0]
                     )
                     .bold()
                     .italic()
@@ -221,7 +308,7 @@ impl Display for CompilationError {
                 )
             }
 
-            CompilationError::UndefinedVariable(file, name) => {
+            CompilationError::UndefinedVariable(file, trace, name) => {
                 writeln!(
                     f,
                     "  {}{}",
@@ -245,7 +332,7 @@ impl Display for CompilationError {
                 )
             }
 
-            CompilationError::DualDefinition(file, name) => {
+            CompilationError::DualDefinition(file, trace, name) => {
                 writeln!(
                     f,
                     "  {}{}",
@@ -268,7 +355,7 @@ impl Display for CompilationError {
                 )
             }
 
-            CompilationError::UndefinedOperator(file, op) => {
+            CompilationError::UndefinedOperator(file, trace, op) => {
                 writeln!(
                     f,
                     "  {}{}",
@@ -284,7 +371,7 @@ impl Display for CompilationError {
                 )
             }
 
-            CompilationError::CannotMutate(file, name) => {
+            CompilationError::CannotMutate(file, trace, name) => {
                 writeln!(
                     f,
                     "  {}{}",
@@ -300,7 +387,7 @@ impl Display for CompilationError {
                 )
             }
 
-            CompilationError::MismatchedTypeInDef(file, name, expected, got) => {
+            CompilationError::MismatchedTypeInDef(file, trace, name, expected, got) => {
                 writeln!(
                     f,
                     "  {}{}",
@@ -319,13 +406,16 @@ impl Display for CompilationError {
                 )
             }
 
-            CompilationError::UndefinedFunction(file, name) => {
+            CompilationError::UndefinedFunction(file, trace, name) => {
                 writeln!(
                     f,
                     "  {}{}",
                     "Compilation error in file ".bold().bright_red(),
                     file.to_string_lossy().bold().bright_red()
                 )?;
+
+                writeln!(f, "{trace:#?}")?;
+
                 writeln!(
                     f,
                     "    {}{}{}",
@@ -343,7 +433,7 @@ impl Display for CompilationError {
                 )
             }
 
-            CompilationError::InvalidCast(file, from, to) => {
+            CompilationError::InvalidCast(file, trace, from, to) => {
                 writeln!(
                     f,
                     "  {}{}",
@@ -362,7 +452,7 @@ impl Display for CompilationError {
                 )
             }
 
-            CompilationError::CannotMakePointer(file, to) => {
+            CompilationError::CannotMakePointer(file, trace, to) => {
                 writeln!(
                     f,
                     "  {}{}",
@@ -390,7 +480,7 @@ impl Display for CompilationError {
                 )
             }
 
-            CompilationError::NotFreed(file, item) => {
+            CompilationError::NotFreed(file, trace, item) => {
                 writeln!(
                     f,
                     "  {}{}",
@@ -415,7 +505,7 @@ impl Display for CompilationError {
                 )
             }
 
-            CompilationError::InvalidSignature(file, name, ret, args) => {
+            CompilationError::InvalidSignature(file, trace, name, ret, args) => {
                 writeln!(
                     f,
                     "  {}{}",

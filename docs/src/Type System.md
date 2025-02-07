@@ -1,1 +1,0 @@
-All types in Mosaic have a size. 

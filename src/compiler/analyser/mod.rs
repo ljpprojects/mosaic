@@ -11,6 +11,7 @@ pub enum UsageKind {
     Get,
     Call(Vec<AstNode>),
     Definition,
+    MakePointer,
 }
 
 #[derive(Debug)]
@@ -49,9 +50,14 @@ pub fn get_usages_of(symbol: &String, code: &[AstNode]) -> Vec<UsageIntrinsic> {
                     usages.extend(get_usages_of(symbol, &[r.deref().clone()]))
                 }
             }
+            AstNode::PrefixOp(op, n)
+                if &**op == "&" && n.deref() == &AstNode::Identifier(symbol.clone()) =>
+            {
+                usages.push(UsageIntrinsic::new(symbol.clone(), UsageKind::MakePointer))
+            }
             AstNode::PrefixOp(_, r) => usages.extend(get_usages_of(symbol, &[r.deref().clone()])),
             AstNode::PostfixOp(l, _) => usages.extend(get_usages_of(symbol, &[l.deref().clone()])),
-            AstNode::MemberExpr(c) if c.first().unwrap() == symbol => {
+            AstNode::MemberExpr(c) if c[0] == *symbol => {
                 usages.push(UsageIntrinsic::new(symbol.clone(), UsageKind::Get))
             }
             AstNode::IdxAccess(o, i) => {
@@ -59,10 +65,13 @@ pub fn get_usages_of(symbol: &String, code: &[AstNode]) -> Vec<UsageIntrinsic> {
                 usages.extend(get_usages_of(symbol, &[i.deref().clone()]));
             }
             AstNode::CallExpr { callee, args } => {
-                if let AstNode::Identifier(name) = callee.deref()
-                    && name == symbol
-                {
-                    usages.push(UsageIntrinsic::new(symbol.clone(), UsageKind::Call(args.to_vec())));
+                if let AstNode::Identifier(name) = callee.deref() {
+                    if name == symbol {
+                        usages.push(UsageIntrinsic::new(
+                            symbol.clone(),
+                            UsageKind::Call(args.to_vec()),
+                        ));
+                    }
                 }
 
                 usages.extend(get_usages_of(symbol, args));
@@ -77,7 +86,7 @@ pub fn get_usages_of(symbol: &String, code: &[AstNode]) -> Vec<UsageIntrinsic> {
                 usages.extend(get_usages_of(symbol, code));
                 usages.extend(get_usages_of(symbol, else_code));
             }
-            AstNode::ForInExpr {
+            AstNode::ForInStmt {
                 var,
                 of,
                 block: ParseBlock::Plain(block),
@@ -89,7 +98,7 @@ pub fn get_usages_of(symbol: &String, code: &[AstNode]) -> Vec<UsageIntrinsic> {
                 usages.extend(get_usages_of(symbol, &[of.deref().clone()]));
                 usages.extend(get_usages_of(symbol, block));
             }
-            AstNode::FnExpr {
+            AstNode::FnStmt {
                 name,
                 code: ParseBlock::Plain(code),
                 ..
@@ -115,17 +124,6 @@ pub fn get_usages_of(symbol: &String, code: &[AstNode]) -> Vec<UsageIntrinsic> {
 
                 usages.extend(get_usages_of(symbol, code));
             }
-            AstNode::StructStmt { name, fields, .. } => {
-                if name == symbol {
-                    usages.push(UsageIntrinsic::new(symbol.clone(), UsageKind::Definition));
-                }
-
-                for (name, _) in fields {
-                    if name == symbol {
-                        usages.push(UsageIntrinsic::new(symbol.clone(), UsageKind::Definition));
-                    }
-                }
-            }
             AstNode::IfStmt {
                 cond,
                 block: ParseBlock::Plain(code),
@@ -140,12 +138,8 @@ pub fn get_usages_of(symbol: &String, code: &[AstNode]) -> Vec<UsageIntrinsic> {
                 usages.push(UsageIntrinsic::new(symbol.clone(), UsageKind::Definition))
             }
             AstNode::ReturnStmt(v) => usages.extend(get_usages_of(symbol, &[v.as_ref().clone()])),
-            AstNode::Macro(name, args) => {
-                if name == symbol {
-                    usages.push(UsageIntrinsic::new(symbol.clone(), UsageKind::Definition));
-                }
-
-                usages.extend(get_usages_of(symbol, args));
+            AstNode::MemberExpr(p) if p.contains(symbol) => {
+                usages.push(UsageIntrinsic::new(symbol.clone(), UsageKind::Get));
             }
             _ => continue,
         }
