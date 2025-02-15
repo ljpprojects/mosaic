@@ -1,6 +1,6 @@
 [package]
 name = "mosaic-lang"
-version = "0.0.2-beta.2"
+version = "0.0.2-beta.3"
 edition = "2021"
 authors = ["Lucas Plumb"]
 keywords = ["compiler", "Mosaic"]
