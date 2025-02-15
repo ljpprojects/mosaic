@@ -4,12 +4,24 @@ use clap::{Parser, Subcommand, ValueEnum};
 pub enum EmitKind {
     #[value(name = "bin")]
     Binary,
+    
+    #[value(name = "sbin")]
+    StaticBinary,
 
-    #[value(name = "static")]
+    #[value(name = "slib")]
     StaticLib,
 
-    #[value(name = "dynamic")]
+    #[value(name = "dylib")]
     DynamicLib,
+}
+
+#[derive(Clone, Debug, Copy, PartialEq, Eq, ValueEnum)]
+pub enum Backend {
+    #[value(name = "cranelift")]
+    Cranelift,
+
+    #[value(name = "javascript")]
+    JavaScript,
 }
 
 #[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
@@ -23,14 +35,8 @@ pub enum Command {
         #[arg(short = 'l')]
         libraries: Vec<String>,
 
-        /// {INP} = input files
-        /// {DST} = output file
-        /// {LIB} = library files (included & -l)
-        #[arg(
-            long = "link-with",
-            default_value = "gcc -Wl,-O3,-pie -o {DST} {INP} {LIB}"
-        )]
-        link_command: String,
+        #[arg(long = "ld-args")]
+        link_flags: Option<String>,
 
         #[arg(long = "shell-path", default_value = "/bin/sh")]
         shell_path: String,
@@ -44,8 +50,14 @@ pub enum Command {
         #[arg(short = 'q', long = "quiet")]
         quiet: bool,
         
-        #[arg(long = "emit")]
+        #[arg(long = "emit", default_value = "bin")]
         emit: EmitKind,
+        
+        #[arg(long = "target")]
+        target: Option<String>,
+        
+        #[arg(long = "linker", default_value = "ld")]
+        linker: String,
     },
 
     Finish,

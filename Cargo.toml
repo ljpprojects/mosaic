@@ -12,9 +12,6 @@ categories = ["compilers"]
 publish = true
 repository = "https://github.com/ljp-projects/mosaic"
 
-[workspace]
-members = ["mosaic-pm"]
-
 [[bin]]
 name = "msc"
 path = "src/main.rs"
@@ -34,7 +31,7 @@ debug = "line-tables-only"
 [profile.release]
 lto = "fat"
 overflow-checks = false
-opt-level = 3
+opt-level = "z"
 incremental = true
 debug-assertions = false
 debug = "line-tables-only"
@@ -44,14 +41,14 @@ strip = "all"
 
 [profile.release.package."*"]
 overflow-checks = false
-opt-level = 3
+opt-level = "z"
 incremental = true
 debug-assertions = false
 debug = "line-tables-only"
 
 [profile.release.build-override]
 overflow-checks = false
-opt-level = 3
+opt-level = "z"
 incremental = true
 debug-assertions = false
 debug = "line-tables-only"
@@ -72,3 +69,5 @@ http-body-util = "0.1.2"
 tar = "0.4.43"
 flate2 = "1.0.35"
 capnp = "0.20.3"
+downcast-rs = "2.0.1"
+target-lexicon = "0.13.2"

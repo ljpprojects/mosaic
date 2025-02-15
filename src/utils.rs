@@ -6,7 +6,7 @@ pub trait IndirectionTrait<T> {
     fn map_option<U, F: FnOnce(&T) -> Option<U>>(self, f: F) -> Option<Indirection<U>>;
 }
 
-pub type Indirection<T> = Rc<T>;
+pub type Indirection<T> = Box<T>;
 
 impl<T> IndirectionTrait<T> for Indirection<T> {
     fn map<U, F: FnOnce(&T) -> U>(self, f: F) -> Indirection<U> {

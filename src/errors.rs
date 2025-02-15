@@ -1,13 +1,14 @@
 use crate::compiler::cranelift::meta::MustFreeMeta;
-use crate::compiler::cranelift::types::CraneliftType;
 use crate::parser::{AstNode, MacroArgKind, ParseType};
 use crate::tokens::{LineInfo, Token};
 use colored::Colorize;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::path::PathBuf;
+use std::rc::Rc;
 use either::Either;
 use crate::compiler::cranelift::trace::Trace;
+use crate::compiler::traits::CompilationType;
 
 #[derive(Clone)]
 pub enum CompilationError {
@@ -38,13 +39,13 @@ pub enum CompilationError {
     UndefinedVariable(PathBuf, Trace, String),
     DualDefinition(PathBuf, Trace, String),
     UndefinedOperator(PathBuf, Trace, String),
-    MismatchedTypeInDef(PathBuf, Trace, String, CraneliftType, CraneliftType),
+    MismatchedTypeInDef(PathBuf, Trace, String, Rc<dyn CompilationType>, Rc<dyn CompilationType>),
     CannotMutate(PathBuf, Trace, String),
     UndefinedFunction(PathBuf, Trace, String),
-    InvalidCast(PathBuf, Trace, CraneliftType, CraneliftType),
+    InvalidCast(PathBuf, Trace, Rc<dyn CompilationType>, Rc<dyn CompilationType>),
     CannotMakePointer(PathBuf, Trace, String),
     NotFreed(PathBuf, Trace, MustFreeMeta),
-    InvalidSignature(PathBuf, Trace, String, CraneliftType, Vec<CraneliftType>)
+    InvalidSignature(PathBuf, Trace, String, Rc<dyn CompilationType>, Vec<Rc<dyn CompilationType>>)
 }
 
 impl Error for CompilationError {}

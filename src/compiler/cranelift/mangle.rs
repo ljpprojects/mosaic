@@ -69,3 +69,13 @@ pub fn mangle_method(
         mangle_function(name, arg_types, ret_type)
     )
 }
+
+mod tests {
+    use crate::compiler::cranelift::mangle::mangle_method;
+    use crate::compiler::cranelift::types::CraneliftType;
+
+    #[test]
+    fn js_example() {
+        println!("{}", mangle_method(&("_Console".to_owned()), &("log".to_owned()), &[CraneliftType::FatPtr(CraneliftType::Int8.into())], &CraneliftType::Null))
+    }
+}

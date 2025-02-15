@@ -1,0 +1,9 @@
+include std::io
+
+fn main -> i32 {
+    println("Hello, World!" as *[i8])
+    println("Hello, World." as *[i8])
+    println("Hello, World?" as *[i8])
+
+    return 0
+}

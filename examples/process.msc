@@ -1,0 +1,24 @@
+include std::io
+include core::alloc
+
+type FILE = *any
+
+extern fn popen(command: *i8, mode: *i8) -> FILE
+extern fn pclose(pipe: FILE) -> null
+extern fn fgets(buf: *i8, len: i32, file: FILE) -> bool
+extern fn malloc(size: i32) -> *any
+
+fn main -> i32 {
+    mut buf = malloc(128) as *i8
+    let command = "ls\0" as *i8
+
+    mut pipe = popen(command, "r")
+
+    fgets(buf, 128, pipe)
+    # println(buf)
+
+    pclose(pipe)
+    #memfree(buf as *any)
+
+    return 0
+}

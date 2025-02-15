@@ -8,6 +8,7 @@ use cranelift_codegen::isa::OwnedTargetIsa;
 use cranelift_frontend::{FunctionBuilder, Variable};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::rc::Rc;
 use cranelift_codegen::ir::stackslot::StackSize;
 use crate::compiler::cranelift::trace::Trace;
 
@@ -116,8 +117,8 @@ impl VariableBuilder {
                 file,
                 trace.clone(),
                 name.clone(),
-                meta.def_type.clone(),
-                vty.clone(),
+                Rc::new(meta.def_type.clone()),
+                Rc::new(vty.clone()),
             ))
         }
         

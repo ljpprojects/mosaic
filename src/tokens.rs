@@ -1,4 +1,4 @@
-use crate::utils::IndirectionTrait;
+use crate::utils::{Indirection, IndirectionTrait};
 use std::fmt::{Debug, Display, Formatter};
 use std::num::{NonZero, NonZeroUsize};
 use std::ops::Range;
@@ -27,8 +27,8 @@ impl Clone for LineInfo {
 impl Default for LineInfo {
     fn default() -> Self {
         LineInfo::new_one_char(
-            Rc::from(1),
-            Rc::from(1),
+            Indirection::new(1),
+            Indirection::new(1),
         )
     }
 }
@@ -68,12 +68,12 @@ impl LineInfo {
         }
     }
 
-    pub fn new_one_char(char: Rc<usize>, line: Rc<usize>) -> LineInfo {
+    pub fn new_one_char(char: Indirection<usize>, line: Indirection<usize>) -> LineInfo {
         LineInfo {
-            start_char: char.clone(),
-            end_char: char.map(|n| n + 1),
-            start_line: line.clone(),
-            end_line: line,
+            start_char: char.clone().into(),
+            end_char: char.map(|n| n + 1).into(),
+            start_line: line.clone().into(),
+            end_line: line.into(),
         }
     }
 
