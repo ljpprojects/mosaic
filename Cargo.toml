@@ -37,7 +37,7 @@ debug-assertions = false
 debug = "line-tables-only"
 panic = "abort"
 rpath = true
-strip = "all"
+strip = true
 
 [profile.release.package."*"]
 overflow-checks = false
