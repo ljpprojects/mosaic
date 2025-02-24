@@ -32,12 +32,12 @@ use cranelift_codegen::entity::EntityRef;
 use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
 use cranelift_codegen::ir::immediates::Imm64;
 use cranelift_codegen::ir::stackslot::StackSize;
-use cranelift_codegen::ir::{AbiParam, Block, Function, GlobalValue, InstBuilder, MemFlags, Signature, StackSlotData, StackSlotKind, UserFuncName, Value};
+use cranelift_codegen::ir::{AbiParam, Block, FuncRef, Function, GlobalValue, InstBuilder, MemFlags, Signature, StackSlotData, StackSlotKind, UserFuncName, Value};
 use cranelift_codegen::isa::{Builder, CallConv, OwnedTargetIsa};
 use cranelift_codegen::settings::Configurable;
 use cranelift_codegen::{ir, isa, settings, Context};
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
-use cranelift_module::{default_libcall_names, DataDescription, Linkage, Module};
+use cranelift_module::{default_libcall_names, DataDescription, FuncId, Linkage, Module};
 use cranelift_native;
 use cranelift_object::{ObjectBuilder, ObjectModule};
 use std::any::Any;
@@ -48,6 +48,7 @@ use std::fs;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::rc::Rc;
+use cranelift_codegen::ir::entities::AnyEntity::SigRef;
 
 macro_rules! get_fn {
     ($self: expr, $name:expr) => {
@@ -119,6 +120,8 @@ pub struct CraneliftGenerator {
     deallocator_fns: HashSet<String>,
     must_frees: HashSet<MustFreeMeta>,
     command: Option<Command>,
+    
+    fn_refs: HashMap<String, (Function, FuncId)>,
 }
 
 impl CraneliftGenerator {
@@ -178,6 +181,7 @@ impl CraneliftGenerator {
             deallocator_fns: HashSet::new(),
             must_frees: HashSet::new(),
             command,
+            fn_refs: HashMap::new(),
         }
     }
 
@@ -509,6 +513,18 @@ impl CraneliftGenerator {
             }
             "&" => {
                 if let AstNode::Identifier(name) = right {
+                    if let Some(f) = get_fn!(self, name) {
+                        let fn_ref = self.module.declare_func_in_func(self.fn_refs.get_mut(name).unwrap().1, &mut self.fn_refs.get_mut(name).unwrap().0);
+                        
+                        let ptr = func.ins().func_addr(self.isa.pointer_type(), fn_ref);
+                        let ty = Type::FuncPtr {
+                            ret_type: Box::new(f.return_type.downcast_ref::<CraneliftType>().unwrap().clone()),
+                            arg_types: f.arg_meta.iter().map(|(_, b)| Box::new(b.downcast_ref::<CraneliftType>().unwrap().clone())).collect(),
+                        };
+                        
+                        return Ok((ptr, ty))
+                    }
+                    
                     let (ptr, ty) =
                         self.var_builder
                             .get_var_ptr(func, name, self.file_path.clone(), trace)?;
@@ -835,6 +851,25 @@ impl CraneliftGenerator {
 
                     arg_types.push(expr.1);
                 }
+                
+                // we need to call a function pointer
+                if let Ok((f, Type::FuncPtr { ret_type, arg_types })) = self.var_builder.get_var(func, name, self.file_path.clone(), trace) {
+                    let mut signature = self.module.make_signature();
+                    
+                    signature.returns.push(AbiParam::new(ret_type.clone().into_cranelift(&self.isa)));
+                    signature.params.extend(arg_types.iter().map(|ty| AbiParam::new(ty.clone().into_cranelift(&self.isa))));
+                    
+                    let sig_ref = func.import_signature(signature);
+                    
+                    let ret = func.ins().call_indirect(sig_ref, f, value_args.as_slice());
+                    let ret = func
+                        .inst_results(ret)
+                        .first()
+                        .copied()
+                        .unwrap_or(func.ins().iconst(ir::types::I8, 0));
+                    
+                    return Ok((ret, ret_type.deref().clone()))
+                }
 
                 let Some(fn_meta) = get_fn!(self, name) else {
                     if let Some(variant) = get_fn_variant!(self, name) {
@@ -1052,6 +1087,8 @@ impl CraneliftGenerator {
                             Ok((func.ins().fcvt_to_uint(to.clone().into_cranelift(&self.isa), val), to))
                         }
                     }
+                    (Type::Int64, p) if p.is_pointer() => Ok((val, ty)),
+                    (p, Type::Int64) if p.is_pointer() => Ok((val, ty)),
                     (from, to)
                         if (from.is_numeric() || matches!(from, Type::Bool)) && to.is_numeric() =>
                     {
@@ -1538,7 +1575,7 @@ impl CraneliftGenerator {
             return Ok(vec![]);
         }
 
-        return Ok(vec![]);
+        Ok(vec![])
     }
 
     pub fn compile_func(&mut self, node: &AstNode) -> Result<(), Box<[CompilationError]>> {
@@ -1602,6 +1639,8 @@ impl CraneliftGenerator {
 
         let mut func =
             Function::with_name_signature(UserFuncName::user(0, fid.index() as u32), sig.clone());
+        
+        self.fn_refs.insert(mangled_name.clone(), (func.clone(), fid));
 
         let mut ctx = FunctionBuilderContext::new();
 
@@ -1624,14 +1663,6 @@ impl CraneliftGenerator {
 
         fn_builder.switch_to_block(block);
         fn_builder.seal_block(block);
-
-        let fpty = Type::FuncPtr {
-            ret_type: Indirection::new(ret_type.clone()),
-            arg_types: arg_types
-                .iter()
-                .map(|a| Indirection::new(a.clone()))
-                .collect(),
-        };
 
         if let Some(variants) = self.function_variants.get_mut(name) {
             variants.push((ret_type.clone(), arg_types.clone()))

@@ -8,6 +8,7 @@
       <sourceFolder url="file://$MODULE_DIR$/src/BEVM/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/mosaic-pm/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/mosaic-pm/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/boostrapped" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/src/BEVM/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
       <excludeFolder url="file://$MODULE_DIR$/docs/src/.obsidian" />

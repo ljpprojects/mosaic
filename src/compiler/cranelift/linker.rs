@@ -40,11 +40,11 @@ impl Linker {
         };
 
         let mut link_flags = vec![];
-// link_flags.join(" ")
+
         match emit {
             EmitKind::Binary if triple.operating_system.is_like_darwin() => {
                 if matches!(triple.operating_system, Darwin(_) | MacOSX(_)) {
-                    link_flags.extend(["-lSystem".to_string(), "-syslibroot `xcrun -sdk macosx --show-sdk-path`".to_string(), "-macos_version_min `xcrun -sdk macosx --show-sdk-version`".to_string()]);
+                    link_flags.extend(["-lSystem".to_string(), "-no_pie -syslibroot `xcrun -sdk macosx --show-sdk-path`".to_string(), "-macos_version_min `xcrun -sdk macosx --show-sdk-version`".to_string()]);
                 } else {
                     return Err(format!("Cannot compile to darwin-like OS/environment {}.", triple.operating_system));
                 }
