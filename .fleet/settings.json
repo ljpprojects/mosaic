@@ -3,6 +3,10 @@
         {
             "type": "add",
             "pluginName": "fleet.rust"
+        },
+        {
+            "type": "add",
+            "pluginName": "izhangzhihao.fleet.rainbow.brackets"
         }
     ]
 }
