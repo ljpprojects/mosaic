@@ -4,7 +4,7 @@ use crate::states::{ParserState, WithState};
 use crate::tokens::{LineInfo, Token};
 use crate::utils::Indirection;
 use std::collections::HashMap;
-use std::fmt::{write, Debug, Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::str::FromStr;

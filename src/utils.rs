@@ -1,5 +1,3 @@
-use std::fmt::{Debug, Display};
-use std::rc::Rc;
 
 pub trait IndirectionTrait<T> {
     fn map<U, F: FnOnce(&T) -> U>(self, f: F) -> Indirection<U>;
