@@ -51,7 +51,7 @@ impl<'a> PreoptEngine<'a> {
 
         while let Some(node) = self.buffer.get_mut(i) {
             let name = match node {
-                AstNode::FnExpr {
+                AstNode::FnStmt {
                     code: ParseBlock::Plain(code),
                     ..
                 } => {
@@ -86,7 +86,7 @@ impl<'a> PreoptEngine<'a> {
 
         while let Some(node) = self.buffer.get_mut(i) {
             let (name, def_type, value) = match node {
-                AstNode::FnExpr {
+                AstNode::FnStmt {
                     code: ParseBlock::Plain(code),
                     ..
                 } => {
@@ -116,7 +116,7 @@ impl<'a> PreoptEngine<'a> {
 
             let usages = analyser::get_usages_of(&name, &self.code[i..])
                 .into_iter()
-                .filter(|u| u.kind == UsageKind::Assignment)
+                .filter(|u| u.kind == UsageKind::Assignment || u.kind == UsageKind::MakePointer)
                 .collect::<Vec<_>>();
 
             if usages.len() == 0 {

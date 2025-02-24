@@ -2,12 +2,19 @@ use crate::errors::CompilationError;
 use crate::reader::CharReader;
 use crate::states::{LexerState, WithState};
 use crate::tokens::{LineInfo, Token};
-use crate::utils::IndirectionTrait;
+use crate::utils::{Indirection, IndirectionTrait};
 use std::cell::{Cell, RefCell};
-use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::str::FromStr;
+
+pub const VALID_CHARS: &[char] = &[
+    '+', '-', '*', '/', '%',
+    '^', ':', '?', '!', '=',
+    '>', '<', '{', '}', '[',
+    ']', '(', ')', '@', ',',
+    '&', '|', '.', '$', ';',
+];
 
 /// This is equal to amount spaces a tab character is equal to.
 /// This is important because without it the character position system does not work.
@@ -160,13 +167,9 @@ impl StreamedLexer {
         self.is_first = false;
 
         match c {
-            '+' | '-' | '*' | '/' | '%' | ':' | '^' | '?' | '!' | '=' | '>' | '<' | '{' | '}'
-            | '[' | ']' | '(' | ')' | '@' | ',' | '&' | '|' | '.' => Some(Ok(Token::Char(
+            c if VALID_CHARS.contains(&c) => Some(Ok(Token::Char(
                 c,
-                LineInfo::new_one_char(
-                    Rc::from(NonZeroUsize::new(columnc.get()).unwrap()),
-                    Rc::from(NonZeroUsize::new(linec.get()).unwrap()),
-                ),
+                LineInfo::new_one_char(Indirection::new(columnc.get()), Indirection::new(linec.get())),
             ))),
 
             '#' => loop {
@@ -204,8 +207,8 @@ impl StreamedLexer {
             }
 
             '"' => {
-                let beginc = Rc::from(NonZeroUsize::new(columnc.get() - 1).unwrap());
-                let beginl = Rc::from(NonZeroUsize::new(linec.get()).unwrap());
+                let beginc = Indirection::new(columnc.get() - 1);
+                let beginl = Indirection::new(linec.get());
 
                 loop {
                     let Some(next_c) = next_char(true) else {
@@ -226,44 +229,56 @@ impl StreamedLexer {
 
                 buffer.get_mut().clear();
 
-                let endc = Rc::from(NonZeroUsize::new(columnc.get()).unwrap());
-                let endl = Rc::from(NonZeroUsize::new(linec.get()).unwrap());
+                let endc = Rc::new(columnc.get());
+                let endl = Rc::new(linec.get());
 
                 Some(Ok(Token::String(
                     string,
-                    LineInfo::new(beginc, endc, beginl, endl),
+                    LineInfo::new(beginc.into(), endc, beginl.into(), endl),
                 )))
             }
 
             '\'' => {
-                let beginc = Rc::from(NonZeroUsize::new(columnc.get()).unwrap());
-                let beginl = Rc::from(NonZeroUsize::new(linec.get()).unwrap());
+                let beginc = Indirection::new(columnc.get());
+                let beginl = Indirection::new(linec.get());
 
-                let c = next_char(true).unwrap() as u8;
+                let Some(c) = next_char(true) else {
+                    return Some(Err(CompilationError::UnexpectedEOF(
+                        self.file.clone(),
+                        "CHAR_LIT".into(),
+                    )));
+                };
 
                 let linfo = LineInfo::new_one_char(beginc, beginl);
 
-                if peek_char().unwrap() != '\'' {
+                let Some(peeked) = peek_char() else {
+                    return Some(Err(CompilationError::UnfinishedString(
+                        self.file.clone(),
+                        linfo,
+                    )));
+                };
+
+                if peeked != '\'' {
                     return Some(Err(CompilationError::InvalidChar(
                         self.file.clone(),
-                        peek_char().unwrap(),
+                        peeked,
                         linfo,
                     )));
                 }
 
                 next_char(true);
 
-                Some(Ok(Token::Byte(c, linfo)))
+                Some(Ok(Token::Byte(c as u8, linfo)))
             }
 
             _ => {
                 if c.is_whitespace() {
                     //columnc.set(columnc.get() + 1);
 
-                    unsafe { (self as *mut Self).as_mut().unwrap().next_token() }
+                    self.next_token()
                 } else if is_mosaic_ident_start(&c) {
-                    let beginc = Rc::from(NonZeroUsize::new(columnc.get()).unwrap());
-                    let beginl = Rc::from(NonZeroUsize::new(linec.get()).unwrap());
+                    let beginc = Rc::from(columnc.get());
+                    let beginl = Rc::from(linec.get());
 
                     *buffer.get_mut() += c.to_string().as_str();
 
@@ -285,20 +300,15 @@ impl StreamedLexer {
 
                     buffer.get_mut().clear();
 
-                    let endc = Rc::from(NonZeroUsize::new(columnc.get()).unwrap());
+                    let endc = Indirection::new(columnc.get());
 
                     Some(Ok(Token::Ident(
                         ident,
-                        LineInfo::new(
-                            beginc,
-                            endc.map(|n| n.checked_add(1).unwrap()),
-                            beginl.clone(),
-                            beginl,
-                        ),
+                        LineInfo::new(beginc, endc.map(|n| n + 1).into(), beginl.clone(), beginl),
                     )))
                 } else if c.is_numeric() {
-                    let beginc = Rc::from(NonZeroUsize::new(columnc.get()).unwrap());
-                    let beginl = Rc::from(NonZeroUsize::new(linec.get()).unwrap());
+                    let beginc = Rc::from(columnc.get());
+                    let beginl = Rc::from(linec.get());
                     let mut is_float = false;
 
                     *buffer.get_mut() += c.to_string().as_str();
@@ -325,12 +335,14 @@ impl StreamedLexer {
                     }
 
                     let string = buffer.get_mut().to_owned();
-                    let num = f64::from_str(string.as_str()).unwrap();
+                    let Ok(num) = f64::from_str(string.as_str()) else {
+                        unreachable!()
+                    };
 
                     buffer.get_mut().clear();
 
-                    let endc = Rc::from(NonZeroUsize::new(columnc.get()).unwrap());
-                    let endl = Rc::from(NonZeroUsize::new(linec.get()).unwrap());
+                    let endc = Rc::from(columnc.get());
+                    let endl = Rc::from(linec.get());
 
                     Some(Ok(Token::Number(
                         num,
@@ -340,10 +352,7 @@ impl StreamedLexer {
                     Some(Err(CompilationError::InvalidChar(
                         self.file.clone(),
                         c,
-                        LineInfo::new_one_char(
-                            Rc::from(NonZeroUsize::new(columnc.get()).unwrap()),
-                            Rc::from(NonZeroUsize::new(linec.get()).unwrap()),
-                        ),
+                        LineInfo::new_one_char(Indirection::new(columnc.get()), Indirection::new(linec.get())),
                     )))
                 }
             }

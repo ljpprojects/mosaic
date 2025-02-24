@@ -1,0 +1,6 @@
+extern fn write(fd: i32, str: *i8, len: i32) -> null
+extern fn strlen(str: *i8) -> i32
+
+fn log(str: *i8) export -> null {
+    return write(2, str, strlen(str))
+}
