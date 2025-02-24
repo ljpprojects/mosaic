@@ -75,7 +75,7 @@ impl CharReader {
 
         file.read_to_end(&mut buf)?;
 
-        let buf = String::from_utf8(buf).unwrap();
+        let buf = String::from_utf8_lossy(&*buf);
         let lines = buf.lines().collect::<Vec<_>>();
 
         for (i, line) in lines.iter().enumerate() {

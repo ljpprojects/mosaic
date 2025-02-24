@@ -1,19 +1,20 @@
-use crate::compiler::cranelift::types::CraneliftType;
 use crate::utils::Indirection;
 use std::ops::Deref;
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ContextKind {
     Global,
     Function,
     CallArg,
     Return,
     Idx,
-    Def(CraneliftType),
-    Normal,
+    Def,
+    LeftOp(String),
+    RightOp(String),
+    FuncArg(String),
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Trace {
     pub parent: Option<Indirection<Trace>>,
     pub symbol: String,
@@ -79,3 +80,10 @@ impl Trace {
         self.nested(symbol, ctx)
     }
 }
+
+/*
+GLOBAL
+  main
+    if
+      returned ← here
+*/

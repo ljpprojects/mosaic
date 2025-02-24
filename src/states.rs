@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use crate::file::File;
 use std::rc::Rc;
+use crate::parser::Macro;
 
 pub trait WithState {
     type ToState: State;
@@ -11,6 +13,7 @@ pub trait WithState {
 
 pub trait State {}
 
+#[derive(Debug)]
 pub struct ReaderState {
     pub pos: u64,
     pub reader: Rc<File<String>>,
@@ -24,6 +27,7 @@ impl ReaderState {
     }
 }
 
+#[derive(Debug)]
 pub struct LexerState {
     pub reader_state: ReaderState,
     pub pos: u64,
@@ -52,14 +56,16 @@ impl LexerState {
     }
 }
 
+#[derive(Debug)]
 pub struct ParserState {
     pub lexer_state: LexerState,
+    pub macros: HashMap<String, Macro> 
 }
 
 impl State for ParserState {}
 
 impl ParserState {
-    pub fn new(lexer_state: LexerState) -> Self {
-        Self { lexer_state }
+    pub fn new(lexer_state: LexerState, macros: HashMap<String, Macro>) -> Self {
+        Self { lexer_state, macros }
     }
 }
