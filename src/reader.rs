@@ -1,10 +1,16 @@
 #![forbid(unsafe_code)]
 
+use mmap_rs::MmapOptions;
+
 use crate::file::File;
 use crate::states::{ReaderState, WithState};
 use crate::tokens::LineInfo;
+use std::fs::OpenOptions;
 use std::io::Read;
+
+#[cfg(unix)]
 use std::os::unix::fs::FileExt;
+
 use std::rc::Rc;
 use std::{fs, io};
 
@@ -49,6 +55,10 @@ impl CharReader {
     pub fn next_char(&mut self) -> Option<char> {
         let mut binding = [0u8; 1];
         let mut buf = binding.as_mut();
+
+        let mmap = {
+            MmapOptions::new(size)
+        };
 
         self.reader.file().read_exact_at(&mut buf, self.pos).ok()?;
 
