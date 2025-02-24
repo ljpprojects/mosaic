@@ -1,6 +1,6 @@
 use crate::utils::Indirection;
 use cranelift_codegen::ir::Value as RawValue;
-use crate::compiler::identifiers;
+use crate::compiler::identifiers::StatementIdentifier;
 
 pub struct OwnershipTrace {
     /// Stores the name of the variable that owns the value, if any
@@ -9,7 +9,7 @@ pub struct OwnershipTrace {
     /// Stores the mangled name of the function that owns the value, if any
     function: Option<String>,
 
-    statement: StatementID,
+    statement: StatementIdentifier,
 }
 
 pub enum CraneliftValue {
