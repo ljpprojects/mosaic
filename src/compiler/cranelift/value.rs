@@ -4,12 +4,7 @@ use crate::compiler::identifiers::StatementIdentifier;
 
 pub struct OwnershipTrace {
     /// Stores the name of the variable that owns the value, if any
-    variable: Option<String>,
-
-    /// Stores the mangled name of the function that owns the value, if any
-    function: Option<String>,
-
-    statement: StatementIdentifier,
+    owner: OneOf<String, String, Statementidentifier>
 }
 
 pub enum CraneliftValue {

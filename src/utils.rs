@@ -38,3 +38,32 @@ impl<T> From<T> for UseSparingly<T> {
         UseSparingly(t)
     }
 }
+
+pub enum OneOf<A, B, C> {
+    Left(A),
+    Centre(B),
+    Right(C)
+}
+
+impl<A, B, C> OneOf<A, B, C> {
+    pub fn unwrap_left(self) -> A {
+        match self {
+            Self::Left(v) => v,
+            _ => panic!("unwrapped left value on right or centre value")
+        }
+    }
+
+    pub fn unwrap_centre(self) -> B {
+        match self {
+            Self::Centre(v) => v,
+            _ => panic!("unwrapped left value on right or left value")
+        }
+    }
+
+    pub fn unwrap_right(self) -> C {
+        match self {
+            Self::Right(v) => v,
+            _ => panic!("unwrapped left value on left or centre value")
+        }
+    }
+}
