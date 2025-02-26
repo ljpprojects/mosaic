@@ -1,0 +1,18 @@
+extern fn puts(s: *i8) -> null
+extern fn malloc(size: i32) -> *any
+
+fn foo no_mangle -> *any {
+    return malloc(4)
+}
+
+fn do(task: fn() -> *any) -> i32 {
+    task()
+
+    return 0
+}
+
+fn main -> i32 {
+    do(&foo)
+
+    return 0
+}

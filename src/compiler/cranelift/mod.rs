@@ -32,7 +32,7 @@ use cranelift_codegen::entity::EntityRef;
 use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
 use cranelift_codegen::ir::immediates::Imm64;
 use cranelift_codegen::ir::stackslot::StackSize;
-use cranelift_codegen::ir::{AbiParam, Block, FuncRef, Function, GlobalValue, InstBuilder, MemFlags, Signature, StackSlotData, StackSlotKind, UserFuncName, Value};
+use cranelift_codegen::ir::{AbiParam, Block, ExtFuncData, ExternalName, FuncRef, Function, GlobalValue, InstBuilder, MemFlags, Signature, StackSlotData, StackSlotKind, UserExternalName, UserExternalNameRef, UserFuncName, Value};
 use cranelift_codegen::isa::{Builder, CallConv, OwnedTargetIsa};
 use cranelift_codegen::settings::Configurable;
 use cranelift_codegen::{ir, isa, settings, Context};
@@ -96,31 +96,67 @@ macro_rules! get_fn_variant {
 }
 
 pub struct CraneliftGenerator {
+    /// A counter for unique names.
     counter: usize,
+
+    /// The name of the module that is being compiled.
     module_name: String,
+
+    /// The number of functions that have been compiled so far in this module.
     fn_counter: u32,
+
+    /// The path to the Mosaic file being compiled.
     file_path: PathBuf,
+
+    /// The parser.
     parser: StreamedParser,
-    builder_ctx: RefCell<FunctionBuilderContext>,
+
+    /// Every variant of the compiled functions.
     function_variants: HashMap<String, Vec<(CraneliftType, Vec<CraneliftType>)>>,
+
+    /// A map of mangled function names to their metadata.
     functions: HashMap<String, FunctionMeta>,
+
+    /// Used to create variables.
     var_builder: VariableBuilder,
+
+    /// The cranelift ObjectModule for generated objects for the output target.
     module: ObjectModule,
+
+    /// The calling convention to use.
     call_conv: CallConv,
+
+    /// The cranelift OwnedTargetIsa primarily used for getting the pointer width/type.
     isa: OwnedTargetIsa,
+
+    /// Used to get the target triple when compiling other modules (marked for removal)
     isa_builder: Builder,
+
+    /// Used to compile types.
     tg: CraneliftTypeGenerator,
+
+    /// A list of every module that the current module has included.
     included_modules: Vec<CraneliftModule>,
-    /// Every value that should be auto-freed at the end of a scope,
-    /// where auto_frees.last() = the current auto-free items.
+
+    /// A function-scoped list of values that will be freed at the end of their function, not scopes.
     auto_frees: Vec<HashSet<Value>>,
+
+    /// A function-scoped list of tasks that will be executed in LIFO order at the end of a function, not scope.
     deferred_items: Vec<Vec<ParseBlock>>,
 
+    /// A list of all functions that were marked with the 'alloc' modifier.
     allocator_fns: HashSet<String>,
+
+    /// A list of all functions that were marked with the 'dealloc' modifier.
     deallocator_fns: HashSet<String>,
+
+    /// A list of all values that must be freed.
     must_frees: HashSet<MustFreeMeta>,
+
+    /// Stores the argument given to the program
     command: Option<Command>,
     
+    /// A map of mangled function names to their cranelift FuncId for calling function pointers.
     fn_refs: HashMap<String, (Function, FuncId)>,
 }
 
@@ -164,7 +200,6 @@ impl CraneliftGenerator {
             module_name,
             file_path,
             parser,
-            builder_ctx: RefCell::new(FunctionBuilderContext::new()),
             function_variants: Default::default(),
             functions: Default::default(),
             var_builder: VariableBuilder::new(&isa),
@@ -514,7 +549,22 @@ impl CraneliftGenerator {
             "&" => {
                 if let AstNode::Identifier(name) = right {
                     if let Some(f) = get_fn!(self, name) {
-                        let fn_ref = self.module.declare_func_in_func(self.fn_refs.get_mut(name).unwrap().1, &mut self.fn_refs.get_mut(name).unwrap().0);
+                        let user_name = UserExternalName {
+                            namespace: 0,
+                            index: self.functions.get(name).unwrap().index
+                        };
+
+                        let name_ref: UserExternalNameRef = func.func.declare_imported_user_function(user_name);
+
+                        let sig_ref = func.import_signature(self.functions.get(name).unwrap().sig.clone());
+
+                        let data = ExtFuncData {
+                            name: ExternalName::User(name_ref),
+                            signature: sig_ref,
+                            colocated: true,
+                        };
+
+                        let fn_ref = func.import_function(data);
                         
                         let ptr = func.ins().func_addr(self.isa.pointer_type(), fn_ref);
                         let ty = Type::FuncPtr {
