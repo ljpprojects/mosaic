@@ -1,0 +1,20 @@
+fn main -> i32 {
+    let array: *4[i32] = [12, 32, 57, 98]
+
+    let 2d_point: vec[i32, 2] = [134, 251] as vec[i32, 2]
+    let 3d_point: vec[f64, 3] = [0.1, 0.5, 0.2] as vec[f64, 3]
+
+    # just in case 4 is too little dimensions
+    # 255 is the max lane count
+    let 255d_point: vec[i32, 255] = [...] as vec[i32, 255]
+
+    let empty_vector: vec[i32, 3] = vec.EMPTY # compiler builtin
+
+    # insert values into the lanes
+    
+    empty_vector[0] = 4
+    empty_vector[1] = 5
+    empty_vector[2] = 6
+
+
+}

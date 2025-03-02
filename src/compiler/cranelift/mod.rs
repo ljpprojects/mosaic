@@ -1798,12 +1798,9 @@ impl CraneliftGenerator {
                     .to_string_lossy()
                     .to_string();
 
-                let mut msc_path = PathBuf::from(format!(
-                    "./{search_path}/{}.msc",
-                    p.last().unwrap()
-                ));
+                let mut msc_path: PathBuf = [search_path.clone(), format!("{}.msc", p.last().unwrap())].iter().collect();
 
-                let mut obj_path: Option<_> = Some(PathBuf::from(format!(
+                let mut obj_path: Option<PathBuf> = Some(PathBuf::from(format!(
                     "./{search_path}/{}.o",
                     p.last().unwrap()
                 )));
