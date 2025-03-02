@@ -32,7 +32,7 @@ use cranelift_codegen::entity::EntityRef;
 use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
 use cranelift_codegen::ir::immediates::Imm64;
 use cranelift_codegen::ir::stackslot::StackSize;
-use cranelift_codegen::ir::{AbiParam, Block, ExtFuncData, ExternalName, FuncRef, Function, GlobalValue, InstBuilder, MemFlags, Signature, StackSlotData, StackSlotKind, UserExternalName, UserExternalNameRef, UserFuncName, Value};
+use cranelift_codegen::ir::{AbiParam, Block, FuncRef, Function, GlobalValue, InstBuilder, MemFlags, Signature, StackSlot, StackSlotData, StackSlotKind, UserFuncName, Value};
 use cranelift_codegen::isa::{Builder, CallConv, OwnedTargetIsa};
 use cranelift_codegen::settings::Configurable;
 use cranelift_codegen::{ir, isa, settings, Context};
@@ -622,7 +622,7 @@ impl CraneliftGenerator {
                 Type::Int8,
             )),
             AstNode::StringLiteral(s) => self.compile_string(s, func),
-            //AstNode::ArrayLiteral(a) => self.compile_array(a, func),
+            AstNode::ArrayLiteral(a) => self.compile_array(a, func),
             AstNode::BooleanLiteral(b) if *b => {
                 Ok((func.ins().iconst(ir::types::I8, Imm64::new(1)), Type::Bool))
             }
@@ -1536,31 +1536,31 @@ impl CraneliftGenerator {
         Ok(())
     }
 
-    /*pub fn compile_array(&mut self, array: &[AstNode], func: &mut FunctionBuilder) -> StackSlot {
+    pub fn compile_array(&mut self, array: &[AstNode], func: &mut FunctionBuilder, trace: &Trace) -> Result<StackSlot, Box<[CompilationError]>> {
         let mut values = vec![];
 
         for node in array {
-            values.push(self.compile_body_expr(node, func));
+            values.push(self.compile_body_expr(node, func, trace)?);
         }
 
-        let inner_type = values.first().unwrap();
+        let (_, inner_type) = values.first().unwrap();
 
         let slot = func.create_sized_stack_slot(StackSlotData {
             kind: StackSlotKind::ExplicitSlot,
-            size: inner_type.bytes() * array.len() as u32,
-            align_shift: 8,
+            size: (inner_type.size_bytes(&self.isa) as usize * array.len()) as u32,
+            align_shift: 0,
         });
 
-        for (index, node) in values.iter().enumerate() {
-            let bytes = inner_type.bytes();
+        for (index, node) in array.iter().enumerate() {
+            let bytes = inner_type.size_bytes(&self.isa);
 
-            let value = self.compile_body_expr(node, func);
+            let (value, _) = self.compile_body_expr(node, func, trace)?;
 
             func.ins().stack_store(value.clone(), slot, (index * bytes as usize) as i32);
         }
 
-        slot
-    }*/
+        Ok(slot)
+    }
 
     /// Returns a global value containing the string
     pub fn make_string(
