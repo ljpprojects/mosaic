@@ -32,13 +32,12 @@ use cranelift_codegen::entity::EntityRef;
 use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
 use cranelift_codegen::ir::immediates::Imm64;
 use cranelift_codegen::ir::stackslot::StackSize;
-use cranelift_codegen::ir::{AbiParam, Block, FuncRef, Function, GlobalValue, InstBuilder, MemFlags, Signature, StackSlot, StackSlotData, StackSlotKind, UserFuncName, Value};
+use cranelift_codegen::ir::{AbiParam, Block, ExtFuncData, ExternalName, FuncRef, Function, GlobalValue, InstBuilder, MemFlags, Signature, StackSlot, StackSlotData, StackSlotKind, UserExternalName, UserExternalNameRef, UserFuncName, Value};
 use cranelift_codegen::isa::{Builder, CallConv, OwnedTargetIsa};
 use cranelift_codegen::settings::Configurable;
 use cranelift_codegen::{ir, isa, settings, Context};
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{default_libcall_names, DataDescription, FuncId, Linkage, Module};
-use cranelift_native;
 use cranelift_object::{ObjectBuilder, ObjectModule};
 use std::any::Any;
 use std::cell::RefCell;
@@ -622,7 +621,11 @@ impl CraneliftGenerator {
                 Type::Int8,
             )),
             AstNode::StringLiteral(s) => self.compile_string(s, func),
-            AstNode::ArrayLiteral(a) => self.compile_array(a, func),
+            AstNode::ArrayLiteral(a) => {
+                let r = self.compile_array(a, func, trace)?;
+
+                Ok((r.1, r.2))
+            },
             AstNode::BooleanLiteral(b) if *b => {
                 Ok((func.ins().iconst(ir::types::I8, Imm64::new(1)), Type::Bool))
             }
@@ -1536,7 +1539,7 @@ impl CraneliftGenerator {
         Ok(())
     }
 
-    pub fn compile_array(&mut self, array: &[AstNode], func: &mut FunctionBuilder, trace: &Trace) -> Result<StackSlot, Box<[CompilationError]>> {
+    pub fn compile_array(&mut self, array: &[AstNode], func: &mut FunctionBuilder, trace: &Trace) -> Result<(StackSlot, Value, Type), Box<[CompilationError]>> {
         let mut values = vec![];
 
         for node in array {
@@ -1559,7 +1562,7 @@ impl CraneliftGenerator {
             func.ins().stack_store(value.clone(), slot, (index * bytes as usize) as i32);
         }
 
-        Ok(slot)
+        Ok((slot, func.ins().stack_addr(self.isa.pointer_type(), slot, 0), Type::Slice(Box::new(values.first().unwrap().1.clone()), values.len() as u32)))
     }
 
     /// Returns a global value containing the string
@@ -1799,11 +1802,7 @@ impl CraneliftGenerator {
                     .to_string();
 
                 let mut msc_path: PathBuf = [search_path.clone(), format!("{}.msc", p.last().unwrap())].iter().collect();
-
-                let mut obj_path: Option<PathBuf> = Some(PathBuf::from(format!(
-                    "./{search_path}/{}.o",
-                    p.last().unwrap()
-                )));
+                let mut obj_path: Option<PathBuf> = Some([search_path.clone(), format!("{}.o", p.last().unwrap())].iter().collect());
 
                 // Attempt lookup in installed modules directory (~/.msc/mods/)
                 if !msc_path.exists() {
