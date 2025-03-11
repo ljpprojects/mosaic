@@ -1806,9 +1806,11 @@ impl CraneliftGenerator {
 
                 // Attempt lookup in installed modules directory (~/.msc/mods/)
                 if !msc_path.exists() {
-                    let home = std::env::var("HOME").unwrap();
-
-                    msc_path = PathBuf::from(format!(
+                    let home = homedir::my_home();
+                    if cfg!(windows) {
+                        msc_path = [home, "AppData", "Mosaic", "Modules", &*search_path, &*format!("{}.msc", p.last().unwrap())]
+                    }
+                    PathBuf::from(format!(
                         "{home}/.msc/mods/{search_path}/{}.msc",
                         p.last().unwrap()
                     ));
