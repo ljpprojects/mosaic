@@ -1806,18 +1806,22 @@ impl CraneliftGenerator {
 
                 // Attempt lookup in installed modules directory (~/.msc/mods/)
                 if !msc_path.exists() {
-                    let home = homedir::my_home();
-                    if cfg!(windows) {
-                        msc_path = [home, "AppData", "Mosaic", "Modules", &*search_path, &*format!("{}.msc", p.last().unwrap())]
-                    }
-                    PathBuf::from(format!(
-                        "{home}/.msc/mods/{search_path}/{}.msc",
-                        p.last().unwrap()
-                    ));
-                    obj_path = Some(PathBuf::from(format!(
-                        "{home}/.msc/mods/{search_path}/{}.o",
-                        p.last().unwrap()
-                    )));
+                    let home = homedir::my_home().unwrap().clone().unwrap();
+                    let home = home.to_str();
+
+                    if cfg!(target_os = "windows") {
+                        msc_path = [home.unwrap(), "AppData", "Mosaic", "Modules", &*search_path, &*format!("{}.msc", p.last().unwrap())].iter().collect::<PathBuf>()
+                    } else if cfg!(target_os = "macos") {
+                       msc_path = [home.unwrap(), "Library", "Application Support", "Mosaic", "Modules", &*search_path, &*format!("{}.msc", p.last().unwrap())].iter().collect::<PathBuf>()
+                    } else {
+                        msc_path = [home.unwrap(), ".msc", "modules", &*search_path, &*format!("{}.msc", p.last().unwrap())].iter().collect::<PathBuf>()
+                    };
+
+                    let mut tmp = msc_path.clone();
+
+                    tmp.set_extension("o");
+
+                    obj_path = Some(tmp)
                 }
 
                 if self
