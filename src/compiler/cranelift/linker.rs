@@ -78,7 +78,9 @@ impl Linker {
         }
 
         for (mosaic_file, assoc_obj) in module.prev_includes {
-            let mosaic_file = file::File::new(mosaic_file.display().to_string()).unwrap();
+            let p = mosaic_file.display().to_string();
+
+            let mosaic_file = file::File::new(p).unwrap();
             let reader = CharReader::new(mosaic_file.clone());
 
             let lexer = StreamedLexer::new(reader);
@@ -101,7 +103,7 @@ impl Linker {
             let cg = CraneliftGenerator::new(parser, lookup(triple.clone()).unwrap(), Some(updated_command));
             let compiled = cg.compile(true, assoc_obj).map_err(|e| e.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n"))?;
 
-            link_files.insert(compiled.out_file.display().to_string());
+            link_files.insert(compiled.out_file.display().to_string().replace(" ", "\\ "));
 
             if let Some(assoc_obj) = compiled.assoc_obj {
                 link_files.insert(assoc_obj.display().to_string());

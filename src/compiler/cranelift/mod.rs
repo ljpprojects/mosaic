@@ -1282,8 +1282,33 @@ impl CraneliftGenerator {
             let new_offset = func.ins().iadd_imm(offset, inner.size_bytes(&self.isa) as i64);
             let cond = func.ins().icmp(IntCC::UnsignedLessThan, index, len);
             func.ins().brif(cond, body_block, &[new_offset], end_block, &[]);
+        } else if let Type::Slice(_, len) = lity {
+            let len = func.ins().iconst(Type::Int32.into_cranelift(&self.isa), len as i64);
+
+            let one = func.ins().iconst(Type::Int32.into_cranelift(&self.isa), 1);
+            let len = func.ins().isub(len, one);
+
+            let offset = func.block_params(body_block)[0];
+            let binding = func.ins().udiv_imm(offset, inner.size_bytes(&self.isa) as i64);
+            let index = func.ins().ireduce(Type::Int32.into_cranelift(&self.isa), binding);
+            let ptr = func.ins().iadd(loop_in, offset);
+
+            let current = func.ins().load(
+                inner.downcast_ref::<CraneliftType>().unwrap().clone().into_cranelift(&self.isa),
+                self.var_builder.flags,
+                ptr,
+                0
+            );
+
+            self.var_builder.create_var(func, current, inner.downcast_ref::<CraneliftType>().unwrap().clone(), r#for.clone(), true);
+
+            self.compile_body(code, func, trace)?;
+
+            let new_offset = func.ins().iadd_imm(offset, inner.size_bytes(&self.isa) as i64);
+            let cond = func.ins().icmp(IntCC::UnsignedLessThan, index, len);
+            func.ins().brif(cond, body_block, &[new_offset], end_block, &[]);
         } else {
-            unimplemented!("For loops over {in}")
+            unimplemented!("For loops over {lity}")
         }
 
         func.seal_block(body_block);
@@ -1839,6 +1864,8 @@ impl CraneliftGenerator {
                 }
 
                 if !msc_path.exists() {
+                    eprintln!("Module not found {msc_path:?}");
+
                     return Err(Box::new([CompilationError::UnknownModule(
                         self.file_path.clone(),
                         Trace::new_root("GLOBAL".to_string()),
