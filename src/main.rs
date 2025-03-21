@@ -19,10 +19,13 @@ use clap::Parser;
 use cranelift_native;
 use std::path::PathBuf;
 use std::process::{exit, ExitCode, Termination};
+use std::str::FromStr;
+use cranelift_codegen::isa::{lookup, IsaBuilder};
 use flate2::read::GzDecoder;
 use octocrab::Octocrab;
 use octocrab::params::repos::Reference;
 use tar::Archive;
+use target_lexicon::Triple;
 
 pub mod cli;
 pub mod compiler;
@@ -92,7 +95,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             archive.unpack(std_path)?;
         }
 
-        Command::Build { file, .. } => {
+        Command::Build { file, target, .. } => {
+            let triple = Triple::from_str(&target.unwrap_or("_".into())).unwrap_or(Triple::host());
+
             if !PathBuf::from(file.clone()).exists() {
                 return Err(CompilationError::UnknownModule(
                     PathBuf::from(file.clone()),
@@ -108,12 +113,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let cg = CraneliftGenerator::new(
                 parser,
-                cranelift_native::builder()?,
+                lookup(triple.clone())?,
                 Some(args.command.clone()),
             );
 
             match cg.compile(true, None) {
-                Ok(gen) => Linker::link(gen, args.command),
+                Ok(gen) => Linker::link(gen, args.command, triple),
                 Err(errors) => {
                     for err in errors {
                         eprintln!("{err}")
@@ -122,7 +127,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     exit(1)
                 }
             }
-        }
+        }?
     }
 
     Ok(())

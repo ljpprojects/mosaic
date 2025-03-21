@@ -2183,7 +2183,7 @@ impl StreamedParser {
 
                 arms.push(MatchArm {
                     operator: "".to_string(),
-                    right: Rc::new(AstNode::NullLiteral),
+                    right: Indirection::new(AstNode::NullLiteral),
                     is_else: true,
                     code: block,
                 });
@@ -2218,7 +2218,7 @@ impl StreamedParser {
 
             arms.push(MatchArm {
                 operator,
-                right: Rc::new(right),
+                right: Indirection::new(right),
                 is_else: false,
                 code: block,
             })

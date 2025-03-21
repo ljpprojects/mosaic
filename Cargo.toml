@@ -1,6 +1,6 @@
 [package]
 name = "mosaic-lang"
-version = "0.0.2-beta.2"
+version = "0.0.2-beta.3"
 edition = "2021"
 authors = ["Lucas Plumb"]
 keywords = ["compiler", "Mosaic"]
@@ -11,9 +11,6 @@ description = "A compiler for Mosaic."
 categories = ["compilers"]
 publish = true
 repository = "https://github.com/ljp-projects/mosaic"
-
-[workspace]
-members = ["mosaic-pm"]
 
 [[bin]]
 name = "msc"
@@ -34,24 +31,24 @@ debug = "line-tables-only"
 [profile.release]
 lto = "fat"
 overflow-checks = false
-opt-level = 3
+opt-level = "z"
 incremental = true
 debug-assertions = false
 debug = "line-tables-only"
 panic = "abort"
 rpath = true
-strip = "all"
+strip = true
 
 [profile.release.package."*"]
 overflow-checks = false
-opt-level = 3
+opt-level = "z"
 incremental = true
 debug-assertions = false
 debug = "line-tables-only"
 
 [profile.release.build-override]
 overflow-checks = false
-opt-level = 3
+opt-level = "z"
 incremental = true
 debug-assertions = false
 debug = "line-tables-only"
@@ -64,7 +61,7 @@ cranelift-object = "0.116.1"
 cranelift-native = "0.116.1"
 cranelift-frontend = "0.116.1"
 colored = "3.0.0"
-clap = { version = "4.5.23", features = ["derive"] }
+clap = { version = "4.5.29", features = ["derive"] }
 either = "1.13.0"
 octocrab = "0.43.0"
 tokio = { version = "1.43.0", features = ["rt", "rt-multi-thread", "macros"] }
@@ -72,3 +69,5 @@ http-body-util = "0.1.2"
 tar = "0.4.43"
 flate2 = "1.0.35"
 capnp = "0.20.3"
+downcast-rs = "2.0.1"
+target-lexicon = "0.13.2"

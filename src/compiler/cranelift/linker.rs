@@ -1,98 +1,137 @@
-use crate::cli::Command;
+use std::collections::HashSet;
+use std::{env, process};
+use std::process::Stdio;
+use cranelift_codegen::isa::lookup;
+use target_lexicon::Architecture::Aarch64;
+use cranelift_object::object::Architecture;
+use crate::cli::{Command, EmitKind};
 use crate::compiler::cranelift::module::CraneliftModule;
-use colored::Colorize;
-use std::process::{exit, Stdio};
-use std::{fs, process};
+use target_lexicon::OperatingSystem::{Darwin, MacOSX};
+use target_lexicon::{Aarch64Architecture, Triple};
+use crate::compiler::cranelift::CraneliftGenerator;
+use crate::file;
+use crate::lexer::StreamedLexer;
+use crate::parser::StreamedParser;
+use crate::reader::CharReader;
 
 pub struct Linker;
 
 impl Linker {
-    pub fn link(module: CraneliftModule, command: Command) {
+    pub fn link(module: CraneliftModule, command: Command, triple: Triple) -> Result<(), String> {
         let _home = std::env::var("HOME").unwrap();
         let mut dist = module.mosaic_file;
 
         dist.set_file_name(module.name.clone());
 
         let Command::Build {
-            libraries,
-            link_command,
-            shell_path,
-            shell_eval_flag,
-            quiet,
-            ..
+            ref file,
+            ref libraries,
+            link_flags: ref custom_link_flags,
+            ref shell_path,
+            ref shell_eval_flag,
+            ref no_implicit_functions,
+            ref quiet,
+            ref out_file,
+            ref emit,
+            ref target,
+            ref linker,
         } = command else {
             unimplemented!()
         };
 
-        let link_command = link_command
-            .replace("{INP}", module.out_file.to_str().unwrap())
-            .replace("{DST}", dist.to_str().unwrap())
-            .replace(
-                "{LIB}",
-                &[
-                    module
-                        .prev_includes
-                        .iter()
-                        .flat_map(|(m, a)| {
-                            let mut m = m.clone();
+        let mut link_flags = vec![];
 
-                            m.set_extension("cmp.o");
+        match emit {
+            EmitKind::Binary if triple.operating_system.is_like_darwin() => {
+                if matches!(triple.operating_system, Darwin(_) | MacOSX(_)) {
+                    link_flags.extend(["-lSystem".to_string(), "-no_pie -syslibroot `xcrun -sdk macosx --show-sdk-path`".to_string(), "-macos_version_min `xcrun -sdk macosx --show-sdk-version`".to_string()]);
+                } else {
+                    return Err(format!("Cannot compile to darwin-like OS/environment {}.", triple.operating_system));
+                }
+            }
+            EmitKind::StaticBinary => {
+                if triple.operating_system.is_like_darwin() {
+                    return Err("Linking static binaries on Darwin or Darwin-like OSes is not possible.".into())
+                }
 
-                            if let Some(a) = a {
-                                [
-                                    m.into_os_string().into_string().unwrap(),
-                                    a.clone().into_os_string().into_string().unwrap(),
-                                ]
-                            } else {
-                                [m.into_os_string().into_string().unwrap(), "".into()]
-                            }
-                        })
-                        .collect::<Vec<_>>(),
-                    libraries,
-                ]
-                .concat()
-                .join(" "),
-            );
-        
-        if !quiet {
-            print!("{}", "Linking with command: ".bold().green());
-            println!("{}", link_command.yellow());
+
+            }
+            EmitKind::StaticLib => {}
+            EmitKind::DynamicLib => {}
+            _ => {}
         }
 
-        let out = match process::Command::new(shell_path)
+        if let Aarch64(Aarch64Architecture::Aarch64) = triple.architecture {
+            link_flags.push("-arch arm64".to_string());
+        } else {
+            link_flags.push(format!("-arch {}", triple.architecture));
+        }
+
+
+        link_flags.push(format!("-o {}", out_file.clone().unwrap_or(dist.display().to_string())));
+
+        let mut link_files: HashSet<String> = HashSet::from_iter(libraries.clone());
+
+        link_files.insert(module.out_file.display().to_string());
+
+        if let Some(assoc_obj) = module.assoc_obj {
+            link_files.insert(assoc_obj.display().to_string());
+        }
+
+        for (mosaic_file, assoc_obj) in module.prev_includes {
+            let mosaic_file = file::File::new(mosaic_file.display().to_string()).unwrap();
+            let reader = CharReader::new(mosaic_file.clone());
+
+            let lexer = StreamedLexer::new(reader);
+            let parser = StreamedParser::new(lexer);
+            
+            let updated_command = Command::Build {
+                file: mosaic_file.path().display().to_string(),
+                out_file: None,
+                libraries: libraries.clone(),
+                link_flags: Some(link_flags.join(",")),
+                shell_path: shell_path.clone(),
+                shell_eval_flag: shell_eval_flag.clone(),
+                no_implicit_functions: *no_implicit_functions,
+                quiet: *quiet,
+                emit: *emit,
+                target: Some(triple.to_string()),
+                linker: linker.clone(),
+            };
+
+            let cg = CraneliftGenerator::new(parser, lookup(triple.clone()).unwrap(), Some(updated_command));
+            let compiled = cg.compile(true, assoc_obj).map_err(|e| e.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n"))?;
+
+            link_files.insert(compiled.out_file.display().to_string());
+
+            if let Some(assoc_obj) = compiled.assoc_obj {
+                link_files.insert(assoc_obj.display().to_string());
+            }
+        }
+        
+        let link_command = format!("{linker} {FLG} {INP}", FLG = custom_link_flags.clone().map(|args| args.replace(",", " ").replace("{DST}", &out_file.clone().unwrap_or(dist.display().to_string()))).clone().unwrap_or(link_flags.join(" ")), INP = link_files.into_iter().collect::<Vec<_>>().join(" "));
+
+        println!("{link_command}");
+
+        let result = process::Command::new(shell_path)
             .arg(shell_eval_flag)
             .arg(link_command)
+            .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .stdout(Stdio::null())
+            .stdin(Stdio::null())
             .spawn()
-            .unwrap()
-            .wait_with_output()
-        {
-            Ok(out) => out,
-            Err(e) => {
-                eprint!("{}", "Failed to link: ".bold().red());
-                eprintln!("{}", e.to_string().bold().red());
+            .map_err(|e| e.to_string())?
+            .wait_with_output();
 
-                fs::remove_file(module.out_file).unwrap();
-
-                exit(1);
+        match result {
+            Err(e) => return Err(e.to_string()),
+            Ok(r) => {
+                if !r.status.success() {
+                    return Err(String::from_utf8_lossy(&r.stderr).parse().unwrap())
+                }
             }
-        };
-
-        if !out.status.success() {
-            print!("{}", "Error during linking: ".bold().red());
-            println!("{}", String::from_utf8(out.stderr).unwrap().red());
-
-            fs::remove_file(module.out_file).unwrap();
-
-            exit(out.status.code().unwrap());
         }
         
-        if !quiet {
-            print!("{}", "Linked successfully: ".bold().green());
-            println!("{}", dist.to_str().unwrap().green());
-        }
-
-        fs::remove_file(module.out_file).unwrap();
+        Ok(())
     }
 }

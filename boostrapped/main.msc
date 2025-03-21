@@ -1,0 +1,12 @@
+# We cannot use the standard library or core, as we must assume they have not been installed.
+
+include file
+include logging
+
+fn main -> i32 {
+    let file = 1 as File
+
+    log("Hello\0" as *i8)
+
+    return file
+}

@@ -1,33 +1,20 @@
+use std::rc::Rc;
 use crate::compiler::cranelift::types::CraneliftType;
 use crate::parser::Modifier;
 use cranelift_codegen::ir::{Block, Signature, Value};
 use cranelift_frontend::Variable;
-use std::collections::HashMap;
+use crate::compiler::traits::CompilationType;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct FunctionMeta {
     pub auto_free_idx: Option<usize>,
     pub modifiers: Box<[Modifier]>,
     pub arity: usize,
-    pub arg_meta: Vec<(String, CraneliftType)>,
-    pub return_type: CraneliftType,
+    pub arg_meta: Vec<(String, Rc<dyn CompilationType>)>,
+    pub return_type: Rc<dyn CompilationType>,
     pub sig: Signature,
     pub index: u32,
     pub start_block: Option<Block>,
-}
-
-#[derive(Clone, Debug)]
-pub struct StructMeta {
-    pub fields: HashMap<String, FieldMeta>,
-    pub methods: HashMap<String, Vec<FunctionMeta>>,
-}
-
-#[derive(Clone, Debug)]
-pub struct FieldMeta {
-    offset: usize,
-    field_type: CraneliftType,
-    modifiers: Box<[Modifier]>,
-    default: Option<Value>,
 }
 
 #[derive(Hash, Clone, Debug, PartialEq, Eq)]
