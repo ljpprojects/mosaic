@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    
+    <title>Mosaic | Mosaic Documentation</title>
+    <meta name="viewport" content="width=device-width,minimum-scale=1">
+    <meta name="description" content="
+Mosaic is a small compiled language built using cranelift.
+Prerequisites
+Mosaic needs the following libraries to run properly:
+
+GCC (unless you specify a custom link command every time you run msc build)
+Rust
+Shell (located at /bin/sh unless a custom path is specified)
+
+Documentation
+Documentation can be found in the docs directory
+or at the Mosaic website.
+Supported Targets (tested)
+
+aarch64-apple-darwin Apple Silicon iMacs, MacBooks, etc…
+aarch64-unknown-linux-gnu Any Linux distro with an ARM64 chip
+x86_64-apple-darwin Intel iMacs, MacBooks, etc…
+x86_64-unknown-linux-gnu Windows WSL or any Linux distro with an x86_64 chip
+
+Theoretically, any architecture that cranelift supports and
+uses traditional UNIX paths (e.g. foo/bar/mod.msc) and UNIX syscalls should work with Mosaic.">
+    <meta name="generator" content="Hugo 0.143.1">
+    
+    
+    
+      <meta name="robots" content="noindex, nofollow">
+    
+    
+
+    
+<link rel="stylesheet" href="/ananke/css/main.min.css" >
+
+
+
+
+    
+
+    
+      
+
+    
+
+    
+
+    
+      <link rel="canonical" href="http://localhost:1313/posts/mosaic/">
+    
+
+    <meta property="og:url" content="http://localhost:1313/posts/mosaic/">
+  <meta property="og:site_name" content="Mosaic Documentation">
+  <meta property="og:title" content="Mosaic">
+  <meta property="og:description" content="Mosaic is a small compiled language built using cranelift.
+Prerequisites Mosaic needs the following libraries to run properly:
+GCC (unless you specify a custom link command every time you run msc build) Rust Shell (located at /bin/sh unless a custom path is specified) Documentation Documentation can be found in the docs directory or at the Mosaic website.
+Supported Targets (tested) aarch64-apple-darwin Apple Silicon iMacs, MacBooks, etc… aarch64-unknown-linux-gnu Any Linux distro with an ARM64 chip x86_64-apple-darwin Intel iMacs, MacBooks, etc… x86_64-unknown-linux-gnu Windows WSL or any Linux distro with an x86_64 chip Theoretically, any architecture that cranelift supports and uses traditional UNIX paths (e.g. foo/bar/mod.msc) and UNIX syscalls should work with Mosaic.">
+  <meta property="og:locale" content="en_us">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="posts">
+    <meta property="article:published_time" content="2025-02-10T07:04:46+11:00">
+    <meta property="article:modified_time" content="2025-02-10T07:04:46+11:00">
+
+  <meta itemprop="name" content="Mosaic">
+  <meta itemprop="description" content="Mosaic is a small compiled language built using cranelift.
+Prerequisites Mosaic needs the following libraries to run properly:
+GCC (unless you specify a custom link command every time you run msc build) Rust Shell (located at /bin/sh unless a custom path is specified) Documentation Documentation can be found in the docs directory or at the Mosaic website.
+Supported Targets (tested) aarch64-apple-darwin Apple Silicon iMacs, MacBooks, etc… aarch64-unknown-linux-gnu Any Linux distro with an ARM64 chip x86_64-apple-darwin Intel iMacs, MacBooks, etc… x86_64-unknown-linux-gnu Windows WSL or any Linux distro with an x86_64 chip Theoretically, any architecture that cranelift supports and uses traditional UNIX paths (e.g. foo/bar/mod.msc) and UNIX syscalls should work with Mosaic.">
+  <meta itemprop="datePublished" content="2025-02-10T07:04:46+11:00">
+  <meta itemprop="dateModified" content="2025-02-10T07:04:46+11:00">
+  <meta itemprop="wordCount" content="147">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Mosaic">
+  <meta name="twitter:description" content="Mosaic is a small compiled language built using cranelift.
+Prerequisites Mosaic needs the following libraries to run properly:
+GCC (unless you specify a custom link command every time you run msc build) Rust Shell (located at /bin/sh unless a custom path is specified) Documentation Documentation can be found in the docs directory or at the Mosaic website.
+Supported Targets (tested) aarch64-apple-darwin Apple Silicon iMacs, MacBooks, etc… aarch64-unknown-linux-gnu Any Linux distro with an ARM64 chip x86_64-apple-darwin Intel iMacs, MacBooks, etc… x86_64-unknown-linux-gnu Windows WSL or any Linux distro with an x86_64 chip Theoretically, any architecture that cranelift supports and uses traditional UNIX paths (e.g. foo/bar/mod.msc) and UNIX syscalls should work with Mosaic.">
+
+	
+  </head><body class="ma0 avenir bg-near-white development">
+
+    
+   
+  
+
+  <header>
+    <div class="bg-black">
+      <nav class="pv3 ph3 ph4-ns" role="navigation">
+  <div class="flex-l justify-between items-center center">
+    <a href="/" class="f3 fw2 hover-white no-underline white-90 dib">
+      
+        Mosaic Documentation
+      
+    </a>
+    <div class="flex-l items-center">
+      
+
+      
+      <div class="ananke-socials"></div>
+
+    </div>
+  </div>
+</nav>
+
+    </div>
+  </header>
+
+
+
+    <main class="pb7" role="main">
+      
+  
+  
+  <article class="flex-l flex-wrap justify-between mw8 center ph3">
+    <header class="mt4 w-100">
+      <aside class="instapaper_ignoref b helvetica tracked ttu">
+          
+        Posts
+      </aside><div id="sharing" class="mt3 ananke-socials"></div>
+<h1 class="f1 athelas mt3 mb1">Mosaic</h1>
+      
+      
+      
+      <time class="f6 mv4 dib tracked" datetime="2025-02-10T07:04:46+11:00">February 10, 2025</time>
+      
+
+      
+      
+    </header>
+    <div class="nested-copy-line-height lh-copy serif f4 nested-links mid-gray pr4-l w-two-thirds-l"><p><img src="icons/mosaic-logo.svg" alt="logo (a black letter m on a blue-green gradient background)"></p>
+<p>Mosaic is a small compiled language built using cranelift.</p>
+<h2 id="prerequisites">Prerequisites</h2>
+<p>Mosaic needs the following libraries to run properly:</p>
+<ul>
+<li>GCC (unless you specify a custom link command every time you run <code>msc build</code>)</li>
+<li>Rust</li>
+<li>Shell (located at <code>/bin/sh</code> unless a custom path is specified)</li>
+</ul>
+<h2 id="documentation">Documentation</h2>
+<p>Documentation can be found in the <a href="docs/src">docs</a> directory
+or at <a href="https://msc.ljpprojects.org/docs/">the Mosaic website</a>.</p>
+<h2 id="supported-targets-tested">Supported Targets (tested)</h2>
+<ul>
+<li><code>aarch64-apple-darwin</code> Apple Silicon iMacs, MacBooks, etc…</li>
+<li><code>aarch64-unknown-linux-gnu</code> Any Linux distro with an ARM64 chip</li>
+<li><code>x86_64-apple-darwin</code> Intel iMacs, MacBooks, etc…</li>
+<li><code>x86_64-unknown-linux-gnu</code> Windows WSL or any Linux distro with an x86_64 chip</li>
+</ul>
+<p>Theoretically, any architecture that cranelift supports and
+uses traditional UNIX paths (e.g. foo/bar/mod.msc) and UNIX syscalls should work with Mosaic.</p>
+<h2 id="planned-targets">Planned targets</h2>
+<ul>
+<li><code>WASM</code></li>
+<li><code>JS</code></li>
+</ul>
+<h2 id="known-bugs-also-on-the-github-repohttpsgithubcomljp-projectsmosaic-issues-page">Known Bugs (also on the <a href="https://github.com/ljp-projects/mosaic">GitHub Repo</a> issues page)</h2>
+<ul>
+<li>Defining variables to the result of a <code>must_free</code> annotated function leads
+to the compiler not being able to check that the value was freed.</li>
+</ul>
+<ul class="pa0">
+  
+</ul>
+<div class="mt6 instapaper_ignoref">
+      
+      
+      </div>
+    </div>
+
+    <aside class="w-30-l mt6-l">
+
+
+
+
+</aside>
+
+  </article>
+
+    </main>
+    <footer class="bg-black bottom-0 w-100 pa3" role="contentinfo">
+  <div class="flex justify-between">
+  <a class="f4 fw4 hover-white no-underline white-70 dn dib-ns pv2 ph3" href="http://localhost:1313/" >
+    &copy;  Mosaic Documentation 2025 
+  </a>
+    <div><div class="ananke-socials"></div>
+</div>
+  </div>
+</footer>
+
+  </body>
+</html>
