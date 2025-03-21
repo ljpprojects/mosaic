@@ -1,1 +1,0 @@
-Mosaic has a lot of hidden allocations. For example, when converting from `*N[T]` to `*[T]`, a pointer must be allocated, since you exchange the compile-time information for runtime information. 

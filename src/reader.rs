@@ -1,24 +1,37 @@
-#![forbid(unsafe_code)]
-
+use cranelift_object::object::ReadRef;
+use mmap_rs::{Mmap, MmapOptions};
 use crate::file::File;
 use crate::states::{ReaderState, WithState};
 use crate::tokens::LineInfo;
+use std::fs::OpenOptions;
 use std::io::Read;
-use std::os::unix::fs::FileExt;
+
+use std::ops::Index;
 use std::rc::Rc;
 use std::{fs, io};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct CharReader {
     pub(crate) reader: File<String>,
     pub pos: u64,
+    mmap: Mmap,
+}
+
+impl PartialEq for CharReader {
+    fn eq(&self, other: &Self) -> bool {
+        return self.reader.clone() == other.reader.clone() && self.pos == other.pos;
+    }
 }
 
 impl Clone for CharReader {
     fn clone(&self) -> Self {
+        let file_length = std::fs::metadata(self.reader.path()).unwrap().len() as usize;
+        let mmap = unsafe { MmapOptions::new(file_length).unwrap().with_file(&self.reader.file(), 0) }.map().unwrap();
+
         Self {
             reader: self.reader.clone(),
             pos: self.pos,
+            mmap,
         }
     }
 }
@@ -43,27 +56,22 @@ impl WithState for CharReader {
 
 impl CharReader {
     pub fn new(reader: File<String>) -> Self {
-        Self { reader, pos: 0 }
+        let file_length = std::fs::metadata(reader.path()).unwrap().len() as usize;
+        let mmap = unsafe { MmapOptions::new(file_length).unwrap().with_file(&reader.file(), 0) }.map().unwrap();
+
+        Self { reader, pos: 0, mmap }
     }
 
     pub fn next_char(&mut self) -> Option<char> {
-        let mut binding = [0u8; 1];
-        let mut buf = binding.as_mut();
-
-        self.reader.file().read_exact_at(&mut buf, self.pos).ok()?;
+        let byte = self.mmap.read_at::<u8>(self.pos).ok()?.clone();
 
         self.pos += 1;
 
-        Some(buf[0] as char)
+        Some(byte as char)
     }
 
     pub fn peek_next_char(&self) -> Option<char> {
-        let mut binding = [0u8; 1];
-        let mut buf = binding.as_mut();
-
-        self.reader.file().read_exact_at(&mut buf, self.pos).ok()?;
-
-        Some(buf[0] as char)
+        Some(self.mmap.read_at::<u8>(self.pos).ok()?.clone() as char)
     }
 
     // TODO: Support multi-line snippets
