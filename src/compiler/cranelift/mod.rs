@@ -32,13 +32,12 @@ use cranelift_codegen::entity::EntityRef;
 use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
 use cranelift_codegen::ir::immediates::Imm64;
 use cranelift_codegen::ir::stackslot::StackSize;
-use cranelift_codegen::ir::{AbiParam, Block, FuncRef, Function, GlobalValue, InstBuilder, MemFlags, Signature, StackSlotData, StackSlotKind, UserFuncName, Value};
+use cranelift_codegen::ir::{AbiParam, Block, ExtFuncData, ExternalName, FuncRef, Function, GlobalValue, InstBuilder, MemFlags, Signature, StackSlot, StackSlotData, StackSlotKind, UserExternalName, UserExternalNameRef, UserFuncName, Value};
 use cranelift_codegen::isa::{Builder, CallConv, OwnedTargetIsa};
 use cranelift_codegen::settings::Configurable;
 use cranelift_codegen::{ir, isa, settings, Context};
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{default_libcall_names, DataDescription, FuncId, Linkage, Module};
-use cranelift_native;
 use cranelift_object::{ObjectBuilder, ObjectModule};
 use std::any::Any;
 use std::cell::RefCell;
@@ -96,31 +95,67 @@ macro_rules! get_fn_variant {
 }
 
 pub struct CraneliftGenerator {
+    /// A counter for unique names.
     counter: usize,
+
+    /// The name of the module that is being compiled.
     module_name: String,
+
+    /// The number of functions that have been compiled so far in this module.
     fn_counter: u32,
+
+    /// The path to the Mosaic file being compiled.
     file_path: PathBuf,
+
+    /// The parser.
     parser: StreamedParser,
-    builder_ctx: RefCell<FunctionBuilderContext>,
+
+    /// Every variant of the compiled functions.
     function_variants: HashMap<String, Vec<(CraneliftType, Vec<CraneliftType>)>>,
+
+    /// A map of mangled function names to their metadata.
     functions: HashMap<String, FunctionMeta>,
+
+    /// Used to create variables.
     var_builder: VariableBuilder,
+
+    /// The cranelift ObjectModule for generated objects for the output target.
     module: ObjectModule,
+
+    /// The calling convention to use.
     call_conv: CallConv,
+
+    /// The cranelift OwnedTargetIsa primarily used for getting the pointer width/type.
     isa: OwnedTargetIsa,
+
+    /// Used to get the target triple when compiling other modules (marked for removal)
     isa_builder: Builder,
+
+    /// Used to compile types.
     tg: CraneliftTypeGenerator,
+
+    /// A list of every module that the current module has included.
     included_modules: Vec<CraneliftModule>,
-    /// Every value that should be auto-freed at the end of a scope,
-    /// where auto_frees.last() = the current auto-free items.
+
+    /// A function-scoped list of values that will be freed at the end of their function, not scopes.
     auto_frees: Vec<HashSet<Value>>,
+
+    /// A function-scoped list of tasks that will be executed in LIFO order at the end of a function, not scope.
     deferred_items: Vec<Vec<ParseBlock>>,
 
+    /// A list of all functions that were marked with the 'alloc' modifier.
     allocator_fns: HashSet<String>,
+
+    /// A list of all functions that were marked with the 'dealloc' modifier.
     deallocator_fns: HashSet<String>,
+
+    /// A list of all values that must be freed.
     must_frees: HashSet<MustFreeMeta>,
+
+    /// Stores the argument given to the program
     command: Option<Command>,
     
+    /// A map of mangled function names to their cranelift FuncId for calling function pointers.
     fn_refs: HashMap<String, (Function, FuncId)>,
 }
 
@@ -164,7 +199,6 @@ impl CraneliftGenerator {
             module_name,
             file_path,
             parser,
-            builder_ctx: RefCell::new(FunctionBuilderContext::new()),
             function_variants: Default::default(),
             functions: Default::default(),
             var_builder: VariableBuilder::new(&isa),
@@ -514,7 +548,22 @@ impl CraneliftGenerator {
             "&" => {
                 if let AstNode::Identifier(name) = right {
                     if let Some(f) = get_fn!(self, name) {
-                        let fn_ref = self.module.declare_func_in_func(self.fn_refs.get_mut(name).unwrap().1, &mut self.fn_refs.get_mut(name).unwrap().0);
+                        let user_name = UserExternalName {
+                            namespace: 0,
+                            index: self.functions.get(name).unwrap().index
+                        };
+
+                        let name_ref: UserExternalNameRef = func.func.declare_imported_user_function(user_name);
+
+                        let sig_ref = func.import_signature(self.functions.get(name).unwrap().sig.clone());
+
+                        let data = ExtFuncData {
+                            name: ExternalName::User(name_ref),
+                            signature: sig_ref,
+                            colocated: true,
+                        };
+
+                        let fn_ref = func.import_function(data);
                         
                         let ptr = func.ins().func_addr(self.isa.pointer_type(), fn_ref);
                         let ty = Type::FuncPtr {
@@ -572,7 +621,11 @@ impl CraneliftGenerator {
                 Type::Int8,
             )),
             AstNode::StringLiteral(s) => self.compile_string(s, func),
-            //AstNode::ArrayLiteral(a) => self.compile_array(a, func),
+            AstNode::ArrayLiteral(a) => {
+                let r = self.compile_array(a, func, trace)?;
+
+                Ok((r.1, r.2))
+            },
             AstNode::BooleanLiteral(b) if *b => {
                 Ok((func.ins().iconst(ir::types::I8, Imm64::new(1)), Type::Bool))
             }
@@ -1486,31 +1539,31 @@ impl CraneliftGenerator {
         Ok(())
     }
 
-    /*pub fn compile_array(&mut self, array: &[AstNode], func: &mut FunctionBuilder) -> StackSlot {
+    pub fn compile_array(&mut self, array: &[AstNode], func: &mut FunctionBuilder, trace: &Trace) -> Result<(StackSlot, Value, Type), Box<[CompilationError]>> {
         let mut values = vec![];
 
         for node in array {
-            values.push(self.compile_body_expr(node, func));
+            values.push(self.compile_body_expr(node, func, trace)?);
         }
 
-        let inner_type = values.first().unwrap();
+        let (_, inner_type) = values.first().unwrap();
 
         let slot = func.create_sized_stack_slot(StackSlotData {
             kind: StackSlotKind::ExplicitSlot,
-            size: inner_type.bytes() * array.len() as u32,
-            align_shift: 8,
+            size: (inner_type.size_bytes(&self.isa) as usize * array.len()) as u32,
+            align_shift: 0,
         });
 
-        for (index, node) in values.iter().enumerate() {
-            let bytes = inner_type.bytes();
+        for (index, node) in array.iter().enumerate() {
+            let bytes = inner_type.size_bytes(&self.isa);
 
-            let value = self.compile_body_expr(node, func);
+            let (value, _) = self.compile_body_expr(node, func, trace)?;
 
             func.ins().stack_store(value.clone(), slot, (index * bytes as usize) as i32);
         }
 
-        slot
-    }*/
+        Ok((slot, func.ins().stack_addr(self.isa.pointer_type(), slot, 0), Type::Slice(Box::new(values.first().unwrap().1.clone()), values.len() as u32)))
+    }
 
     /// Returns a global value containing the string
     pub fn make_string(
@@ -1748,28 +1801,27 @@ impl CraneliftGenerator {
                     .to_string_lossy()
                     .to_string();
 
-                let mut msc_path = PathBuf::from(format!(
-                    "./{search_path}/{}.msc",
-                    p.last().unwrap()
-                ));
-
-                let mut obj_path: Option<_> = Some(PathBuf::from(format!(
-                    "./{search_path}/{}.o",
-                    p.last().unwrap()
-                )));
+                let mut msc_path: PathBuf = [search_path.clone(), format!("{}.msc", p.last().unwrap())].iter().collect();
+                let mut obj_path: Option<PathBuf> = Some([search_path.clone(), format!("{}.o", p.last().unwrap())].iter().collect());
 
                 // Attempt lookup in installed modules directory (~/.msc/mods/)
                 if !msc_path.exists() {
-                    let home = std::env::var("HOME").unwrap();
+                    let home = homedir::my_home().unwrap().clone().unwrap();
+                    let home = home.to_str();
 
-                    msc_path = PathBuf::from(format!(
-                        "{home}/.msc/mods/{search_path}/{}.msc",
-                        p.last().unwrap()
-                    ));
-                    obj_path = Some(PathBuf::from(format!(
-                        "{home}/.msc/mods/{search_path}/{}.o",
-                        p.last().unwrap()
-                    )));
+                    if cfg!(target_os = "windows") {
+                        msc_path = [home.unwrap(), "AppData", "Mosaic", "Modules", &*search_path, &*format!("{}.msc", p.last().unwrap())].iter().collect::<PathBuf>()
+                    } else if cfg!(target_os = "macos") {
+                       msc_path = [home.unwrap(), "Library", "Application Support", "Mosaic", "Modules", &*search_path, &*format!("{}.msc", p.last().unwrap())].iter().collect::<PathBuf>()
+                    } else {
+                        msc_path = [home.unwrap(), ".msc", "modules", &*search_path, &*format!("{}.msc", p.last().unwrap())].iter().collect::<PathBuf>()
+                    };
+
+                    let mut tmp = msc_path.clone();
+
+                    tmp.set_extension("o");
+
+                    obj_path = Some(tmp)
                 }
 
                 if self

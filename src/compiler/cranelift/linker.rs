@@ -18,7 +18,6 @@ pub struct Linker;
 
 impl Linker {
     pub fn link(module: CraneliftModule, command: Command, triple: Triple) -> Result<(), String> {
-        let _home = std::env::var("HOME").unwrap();
         let mut dist = module.mosaic_file;
 
         dist.set_file_name(module.name.clone());

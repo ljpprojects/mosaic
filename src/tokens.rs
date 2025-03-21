@@ -1,9 +1,7 @@
 use crate::utils::{Indirection, IndirectionTrait};
 use std::fmt::{Debug, Display, Formatter};
-use std::num::{NonZero, NonZeroUsize};
 use std::ops::Range;
 use std::rc::Rc;
-use std::slice::SliceIndex;
 
 #[derive(PartialEq)]
 pub struct LineInfo {
