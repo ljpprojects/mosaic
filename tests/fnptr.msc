@@ -1,18 +1,27 @@
-extern fn puts(s: *i8) -> null
-extern fn malloc(size: i32) -> *any
+include std::io
 
-fn foo no_mangle -> *any {
-    return malloc(4)
+extern fn dlopen(path: *const i8, mode: i32) -> *const any
+extern fn dlsym(lib: *const any, sym: *const i8) -> *const any
+extern fn dlclose(lib: *const any) -> null
+
+fn foo export no_mangle -> null {
+    return println("FOOOOO" as *const [i8])
 }
 
-fn do(task: fn() -> *any) -> i32 {
-    task()
-
-    return 0
+fn do(task: fn() -> null) -> null {
+    return task()
 }
 
 fn main -> i32 {
-    do(&foo)
+    let lib = dlopen("./tests/fnptr\0" as *const i8, 1)
+
+    defer {
+        dlclose(lib)
+    }
+
+    let f = dlsym(lib, "foo\0" as *const i8) as fn() -> null
+
+    do(f)
 
     return 0
 }

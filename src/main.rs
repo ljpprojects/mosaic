@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     match args.command.clone() {
-        Command::Finish => todo!("Implement 'finish' command, for now, clone the mosaic-std and mosaic-core modules into ~/.msc/mods as std and core."),
+        Command::Finish => todo!("Implement 'finish' command, for now, clone the mosaic-std and mosaic-core modules into the appropriate directory as std and core."),
 
         Command::Build { file, target, .. } => {
             let triple = Triple::from_str(&target.unwrap_or("_".into())).unwrap_or(Triple::host());

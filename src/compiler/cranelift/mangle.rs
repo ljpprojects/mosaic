@@ -1,5 +1,12 @@
 use crate::compiler::cranelift::types::CraneliftType;
 
+#[macro_export]
+macro_rules! ternary {
+    ($cond: expr, $y: expr, $n: expr) => {
+        if $cond { $y } else { $n }
+    };
+}
+
 pub fn mangle_type(ty: &CraneliftType) -> String {
     match ty {
         CraneliftType::Generic(..) => ty.to_string(), // panics
@@ -27,11 +34,9 @@ pub fn mangle_type(ty: &CraneliftType) -> String {
                 .collect::<Vec<_>>()
                 .join("_")
         ),
-        CraneliftType::CPtr(inner) => format!("P{}", mangle_type(inner)),
-        CraneliftType::FatPtr(inner) => format!("R{}", mangle_type(inner)),
-        CraneliftType::Slice(inner, len) => format!("S{}_{len}", mangle_type(inner)),
-        CraneliftType::CStr => "Pc".into(),
-        CraneliftType::UCStr => "PUc".into(),
+        CraneliftType::CPtr(inner, mutable, nullable) => format!("P{}{}{}", mangle_type(inner), ternary!(*mutable, "M", "K"), ternary!(*nullable, "N", "")),
+        CraneliftType::FatPtr(inner, mutable, nullable) => format!("R{}{}{}", mangle_type(inner), ternary!(*mutable, "M", "K"), ternary!(*nullable, "N", "")),
+        CraneliftType::Slice(inner, len, mutable, nullable) => format!("S{}{}{}_{len}", mangle_type(inner), ternary!(*mutable, "M", "K"), ternary!(*nullable, "N", "")),
     }
 }
 
@@ -71,11 +76,12 @@ pub fn mangle_method(
 }
 
 mod tests {
-    use crate::compiler::cranelift::mangle::{mangle_function, mangle_method};
+    use crate::compiler::cranelift::mangle::{mangle_function, mangle_method, mangle_type};
     use crate::compiler::cranelift::types::CraneliftType;
+    use crate::utils::Indirection;
 
     #[test]
-    fn js_example() {
-        println!("{}", mangle_function(&("hello".to_owned()), &[], &CraneliftType::Null))
+    fn example() {
+        println!("{}", mangle_type(&CraneliftType::FatPtr(Indirection::new(CraneliftType::Int8), true, false)));
     }
 }

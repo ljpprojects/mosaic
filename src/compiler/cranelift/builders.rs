@@ -1,16 +1,16 @@
 use crate::compiler::cranelift::meta::VariableMeta;
+use crate::compiler::cranelift::trace::Trace;
 use crate::compiler::cranelift::types::CraneliftType;
 use crate::compiler::traits::CompilationType;
 use crate::errors::CompilationError;
 use cranelift_codegen::entity::EntityRef;
-use cranelift_codegen::ir::{FuncRef, InstBuilder, MemFlags, StackSlotData, StackSlotKind, Value};
+use cranelift_codegen::ir::stackslot::StackSize;
+use cranelift_codegen::ir::{InstBuilder, MemFlags, StackSlotData, StackSlotKind, Value};
 use cranelift_codegen::isa::OwnedTargetIsa;
 use cranelift_frontend::{FunctionBuilder, Variable};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
-use cranelift_codegen::ir::stackslot::StackSize;
-use crate::compiler::cranelift::trace::Trace;
 
 pub struct VariableBuilder {
     index: usize,
@@ -42,25 +42,19 @@ impl VariableBuilder {
     ) -> Variable {
         let variable = Variable::new(self.index);
 
-        if constant {
-            builder.declare_var(variable, ty.clone().into_cranelift(&self.isa));
+        builder.declare_var(variable, self.isa.pointer_type());
+        
+        let slot = builder.create_sized_stack_slot(StackSlotData {
+            kind: StackSlotKind::ExplicitSlot,
+            size: ty.size_bytes(&self.isa) as StackSize,
+            align_shift: 0,
+        });
+        
+        builder.ins().stack_store(value, slot, 0);
+        
+        let ptr = builder.ins().stack_addr(self.isa.pointer_type(), slot, 0);
 
-            builder.def_var(variable, value);
-        } else {
-            builder.declare_var(variable, self.isa.pointer_type());
-            
-            let slot = builder.create_sized_stack_slot(StackSlotData {
-                kind: StackSlotKind::ExplicitSlot,
-                size: ty.size_bytes(&self.isa) as StackSize,
-                align_shift: 0,
-            });
-            
-            builder.ins().stack_store(value, slot, 0);
-            
-            let ptr = builder.ins().stack_addr(self.isa.pointer_type(), slot, 0);
-
-            builder.def_var(variable, ptr);
-        }
+        builder.def_var(variable, ptr);
 
         self.scopes.last_mut().unwrap().insert(
             name.clone(),
@@ -170,9 +164,7 @@ impl VariableBuilder {
             )]));
         };
 
-        let val = if meta.constant {
-            builder.use_var(meta.variable)
-        } else {
+        let val = {
             let ptr = builder.use_var(meta.variable);
             builder.ins().load(
                 meta.def_type.clone().into_cranelift(&self.isa),
@@ -191,7 +183,7 @@ impl VariableBuilder {
         name: &String,
         file: PathBuf,
         trace: &Trace,
-    ) -> Result<(Value, CraneliftType), Box<[CompilationError]>> {
+    ) -> Result<(Value, CraneliftType, bool), Box<[CompilationError]>> {
         let Some(scope) = self
             .scopes
             .iter()
@@ -213,16 +205,8 @@ impl VariableBuilder {
             )]));
         };
 
-        let val = if meta.constant {
-            return Err(Box::new([CompilationError::CannotMakePointer(
-                file,
-                trace.clone(),
-                name.clone(),
-            )]));
-        } else {
-            builder.use_var(meta.variable)
-        };
+        let val = builder.use_var(meta.variable);
 
-        Ok((val, meta.def_type.clone()))
+        Ok((val, meta.def_type.clone(), meta.constant))
     }
 }

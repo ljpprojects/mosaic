@@ -1,21 +1,20 @@
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::expect_used)]
 
-use crate::compiler::traits::TypeGenerator as OtherTypeGenerator;
 use crate::compiler::cranelift::CraneliftGenerator;
-use crate::compiler::traits::{CompilationType};
+use crate::compiler::traits;
+use crate::compiler::traits::TypeGenerator as OtherTypeGenerator;
+use crate::compiler::traits::CompilationType;
 use crate::errors::CompilationError;
 use crate::parser::{AstNode, ParseType, TypeBound};
 use crate::utils::Indirection;
 use crate::utils::IndirectionTrait;
 use cranelift_codegen::ir::{types, Type};
 use cranelift_codegen::isa::OwnedTargetIsa;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::rc::Rc;
-use std::any::{Any, TypeId};
-use crate::compiler::traits;
 
 #[derive(Clone, Debug)]
 pub enum CraneliftType {
@@ -37,15 +36,9 @@ pub enum CraneliftType {
         ret_type: Indirection<Self>,
         arg_types: Vec<Indirection<Self>>,
     },
-    CPtr(Indirection<Self>),
-    FatPtr(Indirection<Self>),
-    Slice(Indirection<Self>, u32),
-
-    // *:0[i8]
-    CStr,
-
-    // *:0[u8]
-    UCStr,
+    CPtr(Indirection<Self>, bool, bool),
+    FatPtr(Indirection<Self>, bool, bool),
+    Slice(Indirection<Self>, u32, bool, bool),
 }
 
 impl PartialEq for CraneliftType {
@@ -62,9 +55,8 @@ impl PartialEq for CraneliftType {
             (Self::UInt64, Self::UInt64) => true,
             (Self::Bool, Self::Bool) => true,
             (Self::Null, Self::Null) => true,
-            (Self::CPtr(ty), Self::CPtr(ty2)) => ty == ty2,
-            (Self::FatPtr(ty), Self::FatPtr(ty2)) => ty == ty2,
-            (Self::CPtr(ty), Self::UCStr) if ty.deref() == &Self::UInt8 => true,
+            (Self::CPtr(ty, ..), Self::CPtr(ty2, ..)) => ty == ty2,
+            (Self::FatPtr(ty, ..), Self::FatPtr(ty2, ..)) => ty == ty2,
             (Self::Float32, Self::Float32) => true,
             (Self::Float64, Self::Float64) => true,
             (
@@ -77,7 +69,7 @@ impl PartialEq for CraneliftType {
                     arg_types: arg_types2,
                 },
             ) => ret_type == ret_type2 && arg_types == arg_types2,
-            (Self::Slice(ty, size), Self::Slice(ty2, size2)) => ty == ty2 && size == size2,
+            (Self::Slice(ty, size, ..), Self::Slice(ty2, size2, ..)) => ty == ty2 && size == size2,
             _ => false,
         }
     }
@@ -97,7 +89,7 @@ impl CraneliftType {
             Self::Float32 => types::F32,
             Self::Float64 => types::F64,
             Self::Null | Self::Bool => types::I8,
-            Self::FuncPtr { .. } | Self::CPtr(_) | Self::Slice(..) | Self::CStr | Self::UCStr | Self::FatPtr(_) => {
+            Self::FuncPtr { .. } | Self::CPtr(..) | Self::Slice(..) | Self::FatPtr(..) => {
                 isa.pointer_type()
             }
         }
@@ -124,11 +116,9 @@ impl Display for CraneliftType {
             CraneliftType::Null => write!(f, "null"),
             CraneliftType::Bool => write!(f, "bool"),
             CraneliftType::FuncPtr { .. } => write!(f, "fn(...) -> ..."),
-            CraneliftType::CPtr(i) => write!(f, "*{i}"),
-            CraneliftType::FatPtr(i) => write!(f, "*[{i}]"),
-            CraneliftType::Slice(i, l) => write!(f, "*{l}[{i}]"),
-            CraneliftType::CStr => write!(f, "*:0[i8]"),
-            CraneliftType::UCStr => write!(f, "*:0[u8]"),
+            CraneliftType::CPtr(i, mutable, nullable) => write!(f, "*{}{} {i}", if *mutable { "mut" } else { "const" }, if *nullable { "?" } else { "" }),
+            CraneliftType::FatPtr(i, mutable, nullable) => write!(f, "*{}{} [{i}]", if *mutable { "mut" } else { "const" }, if *nullable { "?" } else { "" }),
+            CraneliftType::Slice(i, l, mutable, nullable) => write!(f, "*{}{} {l}[{i}]", if *mutable { "mut" } else { "const" }, if *nullable { "?" } else { "" }),
         }
     }
 }
@@ -148,11 +138,11 @@ impl CompilationType for CraneliftType {
     }
 
     fn is_pointer(&self) -> bool {
-        matches!(self, Self::CPtr(_) | Self::FuncPtr { .. } | Self::CStr | Self::Slice(..) | Self::UCStr | Self::FatPtr(_))
+        matches!(self, Self::CPtr(..) | Self::FuncPtr { .. } | Self::Slice(..) | Self::FatPtr(..))
     }
 
     fn is_c_abi(&self) -> bool {
-        matches!(self, Self::Float32 | Self::Float64 | Self::Int8 | Self::Int16 | Self::Int32 | Self::Int64 | Self::UInt8 | Self::UInt16 | Self::UInt32 | Self::UInt64 | Self::CPtr(_) | Self::CStr | Self::UCStr | Self::FuncPtr { .. })
+        matches!(self, Self::Float32 | Self::Float64 | Self::Int8 | Self::Int16 | Self::Int32 | Self::Int64 | Self::UInt8 | Self::UInt16 | Self::UInt32 | Self::UInt64 | Self::CPtr(..) | Self::FuncPtr { .. })
     }
 
     fn is_signed(&self) -> bool {
@@ -167,7 +157,7 @@ impl CompilationType for CraneliftType {
     fn into_c_abi(self) -> Rc<dyn CompilationType> {
         match self {
             Self::Bool | Self::Null => Rc::new(Self::Int8),
-            Self::Slice(inner, _) => Rc::new(Self::CPtr(inner)),
+            Self::Slice(inner, _, mutable, nullable) => Rc::new(Self::CPtr(inner, mutable, nullable)),
             ty => Rc::new(ty),
         }
     }
@@ -195,7 +185,7 @@ impl CompilationType for CraneliftType {
             Self::Float32 => 4,
             Self::Float64 => 8,
             Self::Null | Self::Bool => 1,
-            Self::FuncPtr { .. } | Self::CPtr(_) | Self::Slice(..) | Self::CStr | Self::UCStr | Self::FatPtr(_) => {
+            Self::FuncPtr { .. } | Self::CPtr(..) | Self::Slice(..) | Self::FatPtr(..) => {
                 isa.pointer_bytes()
             }
         }
@@ -207,11 +197,9 @@ impl CompilationType for CraneliftType {
 
     fn inner(&self) -> Option<Rc<dyn CompilationType>> {
         match self {
-            CraneliftType::CPtr(i) => Some(Rc::new(i.deref().clone())),
-            CraneliftType::Slice(i, _) => Some(Rc::new(i.deref().clone())),
-            CraneliftType::CStr => Some(Rc::new(Self::Int8)),
-            CraneliftType::UCStr => Some(Rc::new(Self::UInt8)),
-            CraneliftType::FatPtr(i) => Some(Rc::new(i.deref().clone())),
+            CraneliftType::CPtr(i, ..) => Some(Rc::new(i.deref().clone())),
+            CraneliftType::Slice(i, ..) => Some(Rc::new(i.deref().clone())),
+            CraneliftType::FatPtr(i, ..) => Some(Rc::new(i.deref().clone())),
             _ => None,
         }
     }
@@ -248,14 +236,8 @@ impl CompilationType for CraneliftType {
                     Self::Slice(t, ..) => {
                         Ok(t.deref().clone() == gen.tg.compile_type(ty.deref(), &gen.isa, allowed_tgs).downcast_ref::<CraneliftType>().unwrap().clone())
                     }
-                    Self::CStr => {
-                        Ok(Self::Int8 == gen.tg.compile_type(ty.deref(), &gen.isa, allowed_tgs).downcast_ref::<CraneliftType>().unwrap().clone())
-                    }
-                    Self::UCStr => {
-                        Ok(Self::UInt8 == gen.tg.compile_type(ty.deref(), &gen.isa, allowed_tgs).downcast_ref::<CraneliftType>().unwrap().clone())
-                    }
                     
-                    Self::FatPtr(_) => {
+                    Self::FatPtr(..) => {
                         Ok(Self::UInt8 == gen.tg.compile_type(ty.deref(), &gen.isa, allowed_tgs).downcast_ref::<CraneliftType>().unwrap().clone())
                     }
                     _ => Ok(false),
@@ -278,7 +260,7 @@ impl CompilationType for CraneliftType {
     }
 
     fn iterable(&self) -> bool {
-        matches!(self, Self::Slice(..) | Self::CStr | Self::UCStr | Self::FatPtr(..))
+        matches!(self, Self::Slice(..) | Self::FatPtr(..))
     }
 }
 
@@ -353,37 +335,34 @@ impl traits::TypeGenerator for CraneliftTypeGenerator {
                 .get(i)
                 .expect(&*format!("Unknown type '{i}'"))
                 .clone(),
-            ParseType::ArrayType { .. } => {
-                panic!("Array types are obsolete; use slice types instead.")
+            ParseType::PointerType {
+                points_to,
+                is_nullable,
+                is_mutable,
+            } => {
+                CraneliftType::CPtr(points_to.clone().map(|t| self.compile_type(&t, isa, tgs).downcast_ref::<CraneliftType>().unwrap().clone()), *is_mutable, *is_nullable)
             }
-            ParseType::PointerType(i) => {
-                CraneliftType::CPtr(i.clone().map(|t| self.compile_type(&t, isa, tgs).downcast_ref::<CraneliftType>().unwrap().clone()))
-            }
-            ParseType::FatPointerType(i) => CraneliftType::FatPtr(
-                i.clone()
+            ParseType::FatPointerType {
+                points_to,
+                is_nullable,
+                is_mutable,
+            } => CraneliftType::FatPtr(
+                points_to.clone()
                     .map(|t| self.compile_type(&t, isa, &HashMap::default()).downcast_ref::<CraneliftType>().unwrap().clone()),
+                *is_mutable,
+                *is_nullable,
             ),
-            ParseType::Slice(i, l) => CraneliftType::Slice(
-                i.clone().map(|t| self.compile_type(&t, isa, tgs).downcast_ref::<CraneliftType>().unwrap().clone()),
-                *l,
+            ParseType::Slice{
+                points_to,
+                is_nullable,
+                is_mutable,
+                length
+            } => CraneliftType::Slice(
+                points_to.clone().map(|t| self.compile_type(&t, isa, tgs).downcast_ref::<CraneliftType>().unwrap().clone()),
+                *length,
+                *is_mutable,
+                *is_nullable,
             ),
-            ParseType::TerminatedSlice(i, t) => {
-                assert!(matches!(t.deref(), AstNode::NumberLiteral(_)));
-
-                if let AstNode::NumberLiteral(n) = t.deref() {
-                    if *n != 0f64 {
-                        panic!("Only null-terminated slices are supported.")
-                    }
-                };
-
-                let ty = i.clone().map(|t| self.compile_type(t, isa, tgs));
-
-                match ty.downcast_ref::<CraneliftType>().unwrap().clone() {
-                    CraneliftType::Int8 => CraneliftType::CStr,
-                    CraneliftType::UInt8 => CraneliftType::UCStr,
-                    _ => panic!("Only i8 & u8 terminated slices (c strings) are supported."),
-                }
-            }
             ParseType::FuncPtr(args, ret) => {
                 let args = args
                     .iter()

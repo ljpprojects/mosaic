@@ -2,10 +2,8 @@ use crate::errors::CompilationError;
 use crate::reader::CharReader;
 use crate::states::{LexerState, WithState};
 use crate::tokens::{LineInfo, Token};
-use crate::utils::{Indirection, IndirectionTrait};
 use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::str::FromStr;
 
 pub const VALID_CHARS: &[char] = &[
@@ -121,20 +119,8 @@ impl StreamedLexer {
     /// This is essentially equivalent to next_token, but it resets the lexer back to its previous state.
     /// This means that if you call this two or more times in a row, you will get the same output.
     pub fn peek_next_token(&mut self) -> Option<Result<Token, LexError>> {
-        /*let prev_pos = self.reader.pos;
-        let prev_line = self.current_line;
-        let prev_column = self.current_char;
-        let was_first = self.is_first;*/
-
         let prev_state = self.state();
-
         let res = self.next_token();
-
-        /*self.reader.pos = prev_pos;
-        self.current_char = prev_column;
-        self.current_line = prev_line;
-        self.is_first = was_first;*/
-
         self.reset_to_state(prev_state);
 
         res
@@ -169,7 +155,7 @@ impl StreamedLexer {
         match c {
             c if VALID_CHARS.contains(&c) => Some(Ok(Token::Char(
                 c,
-                LineInfo::new_one_char(Indirection::new(columnc.get()), Indirection::new(linec.get())),
+                LineInfo::new_one_char(columnc.get(), linec.get()),
             ))),
 
             '#' => loop {
@@ -207,8 +193,8 @@ impl StreamedLexer {
             }
 
             '"' => {
-                let beginc = Indirection::new(columnc.get() - 1);
-                let beginl = Indirection::new(linec.get());
+                let beginc = columnc.get() - 1;
+                let beginl = linec.get();
 
                 loop {
                     let Some(next_c) = next_char(true) else {
@@ -229,8 +215,8 @@ impl StreamedLexer {
 
                 buffer.get_mut().clear();
 
-                let endc = Rc::new(columnc.get());
-                let endl = Rc::new(linec.get());
+                let endc = columnc.get();
+                let endl = linec.get();
 
                 Some(Ok(Token::String(
                     string,
@@ -239,8 +225,8 @@ impl StreamedLexer {
             }
 
             '\'' => {
-                let beginc = Indirection::new(columnc.get());
-                let beginl = Indirection::new(linec.get());
+                let beginc = columnc.get();
+                let beginl = linec.get();
 
                 let Some(c) = next_char(true) else {
                     return Some(Err(CompilationError::UnexpectedEOF(
@@ -277,8 +263,8 @@ impl StreamedLexer {
 
                     self.next_token()
                 } else if is_mosaic_ident_start(&c) {
-                    let beginc = Rc::from(columnc.get());
-                    let beginl = Rc::from(linec.get());
+                    let beginc = columnc.get();
+                    let beginl = linec.get();
 
                     *buffer.get_mut() += c.to_string().as_str();
 
@@ -300,15 +286,15 @@ impl StreamedLexer {
 
                     buffer.get_mut().clear();
 
-                    let endc = Indirection::new(columnc.get());
+                    let endc = columnc.get();
 
                     Some(Ok(Token::Ident(
                         ident,
-                        LineInfo::new(beginc, endc.map(|n| n + 1).into(), beginl.clone(), beginl),
+                        LineInfo::new(beginc, endc + 1, beginl, beginl),
                     )))
                 } else if c.is_numeric() {
-                    let beginc = Rc::from(columnc.get());
-                    let beginl = Rc::from(linec.get());
+                    let beginc = columnc.get();
+                    let beginl = linec.get();
                     let mut is_float = false;
 
                     *buffer.get_mut() += c.to_string().as_str();
@@ -341,8 +327,8 @@ impl StreamedLexer {
 
                     buffer.get_mut().clear();
 
-                    let endc = Rc::from(columnc.get());
-                    let endl = Rc::from(linec.get());
+                    let endc = columnc.get();
+                    let endl = linec.get();
 
                     Some(Ok(Token::Number(
                         num,
@@ -352,7 +338,7 @@ impl StreamedLexer {
                     Some(Err(CompilationError::InvalidChar(
                         self.file.clone(),
                         c,
-                        LineInfo::new_one_char(Indirection::new(columnc.get()), Indirection::new(linec.get())),
+                        LineInfo::new_one_char(columnc.get(), linec.get()),
                     )))
                 }
             }

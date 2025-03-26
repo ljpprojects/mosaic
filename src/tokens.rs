@@ -1,32 +1,19 @@
-use crate::utils::{Indirection, IndirectionTrait};
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Range;
-use std::rc::Rc;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy, Hash, Eq, Ord, PartialOrd)]
 pub struct LineInfo {
-    start_char: Rc<usize>,
-    end_char: Rc<usize>,
-    start_line: Rc<usize>,
-    end_line: Rc<usize>,
-}
-
-impl Clone for LineInfo {
-    fn clone(&self) -> Self {
-        LineInfo::new(
-            self.start_char.clone(),
-            self.end_char.clone(),
-            self.start_line.clone(),
-            self.end_line.clone(),
-        )
-    }
+    start_char: usize,
+    end_char: usize,
+    start_line: usize,
+    end_line: usize,
 }
 
 impl Default for LineInfo {
     fn default() -> Self {
         LineInfo::new_one_char(
-            Indirection::new(1),
-            Indirection::new(1),
+            1,
+            1
         )
     }
 }
@@ -53,10 +40,10 @@ impl Debug for LineInfo {
 
 impl LineInfo {
     pub fn new(
-        start_char: Rc<usize>,
-        end_char: Rc<usize>,
-        start_line: Rc<usize>,
-        end_line: Rc<usize>,
+        start_char: usize,
+        end_char: usize,
+        start_line: usize,
+        end_line: usize,
     ) -> LineInfo {
         LineInfo {
             start_char,
@@ -66,36 +53,36 @@ impl LineInfo {
         }
     }
 
-    pub fn new_one_char(char: Indirection<usize>, line: Indirection<usize>) -> LineInfo {
+    pub fn new_one_char(char: usize, line: usize) -> LineInfo {
         LineInfo {
-            start_char: char.clone().into(),
-            end_char: char.map(|n| n + 1).into(),
-            start_line: line.clone().into(),
-            end_line: line.into(),
+            start_char: char,
+            end_char: char,
+            start_line: line,
+            end_line: line,
         }
     }
 
     pub fn to_ranges(&self) -> (Range<usize>, Range<usize>) {
         (
-            *self.start_char..*self.end_char,
-            *self.start_line..*self.end_line,
+            self.start_char..self.end_char,
+            self.start_line..self.end_line,
         )
     }
 
     pub fn begin_line(&self) -> usize {
-        *self.start_line
+        self.start_line
     }
 
     pub fn end_line(&self) -> usize {
-        *self.end_line
+        self.end_line
     }
 
     pub fn begin_char(&self) -> usize {
-        *self.start_char
+        self.start_char
     }
 
     pub fn end_char(&self) -> usize {
-        *self.end_char
+        self.end_char
     }
 }
 
