@@ -1,0 +1,11 @@
+include std::io
+include std::string
+
+fn main no_mangle -> i32 {
+	mut number = 8273498274 as i64
+	mut args = (&number) as *any
+
+	println(number.to_string())
+
+	return 0
+}

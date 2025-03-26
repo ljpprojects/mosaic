@@ -1,0 +1,23 @@
+[package]
+name = "mosaic-pm"
+version = "0.1.0"
+edition = "2021"
+authors = [ "ljp-projects <lucasplumb@icloud.com>" ]
+
+[package.metadata.release]
+release = false
+
+# https://github.com/rustwasm/wasm-pack/issues/1247
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+worker = { version = "0.5.0", features = ["d1"] }
+worker-macros = { version="0.5.0" }
+serde = { version = "1.0.217", features = ["serde_derive"] }
+console_error_panic_hook = { version = "0.1.1" }
+googapis = { version = "0.6.0", features = ["google-cloud-documentai-v1beta3"] }
+semver = { version = "1.0.25", features = ["serde"] }

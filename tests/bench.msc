@@ -1,0 +1,98 @@
+include std::io
+include std::int
+
+extern fn time(v: *const null) -> u64
+extern fn malloc(size: i32) -> *mut i32
+extern fn free(ptr: *mut i32) -> null
+extern fn srand(seed: u64) -> null
+extern fn rand -> i32
+extern fn memcpy(dest: *mut i32, src: *const i32, len: i32) -> null
+
+fn swap(a: *mut i32, b: *mut i32) -> null {
+    let temp = malloc(4);
+    defer free(temp)
+
+    memcpy(temp, a as *const i32, 4)
+    memcpy(a, b as *const i32, 4)
+    memcpy(b, temp, 4)
+
+    return null
+}
+
+fn bubble_pass_recursive(arr: *mut i32, i: i32, n: i32) -> null {
+    if (i > n - 1) {
+        return null
+    }
+
+    if (i == n - 1) {
+        return null
+    }
+
+    if (arr[i] > arr[i + 1]) {
+        swap(arr + (i * 4) as i64, arr + (1 + i * 4) as i64)
+    }
+
+    return bubble_pass_recursive(arr, i + 1, n)
+}
+
+fn bubble_sort_recursive(arr: *mut i32, n: i32) -> null {
+    if n < 1 {
+        return null
+    }
+
+    if n == 1 {
+        return null
+    }
+
+    bubble_pass_recursive(arr, 0, n)
+    return bubble_sort_recursive(arr, n - 1)
+}
+
+fn randomise_array(i: i32, lim: i32, arr: *mut i32) -> null {
+    return if i < lim {
+        let n = rand() % 10000
+
+        memcpy(arr + i as i64 * 4 as i64, &n, 4)
+
+        randomise_array(i + 1, lim, arr)
+    } else {
+        null
+    }
+}
+
+fn main -> i32 {
+    let N = 4
+
+    let arr = malloc(4 + N * 4)
+
+    defer {
+        free(arr)
+    }
+
+    memcpy(arr, &N, 4)
+
+    let nullptr = null
+
+    srand(time(&nullptr))
+
+    print("Before sorting: " as *const [i8])
+
+    for n in (arr as *mut [i32]) {
+        print(i32::to_string(n))
+        print(" " as *const [i8])
+    }
+
+    print("\n" as *const [i8])
+
+    randomise_array(0, N, arr + 4 as i64)
+    bubble_sort_recursive(arr + 4 as i64, N)
+
+    print("After sorting: " as *const [i8])
+
+    for n in (arr as *const [i32]) {
+        print(i32::to_string(n))
+        print(" " as *const [i8])
+    }
+
+    return 0
+}

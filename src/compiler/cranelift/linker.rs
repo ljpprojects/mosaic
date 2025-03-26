@@ -1,18 +1,17 @@
-use std::collections::HashSet;
-use std::{env, process};
-use std::process::Stdio;
-use cranelift_codegen::isa::lookup;
-use target_lexicon::Architecture::Aarch64;
-use cranelift_object::object::Architecture;
 use crate::cli::{Command, EmitKind};
 use crate::compiler::cranelift::module::CraneliftModule;
-use target_lexicon::OperatingSystem::{Darwin, MacOSX};
-use target_lexicon::{Aarch64Architecture, Triple};
 use crate::compiler::cranelift::CraneliftGenerator;
 use crate::file;
 use crate::lexer::StreamedLexer;
 use crate::parser::StreamedParser;
 use crate::reader::CharReader;
+use cranelift_codegen::isa::lookup;
+use std::collections::HashSet;
+use std::process::Stdio;
+use std::process;
+use target_lexicon::Architecture::Aarch64;
+use target_lexicon::OperatingSystem::{Darwin, MacOSX};
+use target_lexicon::{Aarch64Architecture, Triple};
 
 pub struct Linker;
 
