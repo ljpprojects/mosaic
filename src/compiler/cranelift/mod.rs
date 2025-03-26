@@ -11,9 +11,9 @@ pub mod module;
 pub mod trace;
 pub mod types;
 pub mod value;
+pub mod indexing;
 
 use crate::cli::Command;
-use crate::compiler::analyser::{get_usages_of, PreoptEngine, UsageKind};
 use crate::compiler::cranelift::builders::VariableBuilder;
 use crate::compiler::cranelift::mangle::{mangle_function, mangle_method};
 use crate::compiler::cranelift::meta::{FunctionMeta, MustFreeMeta};
@@ -39,15 +39,11 @@ use cranelift_codegen::{ir, isa, settings, Context};
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{default_libcall_names, DataDescription, FuncId, Linkage, Module};
 use cranelift_object::{ObjectBuilder, ObjectModule};
-use std::any::Any;
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::fmt::Display;
 use std::fs;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::rc::Rc;
-use cranelift_codegen::ir::entities::AnyEntity::SigRef;
 
 macro_rules! get_fn {
     ($self: expr, $name:expr) => {
@@ -101,7 +97,7 @@ pub struct CraneliftGenerator {
     /// The name of the module that is being compiled.
     module_name: String,
 
-    /// The number of functions that have been compiled so far in this module.
+    /// The amount functions that have been compiled so far in this module.
     fn_counter: u32,
 
     /// The path to the Mosaic file being compiled.
@@ -229,8 +225,8 @@ impl CraneliftGenerator {
     ) -> Result<(Value, Type), Box<[CompilationError]>> {
         match &**op {
             "=" => {
-                let AstNode::Identifier(name) = left else {
-                    if let AstNode::IdxAccess(of, idx) = left {
+                let AstNode::Identifier(l, name) = left else {
+                    if let AstNode::IdxAccess(l, of, idx) = left {
                         let (right, rty) = self.compile_body_expr(right, func, trace)?;
 
                         let (of, ty) = self.compile_body_expr(
@@ -261,15 +257,15 @@ impl CraneliftGenerator {
                         );
 
                         return Ok((right, rty));
-                    } else if let AstNode::PrefixOp(op, val) = left {
+                    } else if let AstNode::PrefixOp(_l, op, val) = left {
                         if &**op == "*" {
-                            let (addr, ty) = self.compile_body_expr(val, func, trace)?;
+                            let (addr, _) = self.compile_body_expr(val, func, trace)?;
                             let (right, rty) = self.compile_body_expr(right, func, trace)?;
 
                             // TODO: Type checking
 
                             func.ins()
-                                .store(MemFlags::trusted().with_checked(), right, addr, 0);
+                                .store(self.var_builder.flags, right, addr, 0);
 
                             return Ok((right, rty));
                         } else {
@@ -411,6 +407,15 @@ impl CraneliftGenerator {
 
                 Ok((func.ins().band(left, right), Type::Bool))
             }
+            "||" => {
+                let (left, _) = self.compile_body_expr(left, func, trace)?;
+                let (right, _) = self.compile_body_expr(right, func, trace)?;
+
+                //let left = func.ins().sextend(ir::types::I32, left);
+                let right = func.ins().sextend(ir::types::I32, right);
+
+                Ok((func.ins().bor(left, right), Type::Bool))
+            }
             ">" => {
                 let (left, lty) = self.compile_body_expr(left, func, trace)?;
                 let (right, _rty) = self.compile_body_expr(right, func, trace)?;
@@ -546,7 +551,7 @@ impl CraneliftGenerator {
                 Ok((func.ins().ineg(right), Type::Bool))
             }
             "&" => {
-                if let AstNode::Identifier(name) = right {
+                if let AstNode::Identifier(_l, name) = right {
                     if let Some(f) = get_fn!(self, name) {
                         let user_name = UserExternalName {
                             namespace: 0,
@@ -574,11 +579,11 @@ impl CraneliftGenerator {
                         return Ok((ptr, ty))
                     }
                     
-                    let (ptr, ty) =
+                    let (ptr, ty, mutable) =
                         self.var_builder
                             .get_var_ptr(func, name, self.file_path.clone(), trace)?;
 
-                    Ok((ptr, Type::CPtr(Indirection::new(ty))))
+                    Ok((ptr, Type::CPtr(Indirection::new(ty), mutable, false)))
                 } else {
                     Err(Box::new([CompilationError::UndefinedOperator(self.file_path.clone(), trace.clone(), "& (on an expression)".to_string())]))
                 }
@@ -606,46 +611,46 @@ impl CraneliftGenerator {
         trace: &Trace,
     ) -> Result<(Value, Type), Box<[CompilationError]>> {
         match expr {
-            AstNode::SizeOf(ty) => Ok((
+            AstNode::SizeOf(_l, ty) => Ok((
                 func.ins().iconst(Type::Int32.into_cranelift(&self.isa), self.tg.compile_type_no_tgs(ty, &self.isa).size_bytes(&self.isa) as i64),
                 Type::Int32
             )),
-            AstNode::NumberLiteral(i) if i.fract() == 0f64 => {
+            AstNode::NumberLiteral(_l, i) if i.fract() == 0f64 => {
                 let ty = Type::Int32;
 
                 Ok((func.ins().iconst(ir::types::I32, Imm64::new(*i as i64)), ty))
             }
-            AstNode::NumberLiteral(i) => Ok((func.ins().f64const(*i), Type::Float64)),
-            AstNode::ByteLiteral(b) => Ok((
+            AstNode::NumberLiteral(_l, i) => Ok((func.ins().f64const(*i), Type::Float64)),
+            AstNode::ByteLiteral(_l, b) => Ok((
                 func.ins().iconst(ir::types::I8, Imm64::new(*b as i64)),
                 Type::Int8,
             )),
-            AstNode::StringLiteral(s) => self.compile_string(s, func),
-            AstNode::ArrayLiteral(a) => {
+            AstNode::StringLiteral(_l, s) => self.compile_string(s, func),
+            AstNode::ArrayLiteral(_l, a) => {
                 let r = self.compile_array(a, func, trace)?;
 
                 Ok((r.1, r.2))
             },
-            AstNode::BooleanLiteral(b) if *b => {
+            AstNode::BooleanLiteral(_l, b) if *b => {
                 Ok((func.ins().iconst(ir::types::I8, Imm64::new(1)), Type::Bool))
             }
-            AstNode::BooleanLiteral(_) => {
+            AstNode::BooleanLiteral(..) => {
                 Ok((func.ins().iconst(ir::types::I8, Imm64::new(0)), Type::Bool))
             }
-            AstNode::NullLiteral => {
+            AstNode::NullLiteral(..) => {
                 Ok((func.ins().iconst(ir::types::I8, Imm64::new(0)), Type::Null))
             }
-            AstNode::Identifier(i) => {
+            AstNode::Identifier(_l, i) => {
                 Ok(self
                     .var_builder
                     .get_var(func, i, self.file_path.clone(), trace)?)
             }
-            AstNode::InfixOp(l, o, r) => self.compile_bit_op(o, l, r, func, trace),
-            AstNode::PrefixOp(op, r) => self.compile_prefix_op(op, r, func, trace),
-            AstNode::PostfixOp(_, _) => todo!(),
-            AstNode::Path(_) => todo!(),
-            AstNode::MemberExpr(_) => todo!(),
-            AstNode::IdxAccess(of, idx) => {
+            AstNode::InfixOp(_l, l, o, r) => self.compile_bit_op(o, l, r, func, trace),
+            AstNode::PrefixOp(_l, op, r) => self.compile_prefix_op(op, r, func, trace),
+            AstNode::PostfixOp(..) => todo!(),
+            AstNode::Path(..) => todo!(),
+            AstNode::MemberExpr(..) => todo!(),
+            AstNode::IdxAccess(_l, of, idx) => {
                 let (of, ty) = self.compile_body_expr(of, func, trace)?;
                 let (mut idx, ity) =
                     self.compile_body_expr(idx, func, &trace.nested_ctx(ContextKind::Idx))?;
@@ -653,8 +658,6 @@ impl CraneliftGenerator {
                 if ity.size_bytes(&self.isa) < self.isa.pointer_bytes() {
                     idx = func.ins().uextend(self.isa.pointer_type(), idx)
                 }
-
-                println!("{ty}");
 
                 let inner_ty = ty.inner().unwrap();
                 let inner_ty_size = inner_ty.size_bytes(&self.isa) as i64;
@@ -672,10 +675,10 @@ impl CraneliftGenerator {
                     inner_ty.downcast_ref::<CraneliftType>().unwrap().clone(),
                 ))
             }
-            AstNode::CallExpr { callee, args } => {
-                let AstNode::Identifier(name) = callee.as_ref() else {
-                    let AstNode::Path(p) = callee.as_ref() else {
-                        let AstNode::MemberExpr(p) = callee.as_ref() else {
+            AstNode::CallExpr { callee, args, .. } => {
+                let AstNode::Identifier(_l, name) = callee.as_ref() else {
+                    let AstNode::Path(_l, p) = callee.as_ref() else {
+                        let AstNode::MemberExpr(_l, p) = callee.as_ref() else {
                             panic!("Implement error here (invalid callee)")
                         };
 
@@ -1067,7 +1070,7 @@ impl CraneliftGenerator {
                 let ret = func
                     .inst_results(ret)
                     .first()
-                    .map(|v| v.clone())
+                    .cloned()
                     .unwrap_or(func.ins().iconst(ir::types::I8, 0));
 
                 if fn_meta.modifiers.contains(&Modifier::AutoFree) {
@@ -1094,17 +1097,21 @@ impl CraneliftGenerator {
 
                 Ok((ret, fn_meta.return_type.downcast_ref::<CraneliftType>().unwrap().clone()))
             }
-            AstNode::AsExpr(val, ty) => {
+            AstNode::AsExpr(_l, val, ty) => {
                 let (val, vty) = self.compile_body_expr(val, func, &trace)?;
                 let ty = self.tg.compile_type_no_tgs(ty, &self.isa).downcast_ref::<CraneliftType>().unwrap().clone();
 
+                if vty == ty {
+                    return Ok((val, vty))
+                }
+
                 match (vty.clone(), ty.clone()) {
-                    (Type::CPtr(_), Type::CPtr(_)) => Ok((val, ty)),
-                    (Type::Slice(..), Type::Slice(..)) => Ok((val, ty)),
-                    (Type::Slice(..), Type::CPtr(..)) => Ok((val, ty)),
-                    (Type::FatPtr(..), Type::CPtr(..)) => Ok((val, ty)),
-                    (Type::CPtr(_), Type::FatPtr(_)) => Ok((val, ty)),
-                    (Type::Slice(inner, len), Type::FatPtr(..)) => {
+                    (Type::CPtr(_, m1, n1), Type::CPtr(_, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => Ok((val, ty)),
+                    (Type::Slice(_, _, m1, n1), Type::Slice(_, _, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => Ok((val, ty)),
+                    (Type::Slice(_, _, m1, n1), Type::CPtr(_, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => Ok((val, ty)),
+                    (Type::FatPtr(_, m1, n1), Type::CPtr(_, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => Ok((val, ty)),
+                    (Type::CPtr(_, m1, n1), Type::FatPtr(_, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => Ok((val, ty)),
+                    (Type::Slice(inner, len, m1, n1), Type::FatPtr(_, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => {
                         let slot = func.create_sized_stack_slot(StackSlotData {
                             kind: StackSlotKind::ExplicitSlot,
                             size: (len * inner.size_bytes(&self.isa) as u32 + 4) as StackSize,
@@ -1124,8 +1131,6 @@ impl CraneliftGenerator {
 
                         Ok((ptr, ty))
                     },
-                    (from, Type::CPtr(i)) if from.is_pointer() && matches!(i.deref(), Type::Any) => Ok((val, ty)),
-                    (Type::CPtr(i), to) if to.is_pointer() && matches!(i.deref(), Type::Any) => Ok((val, ty)),
                     (from, Type::Float32 | Type::Float64) if from.is_numeric() => {
                         if from.is_signed() {
                             Ok((func.ins().fcvt_from_sint(ty.clone().into_cranelift(&self.isa), val), ty))
@@ -1157,6 +1162,7 @@ impl CraneliftGenerator {
 
                         Ok((casted, to))
                     }
+                    (Type::CPtr(i, ..), Type::FuncPtr { .. }) if *i == Type::Any => Ok((val, ty)),
                     (from, to) => Err(Box::new([CompilationError::InvalidCast(
                         self.file_path.clone(),
                         trace.clone(),
@@ -1169,11 +1175,12 @@ impl CraneliftGenerator {
                 cond,
                 block,
                 else_clause,
+                ..
             } => Ok(self
                 .compile_if_expr(cond.as_ref(), block, else_clause, func, trace)?
                 .0
                 .unwrap()),
-            AstNode::MatchExpr { matchee, arms } => Ok(self.compile_match(matchee, arms, func, trace)?.unwrap()),
+            AstNode::MatchExpr { matchee, arms, .. } => Ok(self.compile_match(matchee, arms, func, trace)?.unwrap()),
             node => unimplemented!("Compile node {node}"),
         }
     }
@@ -1234,25 +1241,7 @@ impl CraneliftGenerator {
 
         let ParseBlock::Plain(code) = body;
 
-        if matches!(lity, Type::CStr | Type::UCStr) {
-            let offset = func.block_params(body_block)[0];
-            let ptr = func.ins().iadd(loop_in, offset);
-
-            let current = func.ins().load(
-                inner.downcast_ref::<CraneliftType>().unwrap().clone().into_cranelift(&self.isa),
-                self.var_builder.flags,
-                ptr,
-                0
-            );
-
-            self.var_builder.create_var(func, current, inner.downcast_ref::<CraneliftType>().unwrap().clone(), r#for.clone(), true);
-
-            self.compile_body(code, func, trace)?;
-
-            let new_offset = func.ins().iadd_imm(offset, inner.size_bytes(&self.isa) as i64);
-            let cond = func.ins().icmp_imm(IntCC::NotEqual, current, 0);
-            func.ins().brif(cond, body_block, &[new_offset], end_block, &[]);
-        } else if matches!(lity, Type::FatPtr(_)) {
+        if matches!(lity, Type::FatPtr(..)) {
             let len = func.ins().load(
                 Type::Int32.into_cranelift(&self.isa),
                 self.var_builder.flags,
@@ -1282,7 +1271,7 @@ impl CraneliftGenerator {
             let new_offset = func.ins().iadd_imm(offset, inner.size_bytes(&self.isa) as i64);
             let cond = func.ins().icmp(IntCC::UnsignedLessThan, index, len);
             func.ins().brif(cond, body_block, &[new_offset], end_block, &[]);
-        } else if let Type::Slice(_, len) = lity {
+        } else if let Type::Slice(_, len, ..) = lity {
             let len = func.ins().iconst(Type::Int32.into_cranelift(&self.isa), len as i64);
 
             let one = func.ins().iconst(Type::Int32.into_cranelift(&self.isa), 1);
@@ -1334,11 +1323,13 @@ impl CraneliftGenerator {
                     cond,
                     block,
                     else_clause,
+                    ..
                 } => self.compile_if_expr(cond.as_ref(), block, else_clause, func, trace)?,
                 AstNode::LetStmt {
                     name,
                     def_type,
                     value,
+                    ..
                 } => {
                     let (val, vty) =
                         self.compile_body_expr(value, func, &trace.nested_ctx(ContextKind::Def))?;
@@ -1363,6 +1354,7 @@ impl CraneliftGenerator {
                     name,
                     def_type,
                     value,
+                    ..
                 } => {
                     let (val, vty) =
                         self.compile_body_expr(value, func, &trace.nested_ctx(ContextKind::Def))?;
@@ -1383,16 +1375,17 @@ impl CraneliftGenerator {
 
                     (None, false)
                 }
-                AstNode::IncludeStmt(_) => todo!(),
+                AstNode::IncludeStmt(..) => todo!(),
                 AstNode::ExternFn {
                     name,
                     ret_type,
                     args,
+                    ..
                 } => {
                     self.compile_extern_fn(name, ret_type, args)?;
                     (None, false)
                 }
-                AstNode::ReturnStmt(v) => {
+                AstNode::ReturnStmt(_l, v) => {
                     let (val, _) = self.compile_body_expr(v, func, trace)?;
 
                     let mut sig = Signature::new(self.call_conv);
@@ -1429,19 +1422,19 @@ impl CraneliftGenerator {
 
                     (None, true)
                 }
-                AstNode::WhileStmt { cond, code } => {
+                AstNode::WhileStmt { cond, code, .. } => {
                     self.compile_while_expr(cond.as_ref(), code, func, trace)?;
                     (None, false)
                 }
-                AstNode::ForInStmt { var, of, block } => {
+                AstNode::ForInStmt { var, of, block, .. } => {
                     self.compile_for_in_expr(var, of, block, func, trace)?;
                     (None, false)
                 },
-                AstNode::IfStmt { cond, block } => (
+                AstNode::IfStmt { cond, block, .. } => (
                     None,
                     self.compile_if_stmt(cond.as_ref(), block, func, None, &[], trace)?,
                 ),
-                AstNode::DeferStmt(code) => {
+                AstNode::DeferStmt(_l, code) => {
                     if let Some(scope) = self.deferred_items.last_mut() {
                         scope.insert(0, code.clone());
                     } else {
@@ -1450,7 +1443,7 @@ impl CraneliftGenerator {
 
                     (None, false)
                 }
-                AstNode::MatchExpr { matchee, arms } => (self.compile_match(matchee, arms, func, trace)?, false),
+                AstNode::MatchExpr { matchee, arms, .. } => (self.compile_match(matchee, arms, func, trace)?, false),
                 _ => (
                     Some(match self.compile_body_expr(stmt, func, trace) {
                         Ok(v) => v,
@@ -1487,12 +1480,12 @@ impl CraneliftGenerator {
 
         for (i, stmt) in body.iter().enumerate() {
             let res = match stmt {
-                AstNode::Identifier(n) if n == "break" => {
+                AstNode::Identifier(_l, n) if n == "break" => {
                     func.ins().jump(end_block, end_args);
 
                     (None, true)
                 }
-                AstNode::IfStmt { cond, block } => (
+                AstNode::IfStmt { cond, block, .. } => (
                     None,
                     self.compile_if_stmt(cond.as_ref(), block, func, Some(end_block), &[], trace)?,
                 ),
@@ -1587,7 +1580,7 @@ impl CraneliftGenerator {
             func.ins().stack_store(value.clone(), slot, (index * bytes as usize) as i32);
         }
 
-        Ok((slot, func.ins().stack_addr(self.isa.pointer_type(), slot, 0), Type::Slice(Box::new(values.first().unwrap().1.clone()), values.len() as u32)))
+        Ok((slot, func.ins().stack_addr(self.isa.pointer_type(), slot, 0), Type::Slice(Box::new(values.first().unwrap().1.clone()), values.len() as u32, false, false)))
     }
 
     /// Returns a global value containing the string
@@ -1634,26 +1627,8 @@ impl CraneliftGenerator {
 
         Ok((
             func.ins().global_value(self.isa.pointer_type(), global),
-            Type::Slice(Indirection::new(Type::Int8), string.len() as u32),
+            Type::Slice(Indirection::new(Type::Int8), string.len() as u32, false, false),
         ))
-    }
-
-    fn get_calls_of_func(
-        &mut self,
-        name: &String,
-        remaining_nodes: Vec<AstNode>,
-    ) -> Result<Vec<Box<[Type]>>, Box<[CompilationError]>> {
-        let usages = get_usages_of(name, remaining_nodes.as_slice());
-        let calls = usages[1..]
-            .into_iter()
-            .filter(|usage| matches!(usage.kind, UsageKind::Call(_)))
-            .collect::<Vec<_>>();
-
-        if calls.len() == 0 {
-            return Ok(vec![]);
-        }
-
-        Ok(vec![])
     }
 
     pub fn compile_func(&mut self, node: &AstNode) -> Result<(), Box<[CompilationError]>> {
@@ -1665,6 +1640,7 @@ impl CraneliftGenerator {
             type_generics: _,
             code,
             modifiers,
+            ..
         } = node
         else {
             unreachable!();
@@ -1816,8 +1792,9 @@ impl CraneliftGenerator {
                 name,
                 ret_type,
                 args,
+                ..
             } => self.compile_extern_fn(name, ret_type, args),
-            AstNode::IncludeStmt(p) => {
+            AstNode::IncludeStmt(_l, p) => {
                 let search_path = p.as_ref().split_last().unwrap().1.join("/");
                 let parent_path = self
                     .file_path
@@ -1829,7 +1806,7 @@ impl CraneliftGenerator {
                 let mut msc_path: PathBuf = [search_path.clone(), format!("{}.msc", p.last().unwrap())].iter().collect();
                 let mut obj_path: Option<PathBuf> = Some([search_path.clone(), format!("{}.o", p.last().unwrap())].iter().collect());
 
-                // Attempt lookup in installed modules directory (~/.msc/mods/)
+                // Attempt lookup in installed modules directory
                 if !msc_path.exists() {
                     let home = homedir::my_home().unwrap().clone().unwrap();
                     let home = home.to_str();
@@ -1873,6 +1850,10 @@ impl CraneliftGenerator {
                     )]));
                 }
 
+                if self.included_modules.iter().any(|m| m.mosaic_file == msc_path) || self.file_path == msc_path {
+                    return Ok(())
+                }
+
                 // SHADOW CODEGEN
 
                 let reader =
@@ -1896,7 +1877,7 @@ impl CraneliftGenerator {
 
                 Ok(())
             }
-            AstNode::TypeAlias(name, to) => {
+            AstNode::TypeAlias(_l, name, to) => {
                 let to = self.tg.compile_type_no_tgs(to, &self.isa);
 
                 self.tg.register_type(name, to);
@@ -1921,13 +1902,6 @@ impl CraneliftGenerator {
                 Err(e) => errors.push(e),
             }
         }
-
-        let mut engine = PreoptEngine::new(&nodes);
-
-        //engine.removed_unused_defs();
-        engine.demote_mutables();
-
-        //let nodes = engine.finish();
 
         for node in nodes {
             match self.compile_global(&node) {

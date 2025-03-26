@@ -1,12 +1,11 @@
-use cranelift_object::object::ReadRef;
-use mmap_rs::{Mmap, MmapOptions};
+#![allow(clippy::unwrap_used)]
+
 use crate::file::File;
 use crate::states::{ReaderState, WithState};
 use crate::tokens::LineInfo;
-use std::fs::OpenOptions;
-use std::io::Read;
+use cranelift_object::object::ReadRef;
+use mmap_rs::{Mmap, MmapOptions};
 
-use std::ops::Index;
 use std::rc::Rc;
 use std::{fs, io};
 
@@ -19,13 +18,13 @@ pub struct CharReader {
 
 impl PartialEq for CharReader {
     fn eq(&self, other: &Self) -> bool {
-        return self.reader.clone() == other.reader.clone() && self.pos == other.pos;
+        self.reader.clone() == other.reader.clone() && self.pos == other.pos
     }
 }
 
 impl Clone for CharReader {
     fn clone(&self) -> Self {
-        let file_length = std::fs::metadata(self.reader.path()).unwrap().len() as usize;
+        let file_length = fs::metadata(self.reader.path()).unwrap().len() as usize;
         let mmap = unsafe { MmapOptions::new(file_length).unwrap().with_file(&self.reader.file(), 0) }.map().unwrap();
 
         Self {
@@ -63,7 +62,7 @@ impl CharReader {
     }
 
     pub fn next_char(&mut self) -> Option<char> {
-        let byte = self.mmap.read_at::<u8>(self.pos).ok()?.clone();
+        let byte = *self.mmap.read_at::<u8>(self.pos).ok()?;
 
         self.pos += 1;
 
@@ -71,41 +70,38 @@ impl CharReader {
     }
 
     pub fn peek_next_char(&self) -> Option<char> {
-        Some(self.mmap.read_at::<u8>(self.pos).ok()?.clone() as char)
+        Some(*self.mmap.read_at::<u8>(self.pos).ok()? as char)
     }
 
-    // TODO: Support multi-line snippets
     pub fn get_snippet(&self, info: &LineInfo) -> io::Result<String> {
-        let mut buf = vec![];
         let mut snippet = String::new();
 
-        let mut file = fs::File::open(self.reader.path().to_string_lossy().to_string())?;
-
-        file.read_to_end(&mut buf)?;
-
-        let buf = String::from_utf8_lossy(&*buf);
+        let mut offset = 0;
+        let buf = String::from_utf8(self.mmap.read_slice(&mut offset, self.mmap.len()).unwrap().to_vec()).unwrap();
         let lines = buf.lines().collect::<Vec<_>>();
 
-        for (i, line) in lines.iter().enumerate() {
-            if i < info.begin_line() - 1 {
-                continue;
+        for (linec, line) in lines.into_iter().enumerate() {
+            if linec + 1 < info.begin_line() {
+                continue
             }
 
-            if i >= info.end_line() {
-                break;
+            if linec + 1 > info.end_line() {
+                break
             }
 
-            for (i, char) in line.to_string().chars().enumerate() {
-                if i < info.begin_char() - 1 {
-                    continue;
+            for (charc, char) in line.chars().enumerate() {
+                if charc + 1 < info.begin_char() && linec + 1 == info.begin_line() {
+                    continue
                 }
 
-                if i >= info.end_char() - 1 {
-                    break;
+                if charc + 1 > info.end_char() && linec + 1 == info.end_line() {
+                    break
                 }
 
                 snippet.push(char);
             }
+
+            snippet.push('\n');
         }
 
         Ok(snippet)
