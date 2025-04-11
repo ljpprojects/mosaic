@@ -58,12 +58,11 @@ debug = "line-tables-only"
 cranelift-codegen = { version = "0.118.0", features = ["all-native-arch", "x86", "arm64", "incremental-cache", "all-arch", "riscv64", "std"] }
 cranelift-module = { version = "0.118.0", features = ["std"] }
 cranelift-object = "0.118.0"
-cranelift-interpreter = { version = "0.118.0" }
 cranelift-frontend = { version = "0.118.0", features = ["std"] }
 colored = "3.0.0"
-clap = { version = "4.5.29", features = ["derive"] }
+clap = { version = "4.5.36", features = ["derive"] }
 either = "1.13.0"
-tokio = { version = "1.43.0", features = ["rt", "rt-multi-thread", "macros"] }
+tokio = { version = "1.44.1", features = ["rt", "rt-multi-thread", "macros"] }
 downcast-rs = "2.0.1"
 target-lexicon = "0.13.2"
 mmap-rs = "0.6.1"
