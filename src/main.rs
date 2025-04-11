@@ -16,8 +16,9 @@ use clap::Parser;
 use std::path::PathBuf;
 use std::process::exit;
 use std::str::FromStr;
+use cranelift_codegen::gimli;
 use cranelift_codegen::isa::lookup;
-use target_lexicon::Triple;
+use target_lexicon::{Architecture, Triple};
 
 pub mod cli;
 pub mod compiler;
@@ -39,6 +40,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         Command::Build { file, target, .. } => {
             let triple = Triple::from_str(&target.unwrap_or("_".into())).unwrap_or(Triple::host());
+
+            
 
             if !PathBuf::from(file.clone()).exists() {
                 return Err(CompilationError::UnknownModule(

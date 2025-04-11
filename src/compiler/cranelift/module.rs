@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::rc::Rc;
+use crate::compiler::cranelift::meta::DataDeclMeta;
 
 pub struct CraneliftModule {
     pub product: ObjectProduct,
@@ -15,6 +16,7 @@ pub struct CraneliftModule {
     pub prev_includes: HashSet<(PathBuf, Option<PathBuf>)>,
     pub mosaic_file: PathBuf,
     pub functions: HashMap<String, FunctionMeta>,
+    pub data_declarations: HashMap<String, DataDeclMeta>,
     pub function_variants: HashMap<String, Vec<(CraneliftType, Vec<CraneliftType>)>>,
     pub tg: CraneliftTypeGenerator,
     pub out_file: PathBuf,
@@ -58,6 +60,6 @@ impl CompilationModule for CraneliftModule {
     }
 
     fn out_file(&self) -> PathBuf {
-        todo!()
+        self.out_file.clone()
     }
 }

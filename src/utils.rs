@@ -1,3 +1,9 @@
+#[macro_export]
+macro_rules! ternary {
+    ($cond: expr => $y: expr; $n: expr) => {
+        if $cond { $y } else { $n }
+    };
+}
 
 pub trait IndirectionTrait<T> {
     fn map<U, F: FnOnce(&T) -> U>(self, f: F) -> Indirection<U>;

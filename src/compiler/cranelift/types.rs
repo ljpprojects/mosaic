@@ -39,6 +39,11 @@ pub enum CraneliftType {
     CPtr(Indirection<Self>, bool, bool),
     FatPtr(Indirection<Self>, bool, bool),
     Slice(Indirection<Self>, u32, bool, bool),
+    
+    /// Stores the name of the data declaration the value conforms to.
+    /// Mutability is enforced on a per-field basis.
+    /// Nullability is achieved by using a wrapper.
+    DataPtr(String),
 }
 
 impl PartialEq for CraneliftType {
@@ -89,7 +94,7 @@ impl CraneliftType {
             Self::Float32 => types::F32,
             Self::Float64 => types::F64,
             Self::Null | Self::Bool => types::I8,
-            Self::FuncPtr { .. } | Self::CPtr(..) | Self::Slice(..) | Self::FatPtr(..) => {
+            Self::DataPtr(..) | Self::FuncPtr { .. } | Self::CPtr(..) | Self::Slice(..) | Self::FatPtr(..) => {
                 isa.pointer_type()
             }
         }
@@ -115,6 +120,7 @@ impl Display for CraneliftType {
             CraneliftType::Float64 => write!(f, "f64"),
             CraneliftType::Null => write!(f, "null"),
             CraneliftType::Bool => write!(f, "bool"),
+            CraneliftType::DataPtr(name) => write!(f, "data {}", name),
             CraneliftType::FuncPtr { .. } => write!(f, "fn(...) -> ..."),
             CraneliftType::CPtr(i, mutable, nullable) => write!(f, "*{}{} {i}", if *mutable { "mut" } else { "const" }, if *nullable { "?" } else { "" }),
             CraneliftType::FatPtr(i, mutable, nullable) => write!(f, "*{}{} [{i}]", if *mutable { "mut" } else { "const" }, if *nullable { "?" } else { "" }),
@@ -185,7 +191,7 @@ impl CompilationType for CraneliftType {
             Self::Float32 => 4,
             Self::Float64 => 8,
             Self::Null | Self::Bool => 1,
-            Self::FuncPtr { .. } | Self::CPtr(..) | Self::Slice(..) | Self::FatPtr(..) => {
+            Self::DataPtr(..) | Self::FuncPtr { .. } | Self::CPtr(..) | Self::Slice(..) | Self::FatPtr(..) => {
                 isa.pointer_bytes()
             }
         }

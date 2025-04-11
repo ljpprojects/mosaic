@@ -17,6 +17,13 @@ pub struct FunctionMeta {
     pub start_block: Option<Block>,
 }
 
+#[derive(Clone)]
+pub struct DataDeclMeta {
+    pub size: u16,
+    pub alignment: u8,
+    pub fields: Vec<(u16, bool, String, Rc<dyn CompilationType>)>, // offset, is_mutable, name, type
+}
+
 #[derive(Hash, Clone, Debug, PartialEq, Eq)]
 pub struct MustFreeMeta {
     pub(crate) value: Value,
