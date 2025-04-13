@@ -45,7 +45,6 @@ use std::ops::Deref;
 use std::path::PathBuf;
 use std::rc::Rc;
 use downcast_rs::Downcast;
-use wasmtime::{Config, Engine};
 use crate::compiler::align::{alignment_of_cranelift_type_on_architecture, calculate_data_cranelift};
 
 macro_rules! get_fn {

@@ -2,17 +2,22 @@
 
 # Mosaic
 
-Mosaic is a small compiled language built using cranelift.
+A simple compiled programming language piggybacking off of other's
+work.
 
-## Prerequisites
-Mosaic needs the following libraries to run properly:
-* GCC (unless you specify a custom link command every time you run `msc build`)
-* Rust
-* Shell (located at `/bin/sh` unless a custom path is specified)
+**ONLY FOR PEOPLE WHO KNOW WHAT THEY'RE DOING**
+
+## Dependencies
+* Rust & Cargo
+* `ld` unless a custom linker is specified
+* Shell
+* Bash (if you plan to run install.sh)
+* About 3.5GB of free space
 
 ## Documentation
-Documentation can be found in the [docs](docs/src) directory
-or at [the Mosaic website](https://msc.ljpprojects.org/docs/).
+Just look at the compiler source code, specifically the parser.
+If you cannot do this, go use Scratch or something, imbecile.
+Go back from where you came, *Scratchers*.
 
 ## Supported Targets (tested)
 * `aarch64-apple-darwin` Apple Silicon iMacs, MacBooks, etc…
@@ -20,12 +25,4 @@ or at [the Mosaic website](https://msc.ljpprojects.org/docs/).
 * `x86_64-apple-darwin` Intel iMacs, MacBooks, etc…
 * `x86_64-unknown-linux-gnu` Windows WSL or any Linux distro with an x86_64 chip.
 
-Theoretically, any architecture that cranelift supports and
-uses traditional UNIX paths (e.g. foo/bar/mod.msc) should work with Mosaic.
-
-## Planned targets
-* `WASM`
-
-## Known Bugs (also on the [GitHub Repo](https://github.com/ljp-projects/mosaic) issues page)
-* Insufficient compiler tracking of pointer lifetimes
-leading to problems with the `must_free` annotation (temporarily removed)
+With extra configuration, compiling on Windows without WSL is possible.

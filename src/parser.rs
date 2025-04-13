@@ -11,7 +11,6 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::string::ToString;
-use cranelift_codegen::gimli::Pointer::Indirect;
 use either::Either;
 
 pub const MATCH_OPS: &[&str] = &[">", "<", "!="];
@@ -48,16 +47,10 @@ pub enum Modifier {
     /// Indicates to the compiler that this function should not be mangled.
     /// This is always used on main functions.
     NoMangle,
-}
-
-#[macro_export]
-macro_rules! modifier {
-    ($s: literal) => {
-        match crate::parser::Modifier::from_str($s) {
-            Err(_) => compile_error!($s),
-            Ok(m) => m,
-        }
-    };
+    
+    /// Indicates to the compiler that whoever wrote this did not know what they were doing,
+    /// meaning the compiler will output a warning when it is declared or defined.
+    StupidThing,
 }
 
 impl FromStr for Modifier {
@@ -65,12 +58,13 @@ impl FromStr for Modifier {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "export" => Ok(Modifier::Export),
+            "export" | "public" | "pub" => Ok(Modifier::Export),
             "autofree" | "auto_free" => Ok(Modifier::AutoFree),
             "mustfree" | "must_free" => Ok(Modifier::MustFree),
             "alloc" | "allocates" => Ok(Modifier::Alloc),
             "dealloc" | "deallocates" => Ok(Modifier::Dealloc),
             "nomangle" | "no_mangle" => Ok(Modifier::NoMangle),
+            "stupid_thing" | "stupidthing" | "donottrustthis" | "do_not_trust_this" | "probably_broken" | "probablybroken" => Ok(Modifier::StupidThing),
             m => Err(format!("Invalid modifier {m}")),
         }
     }
@@ -284,6 +278,14 @@ pub enum AstNode {
         fields: Vec<(String, Indirection<AstNode>)>,
         line_info: LineInfo,
     },
+    
+    // --- Statements and expressions at the same time? --- //
+    
+    GuardClause {
+        line_info: LineInfo,
+        cond: Indirection<AstNode>,
+        else_code: ParseBlock,
+    },
 
     // --- Statements --- //
     
@@ -394,6 +396,7 @@ impl Display for AstNode {
             ),
             AstNode::AsExpr(v, t, ..) => write!(f, "({v}) as {t}"),
             AstNode::AbortingAsExpr(v, t, ..) => write!(f, "({v}) as! {t}"),
+            AstNode::GuardClause { cond, .. } => write!(f, "guard {cond} else {{ ... }}"),
             AstNode::IfExpr {
                 cond,
                 block,
@@ -457,6 +460,7 @@ impl AstNode {
             AstNode::InfixOp(l, ..) => l,
             AstNode::PrefixOp(l, ..) => l,
             AstNode::PostfixOp(l, ..) => l,
+            AstNode::GuardClause { line_info, .. } => line_info,
             AstNode::DataInitExpr { line_info, .. } => line_info,
             AstNode::Path(l, ..) => l,
             AstNode::MemberExpr(l, _) => l,
@@ -2588,6 +2592,39 @@ impl StreamedParser {
         }))
     }
 
+    pub fn parse_guard_clause(&mut self) -> Option<Result<AstNode, ParseError>> {
+        let start = self.expect_ident(&"guard", true).unwrap();
+
+        let cond = match self.parse_bitwise_expr() {
+            Some(Ok(cond)) => cond,
+            Some(Err(e)) => return Some(Err(e)),
+            None => {
+                return Some(Err(ParseError::UnexpectedEOF(
+                    self.file.clone(),
+                    "GUARD COND".to_string()
+                )))
+            }
+        };
+
+        self.expect_ident(&"else", true).unwrap();
+
+        let else_code = match self.parse_block_expr() {
+            Ok(block) => block,
+            Err(e) => return Some(Err(e)),
+        };
+
+        Some(Ok(AstNode::GuardClause {
+            line_info: LineInfo::new(
+                start.begin_char(),
+                self.lexer.state().current_char,
+                start.begin_line(),
+                self.lexer.state().current_line,
+            ),
+            cond: Indirection::new(cond),
+            else_code,
+        }))
+    }
+
     pub fn next_ast_node(&mut self) -> Option<Result<AstNode, ParseError>> {
         if let Some(Ok(Token::Ident(ident, _))) = self.lexer.peek_next_token() {
             match ident.as_str() {
@@ -2604,6 +2641,7 @@ impl StreamedParser {
                 "type" => self.parse_type_alias(),
                 "defer" => self.parse_defer_stmt(),
                 "match" => self.parse_match_stmt(),
+                "guard" => self.parse_guard_clause(),
                 _ => self.parse_bitwise_expr(),
             }
         } else if let Some(Ok(Token::Char(c, _))) = self.lexer.peek_next_token() {
