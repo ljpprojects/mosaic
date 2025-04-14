@@ -710,6 +710,49 @@ impl CraneliftGenerator {
                     Err(Box::new([CompilationError::UndefinedData(self.file_path.clone(), trace.clone(), name.clone())]))
                 }
             }
+            AstNode::GuardClause {
+                cond,
+                else_code: ParseBlock::Plain(else_code),
+                ..
+            } => {
+                let (cond, cty) = self.compile_body_expr(cond.deref(), func, trace)?;
+                let check = func.ins().icmp_imm(IntCC::NotEqual, cond, 0);
+
+                if !cty.is_pointer() {
+                    todo!("Handle error case: invalid type for guard clause")
+                }
+
+                if !cty.nullable() {
+                    return Ok((cond, cty))
+                }
+
+                let end_block = func.create_block();
+                let else_block = func.create_block();
+
+                func.ins().brif(check, end_block, &[cond], else_block, &[]);
+                func.switch_to_block(else_block);
+
+                let (_, filled) = self.compile_body(else_code, func, trace)?;
+
+                if !filled {
+                    todo!("Handle error case: guard clause else block falls through")
+                }
+
+                func.switch_to_block(end_block);
+
+                let [val] = func.block_params(end_block) else {
+                    unreachable!()
+                };
+
+                let new_type = match cty {
+                    Type::CPtr(i, m, _) => Type::CPtr(i, m, false),
+                    Type::FatPtr(i, m, _) => Type::FatPtr(i, m, false),
+                    Type::Slice(i, l, m, _) => Type::Slice(i, l, m, false),
+                    _ => unreachable!()
+                };
+
+                Ok((*val, new_type))
+            },
             AstNode::IdxAccess(_l, of, idx) => {
                 let (of, ty) = self.compile_body_expr(of, func, trace)?;
                 let (mut idx, ity) =
@@ -1739,10 +1782,10 @@ impl CraneliftGenerator {
             Linkage::Local
         };
         
-        // main MUST have i32, *const i8 args
+        /*// main MUST have i32, *const i8 args
         if unmangled_name == "main" && arg_types != vec![CraneliftType::Int32, CraneliftType::CPtr(Indirection::new(CraneliftType::CPtr(Indirection::new(CraneliftType::Int8), false, false)), false, false)] {
             return Err(Box::new([CompilationError::MainMustHave2Args(self.file_path.clone())]))
-        }
+        }*/
 
         let name = &mangled_name;
 
@@ -1823,8 +1866,12 @@ impl CraneliftGenerator {
                 true,
             );
         }
+
+        let Some(Command::Build { no_fptr_sugar, .. }) = self.command else {
+            todo!("Handle error case")
+        };
         
-        if &*name == "main" {
+        /*if &*name == "main" && !no_fptr_sugar {
             /**** Define data ****/
             let dat = self.module.declare_data("__mosaic_injected$fnptr_opened_lib", Linkage::Local, true, false).unwrap();
 
@@ -1866,29 +1913,13 @@ impl CraneliftGenerator {
             /**** Assign to global data ****/
             let val = self.module.declare_data_in_func(dat, fn_builder.func);
             let val = fn_builder.ins().global_value(self.isa.pointer_type(), val);
-        }
+        }*/
 
         self.compile_body(code.as_ref(), &mut fn_builder, &mut trace)?;
 
         fn_builder.finalize();
 
         let mut context = Context::for_function(func.clone());
-
-        if &*name == "main" {
-            if self.must_frees.len() != 0 {
-                let mut errors = vec![];
-
-                for item in self.must_frees.iter() {
-                    errors.push(CompilationError::NotFreed(
-                        self.file_path.clone(),
-                        trace.clone(),
-                        item.clone(),
-                    ))
-                }
-
-                return Err(errors.into_boxed_slice());
-            }
-        }
 
         self.module.define_function(fid, &mut context).unwrap();
 

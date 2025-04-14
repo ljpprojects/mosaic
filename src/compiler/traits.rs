@@ -16,6 +16,9 @@ pub trait CompilationType: Display + Any + Downcast {
     fn is_pointer(&self) -> bool;
     fn is_c_abi(&self) -> bool;
     fn is_signed(&self) -> bool;
+
+    fn nullable(&self) -> bool;
+    fn mutable(&self) -> bool;
     
     fn into_c_abi(self) -> Rc<dyn CompilationType>;
     

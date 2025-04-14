@@ -144,9 +144,10 @@ impl CompilationType for CraneliftType {
     }
 
     fn is_pointer(&self) -> bool {
-        matches!(self, Self::CPtr(..) | Self::FuncPtr { .. } | Self::Slice(..) | Self::FatPtr(..))
+        matches!(self, Self::DataPtr(..) | Self::CPtr(..) | Self::FuncPtr { .. } | Self::Slice(..) | Self::FatPtr(..))
     }
 
+    /// Returns true when the type has a direct conversion to C
     fn is_c_abi(&self) -> bool {
         matches!(self, Self::Float32 | Self::Float64 | Self::Int8 | Self::Int16 | Self::Int32 | Self::Int64 | Self::UInt8 | Self::UInt16 | Self::UInt32 | Self::UInt64 | Self::CPtr(..) | Self::FuncPtr { .. })
     }
@@ -158,6 +159,24 @@ impl CompilationType for CraneliftType {
             | Self::Int64
             | Self::Float32
             | Self::Float64)
+    }
+
+    fn nullable(&self) -> bool {
+        match self {
+            Self::CPtr(_, _, nullable, ..) => *nullable,
+            Self::Slice(_, _, _, nullable) => *nullable,
+            Self::FatPtr(_, _, nullable) => *nullable,
+            _ => false,
+        }
+    }
+
+    fn mutable(&self) -> bool {
+        match self {
+            Self::CPtr(_, mutable, _) => *mutable,
+            Self::Slice(_, _, mutable, _) => *mutable,
+            Self::FatPtr(_, mutable, _) => *mutable,
+            _ => false,
+        }
     }
 
     fn into_c_abi(self) -> Rc<dyn CompilationType> {

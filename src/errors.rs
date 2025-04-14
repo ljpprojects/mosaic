@@ -374,7 +374,7 @@ impl Display for CompilationError {
 
                 write!(
                     f,
-                    "    Main must have two arguments - an i32 and a *const i8"
+                    "    Main must have two arguments - an i32 and a *const *const i8"
                 )
             }
 

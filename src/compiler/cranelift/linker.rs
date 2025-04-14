@@ -33,6 +33,7 @@ impl Linker {
             ref emit,
             ref target,
             ref linker,
+            ref no_fptr_sugar,
         } = command else {
             unimplemented!()
         };
@@ -97,6 +98,7 @@ impl Linker {
                 emit: *emit,
                 target: Some(triple.to_string()),
                 linker: linker.clone(),
+                no_fptr_sugar: *no_fptr_sugar,
             };
 
             let cg = CraneliftGenerator::new(parser, lookup(triple.clone()).unwrap(), Some(updated_command));
