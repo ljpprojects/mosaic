@@ -33,4 +33,4 @@ leading to problems with the `must_free` annotation (temporarily removed)
 ## If You Are Trying to Mark My Work
 
 First of all, wrong branch.
-Second of all, please take agander through the source code in the CORRECT branch and maybe there you can find my work (hint: look at the tests)
+Second of all, please take a gander through the source code in the CORRECT branch and maybe there you can find my work. Bootstrapped.
