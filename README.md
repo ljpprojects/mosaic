@@ -29,3 +29,8 @@ uses traditional UNIX paths (e.g. foo/bar/mod.msc) should work with Mosaic.
 ## Known Bugs (also on the [GitHub Repo](https://github.com/ljp-projects/mosaic) issues page)
 * Insufficient compiler tracking of pointer lifetimes
 leading to problems with the `must_free` annotation (temporarily removed)
+
+## If You Are Trying to Mark My Work
+
+First of all, wrong branch.
+Second of all, please take agander through the source code in the CORRECT branch and maybe there you can find my work (hint: look at the tests)
