@@ -1,0 +1,43 @@
+# It seems you have reached the only example on this branch.
+# If you analyze the code you can find the link to my work.
+
+extern fn malloc(size: i32) -> *mut? any;
+
+fn main -> i32 {
+  let proto = "https" as *const [i8];
+  let domain = "canva.com" as *const [i8];
+
+  # it won't be that easy the whole time, though.
+
+  let paths = (guard malloc((*const [i8]) * 5) else {
+    return 1;
+  }) as *mut [*const [i8]];
+
+  # Do you know what Mosaic is yet?
+
+  paths[0] = "design" as *const [i8];
+  paths[1] = "DAGyWg1xzTQ" as *const [i8];
+  paths[2] = "WnPFDK9zz2PYqMdSBTAZTw" as *const [i8];
+  paths[3] = "edit" as *const [i8];
+
+  mut utm_content = "Do YOU know what Mosaic is?" as *const [i8];
+
+  defer {
+    utm_content = "DAGyWg1xzTQ" as *const [i8];
+  }
+
+  if paths[4] == "What?" {
+    utm_content = "?????" as *const [i8];
+  }
+
+  # Error time!
+
+  utm_campaign = "designshare";
+
+  let addr = &main;
+
+  (*medium) = link2;
+  (*(*utm_source)) = "sharebutton\0" as *const i8;
+
+  # or you can be boring and use the normal link :( https://www.canva.com/design/DAGyWg1xzTQ/WnPFDK9zz2PYqMdSBTAZTw/edit?utm_content=DAGyWg1xzTQ&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton
+}
