@@ -75,6 +75,8 @@ impl VariableBuilder {
         file: PathBuf,
         trace: &Trace,
     ) -> Result<(), Box<[CompilationError]>> {
+        println!("SET VAR");
+
         let mut errors = vec![];
 
         let Some(scope) = self

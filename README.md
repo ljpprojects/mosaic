@@ -21,8 +21,8 @@ I did this. I made this. I wrote it. Thank me later.
 - `ld` unless a custom linker is specified, forgot how though
 - Shell
 
-DO NOT USE install.sh it downloads defunct mosaic-std and mosaic-core onto your
-system just use declare bindings to libc in your code
+install.sh will install the `msc` binary system-wide and copy tests/std and
+tests/core to the appropriate directories for them to be found by the compiler.
 
 ## Quirks
 

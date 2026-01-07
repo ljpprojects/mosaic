@@ -1320,7 +1320,12 @@ impl CraneliftGenerator {
         func.switch_to_block(body_block);
 
         let ParseBlock::Plain(code) = code;
-        let (_, filled) = self.compile_while_body(code.as_ref(), func, trace, end_block, &[])?;
+
+        for nd in code {
+            eprintln!("WHILE CODE {nd}");
+        }
+
+        let (_, filled) = self.compile_body(code.as_ref(), func, trace)?;
 
         if !filled {
             let (cond, _) = self.compile_body_expr(cond_node, func, trace)?;

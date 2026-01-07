@@ -53,6 +53,7 @@ fn Stream::stdout export alloc -> MaybeStream {
 
     let fd = 1;
 
+    # Wish I could just do this
     # self.fd = fd;
 
     memcpy((&self.fd) as *mut any, (&fd) as *const any, 4);
@@ -69,7 +70,7 @@ fn Stream::stdin export alloc -> MaybeStream {
 
     let self = (ptr as Stream);
 
-    let fd = 2;
+    let fd = 2; # oops, my finger slipped. "fix it" I hear you say but thats YOUR job, not mine
 
     memcpy((&self.fd) as *mut any, (&fd) as *const any, 4);
     memset((&self.readonly) as *mut any, 1, 1);
@@ -83,6 +84,7 @@ fn Stream::write(self: Stream, bytes: ByteArray) export -> null {
     return null
 }
 
+# Why doesnt this do anything? What went wrong????
 fn Stream::read(self: Stream, dest: ByteArray) export -> null {
     # read(self.fd, bytes.as_ptr(), bytes.length());
 

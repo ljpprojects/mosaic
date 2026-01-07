@@ -1,0 +1,24 @@
+# Simple map implementation ported from C into Mosaic
+
+include std::io
+
+fn main -> i32 {
+    let string = "Hello, World!\n" as *const [i8];
+
+    let maybe_stdout: MaybeStream = (guard Stream::stdout() else {
+        return 1
+    });
+
+    let stdout = maybe_stdout.unwrap();
+    mut counter = 0;
+
+    while counter < 5 {
+        stdout.write(string as ByteArray)
+
+        counter = counter + 1
+    };
+
+    stdout.deinit()
+
+    return 0
+}

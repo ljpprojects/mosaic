@@ -47,7 +47,7 @@ pub enum Modifier {
     /// Indicates to the compiler that this function should not be mangled.
     /// This is always used on main functions.
     NoMangle,
-    
+
     /// Indicates to the compiler that whoever wrote this did not know what they were doing,
     /// meaning the compiler will output a warning when it is declared or defined.
     StupidThing,
@@ -269,7 +269,7 @@ pub enum AstNode {
         block: ParseBlock,
         else_clause: ParseBlock,
     },
-    
+
     MatchExpr {
         line_info: LineInfo,
         matchee: Rc<AstNode>,
@@ -283,9 +283,9 @@ pub enum AstNode {
     },
 
     SizeOf(LineInfo, ParseType),
-    
+
     // --- Statements and expressions at the same time? --- //
-    
+
     GuardClause {
         line_info: LineInfo,
         cond: Indirection<AstNode>,
@@ -293,14 +293,14 @@ pub enum AstNode {
     },
 
     // --- Statements --- //
-    
+
     ForInStmt {
         line_info: LineInfo,
         var: String,
         of: Indirection<AstNode>,
         block: ParseBlock,
     },
-    
+
     ForCondStmt {
         line_info: LineInfo,
         var: String,
@@ -308,7 +308,7 @@ pub enum AstNode {
         operator: Indirection<AstNode>,
         block: ParseBlock,
     },
-    
+
     FnStmt {
         line_info: LineInfo,
         of: Option<String>,
@@ -319,7 +319,7 @@ pub enum AstNode {
         code: ParseBlock,
         modifiers: Box<[Modifier]>,
     },
-    
+
     LetStmt {
         name_info: LineInfo,
         name: String,
@@ -491,7 +491,7 @@ impl AstNode {
             AstNode::SizeOf(l, _) => l,
         }
     }
-    
+
     fn is_stmt(&self) -> bool {
         matches!(self, Self::ForInStmt { .. }  |
             Self::FnStmt { .. }     |
@@ -508,11 +508,11 @@ impl AstNode {
     fn is_special(&self) -> bool {
         matches!(self, Self::MacroUseArg(..))
     }
-    
+
     fn is_expr(&self) -> bool {
         !self.is_stmt() && !self.is_special()
     }
-    
+
     fn is_literal(&self) -> bool {
         matches!(self, Self::BooleanLiteral(..) |
             Self::ArrayLiteral(..)   |
@@ -580,7 +580,7 @@ impl StreamedParser {
 
         iter.collect::<Vec<_>>().into_iter()
     }
-    
+
     pub fn new(lexer: StreamedLexer) -> Self {
         let file = lexer.reader.reader.path().to_path_buf();
 
@@ -590,21 +590,21 @@ impl StreamedParser {
             })
         ].into() }
     }
-    
+
     pub fn parse_complete(mut self) -> Result<ParsedFile, Vec<ParseError>> {
         let (mut nodes, mut errors) = (vec![], vec![]);
-        
+
         for node in self {
             match node {
                 Ok(node) => nodes.push(node),
                 Err(error) => errors.push(error),
             }
         }
-        
+
         if !errors.is_empty() {
             return Err(errors);
         }
-        
+
         // Get all included modules (and their paths)
         let included_module_paths = nodes.iter()
             .filter(|n| matches!(n, AstNode::IncludeStmt(..)))
@@ -612,10 +612,10 @@ impl StreamedParser {
                 let AstNode::IncludeStmt(_, p, ..) = n else {
                     unreachable!()
                 };
-                
+
                 let search_path = p.as_ref().split_last().unwrap().1.join("/");
                 let mut msc_path: PathBuf = [search_path.clone(), format!("{}.msc", p.last().unwrap())].iter().collect();
-                
+
                 if !msc_path.exists() {
                     let home = homedir::my_home().unwrap().clone().unwrap();
                     let home = home.to_str();
@@ -628,11 +628,11 @@ impl StreamedParser {
                         msc_path = [home.unwrap(), ".msc", "modules", &*search_path, &*format!("{}.msc", p.last().unwrap())].iter().collect::<PathBuf>()
                     };
                 }
-                
+
                 msc_path
             })
             .collect::<HashSet<_>>();
-        
+
         Ok(ParsedFile {
             nodes,
             included_module_paths,
@@ -697,11 +697,20 @@ impl StreamedParser {
         mutate: bool,
         start_pos: &LineInfo,
     ) -> Result<LineInfo, ParseError> {
+        let mut self_clone = self.clone();
+
         for char in chars.to_string()[0..chars.len() - 1].chars() {
-            self.expect_char(&char, mutate)?;
+            self_clone.expect_char(&char, true)?;
         }
 
-        let end_pos = self.expect_char(&chars.chars().last().unwrap(), mutate)?;
+        let end_pos = self_clone.expect_char(&chars.chars().last().unwrap(), false)?;
+
+        if mutate {
+            // Consume the characters we should've consumed earlier
+            for _ in 0..chars.len() {
+                self.lexer.next_token();
+            }
+        }
 
         Ok(LineInfo::new(
             start_pos.begin_char(),
@@ -1066,7 +1075,7 @@ impl StreamedParser {
             if !allow_parenthesis_exclusion {
                 return Err(e)
             }
-            
+
             return Ok(Default::default());
         };
 
@@ -1097,7 +1106,7 @@ impl StreamedParser {
                     ))
                 }
             };
-            
+
             self.expect_chars(&":", true, &LineInfo::new_one_char(self.lexer.state().current_char, self.lexer.state().current_line))?;
 
             let t = self.parse_type()?;
@@ -1169,7 +1178,7 @@ impl StreamedParser {
             Ok(_) => (),
             Err(e) => return Some(Err(e)),
         }
-        
+
         let mut fields: Vec<(String, Indirection<AstNode>)> = vec![];
 
         while self.expect_char(&'.', true).is_ok() {
@@ -1190,12 +1199,12 @@ impl StreamedParser {
                     )))
                 }
             };
-            
+
             match self.expect_char(&'=', true) {
                 Ok(_) => (),
                 Err(e) => return Some(Err(e)),
             }
-            
+
             let value = match self.next_ast_node() {
                 None => {
                     return Some(Err(ParseError::UnexpectedEOF(
@@ -1206,7 +1215,7 @@ impl StreamedParser {
                 Some(Ok(node)) => node,
                 Some(Err(e)) => return Some(Err(e)),
             };
-            
+
             println!(".{name} = {value:?}");
 
             let _ = self.expect_char(&',', true);
@@ -1218,7 +1227,7 @@ impl StreamedParser {
             Ok(_) => (),
             Err(e) => return Some(Err(e)),
         }
-        
+
         Some(Ok(AstNode::DataInitExpr {
             name,
             fields,
@@ -1366,7 +1375,7 @@ impl StreamedParser {
                         line_info.begin_line(),
                         next.line_info().end_line(),
                     );
-                    
+
                     AstNode::PrefixOp(info, c.to_string(), Indirection::new(next))
                 } else if c == '(' {
                     match self.expect_char(&')', true) {
@@ -1460,7 +1469,7 @@ impl StreamedParser {
                                 caller.line_info().begin_char(),
                                 self.lexer.state().current_char,
                                 caller.line_info().begin_line(),
-                                self.lexer.state().current_line,  
+                                self.lexer.state().current_line,
                             ),
                             callee: Rc::from(caller),
                             args: args.into_boxed_slice(),
@@ -1740,7 +1749,7 @@ impl StreamedParser {
             return Some(Ok(left));
         };
 
-        if ADDITIVE_OPS.contains(&op.to_string().as_str()) {
+        if ADDITIVE_OPS.contains(&&*op.to_string()) {
             let _ = self.lexer.next_token();
 
             if op == '=' {
@@ -1864,24 +1873,6 @@ impl StreamedParser {
                 }
 
                 Err(e) => return Some(Err(e)),
-            }
-        }
-
-        if let Some(Ok(Token::Char(c, _))) = self.lexer.peek_next_token() {
-            if c == '=' {
-                let _ = self.expect_chars(&"=", true, &LineInfo::new_one_char(self.lexer.state().current_char, self.lexer.state().current_line));
-
-                let right = match self.next_ast_node()? {
-                    Ok(left) => left,
-                    Err(e) => return Some(Err(e)),
-                };
-
-                left = AstNode::InfixOp(LineInfo::new(
-                    left.line_info().begin_char(),
-                    self.lexer.state().current_char,
-                    left.line_info().begin_line(),
-                    self.lexer.state().current_line,
-                ), Rc::new(left), "=".into(), Rc::new(right));
             }
         }
 
@@ -2357,6 +2348,33 @@ impl StreamedParser {
         }))
     }
 
+    pub fn parse_while_stmt(&mut self) -> Option<Result<AstNode, ParseError>> {
+        println!("WHILE");
+
+        let start = self.expect_ident(&"while", true).unwrap();
+
+        let cond = match self.parse_comparative_expr()? {
+            Err(e) => return Some(Err(e)),
+            Ok(n) => n,
+        };
+
+        let block = match self.parse_block_expr() {
+            Ok(b) => b,
+            Err(e) => return Some(Err(e)),
+        };
+
+        Some(Ok(AstNode::WhileStmt {
+            line_info: LineInfo::new(
+                start.begin_char(),
+                self.lexer.state().current_char,
+                start.begin_line(),
+                self.lexer.state().current_line,
+            ),
+            cond: Rc::new(cond),
+            code: block,
+        }))
+    }
+
     pub fn parse_type_alias(&mut self) -> Option<Result<AstNode, ParseError>> {
         let start = self.expect_ident(&"type", true).unwrap();
 
@@ -2413,11 +2431,11 @@ impl StreamedParser {
         if let Err(e) = self.expect_char(&'(', true) {
             return Some(Err(e));
         }
-        
+
         let mut macro_def = Macro {
             arguments: Default::default(),
         };
-        
+
         while let Ok(_) = self.expect_char(&'$', true) {
             let name = match self.lexer.next_token() {
                 Some(Ok(Token::Ident(name, _))) => name,
@@ -2429,34 +2447,34 @@ impl StreamedParser {
             if let Err(e) = self.expect_char(&':', true) {
                 return Some(Err(e));
             }
-            
+
             let kind = match self.lexer.next_token() {
                 Some(Ok(Token::Ident(name, _))) => name,
                 Some(Ok(tk)) => return Some(Err(ParseError::ExpectedToken(self.file.clone(), Token::Debug("MACRO_ARG_NAME".into()), tk))),
                 Some(Err(e)) => return Some(Err(e)),
                 None => return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), "MACRO PARAMETER NAME".to_string())))
             };
-            
+
             let kind = match MacroArgKind::from_str(&self.file, &name, &kind) {
                 Ok(kind) => kind,
                 Err(e) => return Some(Err(e))
             };
-            
+
             macro_def.arguments.insert(name, kind);
         }
 
         if let Err(e) = self.expect_char(&')', true) {
             return Some(Err(e));
         }
-        
+
         self.macros.insert(name, macro_def);
 
         self.next_ast_node()
     }
-    
+
     pub fn parse_defer_stmt(&mut self) -> Option<Result<AstNode, ParseError>> {
         let start = self.expect_ident(&"defer", true).unwrap();
-        
+
         let block = if self.expect_char(&'{', false).is_ok() {
             match self.parse_block_expr() {
                 Err(e) => return Some(Err(e)),
@@ -2468,10 +2486,10 @@ impl StreamedParser {
                 Some(Err(e)) => return Some(Err(e)),
                 None => return Some(Err(ParseError::UnexpectedEOF(self.file.clone(), "DEFER CODE".to_string())))
             };
-            
+
             ParseBlock::Plain(Box::new([node]))
         };
-        
+
         Some(Ok(AstNode::DeferStmt(LineInfo::new(
             start.begin_char(),
             self.lexer.state().current_char,
@@ -2488,14 +2506,14 @@ impl StreamedParser {
             Some(Err(e)) => return Some(Err(e)),
             Some(Ok(matchee)) => matchee,
         };
-        
+
         match self.expect_char(&'{', true) {
             Ok(_) => (),
             Err(e) => return Some(Err(e)),
         };
-        
+
         let mut arms = vec![];
-        
+
         while self.expect_char(&'}', true).is_err() {
             if self.expect_ident(&"else", true).is_ok() {
                 let block = match self.parse_block_expr() {
@@ -2510,7 +2528,7 @@ impl StreamedParser {
                     is_else: true,
                     code: block,
                 });
-                
+
                 break
             }
 
@@ -2551,7 +2569,7 @@ impl StreamedParser {
             Ok(_) => (),
             Err(e) => return Some(Err(e)),
         };
-        
+
         Some(Ok(AstNode::MatchExpr {
             line_info: LineInfo::new(
                 start.begin_char(),
@@ -2726,6 +2744,35 @@ impl StreamedParser {
         )))
     }
 
+    pub fn parse_assignment_expr(&mut self) -> Option<Result<AstNode, ParseError>> {
+        eprintln!("PRE-ASSIGNMENT, next = {:?}", self.lexer.peek_next_token());
+
+        let mut left = match self.parse_bitwise_expr()? {
+            Ok(l) => l,
+            Err(e) => return Some(Err(e)),
+        };
+
+        eprintln!("ASSIGNMENT, next = {:?}", self.lexer.peek_next_token());
+
+        if let Ok(_) = self.expect_chars(&"=", true, &LineInfo::new_one_char(self.lexer.state().current_char, self.lexer.state().current_line)) {
+            eprintln!("ACTUAL ASSIGNMENT!!!!!!!!!");
+
+            let right = match self.parse_assignment_expr()? {
+                Ok(left) => left,
+                Err(e) => return Some(Err(e)),
+            };
+
+            left = AstNode::InfixOp(LineInfo::new(
+                left.line_info().begin_char(),
+                self.lexer.state().current_char,
+                left.line_info().begin_line(),
+                self.lexer.state().current_line,
+            ), Rc::new(left), "=".into(), Rc::new(right));
+        };
+
+        Some(Ok(left))
+    }
+
     pub fn next_ast_node(&mut self) -> Option<Result<AstNode, ParseError>> {
         if let Some(Ok(Token::Ident(ident, _))) = self.lexer.peek_next_token() {
             match ident.as_str() {
@@ -2739,12 +2786,13 @@ impl StreamedParser {
                 "extern" => self.parse_extern_stmt(),
                 "return" => self.parse_return_stmt(),
                 "for" => self.parse_for_in_expr(),
+                "while" => self.parse_while_stmt(),
                 "type" => self.parse_type_alias(),
                 "defer" => self.parse_defer_stmt(),
                 "match" => self.parse_match_stmt(),
                 "guard" => self.parse_guard_clause(),
                 "sizeof" => self.parse_sizeof_expr(),
-                _ => self.parse_bitwise_expr(),
+                _ => self.parse_assignment_expr(),
             }
         } else if let Some(Ok(Token::Char(c, _))) = self.lexer.peek_next_token() {
             match c {
