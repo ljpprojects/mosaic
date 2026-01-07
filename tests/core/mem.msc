@@ -1,0 +1,68 @@
+# Ripped from my implementation of the core module
+
+type AnyPtr = *const any;
+type HeapPtr = AnyPtr;
+type StackPtr = AnyPtr;
+type StaticPtr = AnyPtr;
+
+type AnyPtrMut = *mut any;
+type HeapPtrMut = AnyPtrMut;
+type StackPtrMut = AnyPtrMut;
+type StaticPtrMut = AnyPtrMut;
+
+extern fn malloc(size: i32) -> *mut? any
+extern fn memcpy(dest: AnyPtrMut, src: AnyPtr, len: i32) -> AnyPtrMut
+extern fn memset(dest: AnyPtrMut, value: i32, count: i32) -> AnyPtrMut
+extern fn free(ptr: AnyPtrMut) -> null
+
+fn alloc(size: i32) export -> *mut? any {
+    let ptr = guard malloc(size) else {
+        return (0 as i64) as *mut? any
+    };
+
+    memset(ptr, 0, size)
+
+    return ptr as *mut? any
+}
+
+fn dealloc(ptr: AnyPtrMut) export -> null {
+    return free(ptr)
+}
+
+fn AnyPtr::copy_into(self: AnyPtr, dest: AnyPtrMut, len: i32) export -> null {
+    memcpy(dest, self, len)
+
+    return null
+}
+
+fn memcopy(self: AnyPtr, dest: AnyPtrMut, len: i32) no_mangle export -> null {
+    memcpy(dest, self, len)
+
+    return null
+}
+
+fn AnyPtrMut::copy_from(self: AnyPtrMut, src: AnyPtr, len: i32) export -> null {
+    memcpy(self, src, len)
+
+    return null
+}
+
+fn AnyPtrMut::zero(self: AnyPtrMut, len: i32) export -> null {
+    memset(self, 0, len)
+
+    return null
+}
+
+fn AnyPtrMut::memset(self: AnyPtrMut, byte: i8, len: i32) export -> null {
+    memset(self, byte as i32, len)
+
+    return null
+}
+
+fn AnyPtrMut::deinit(self: AnyPtrMut) export -> null {
+    return dealloc(self)
+}
+
+# trait PtrMut {
+#     fn deinit(self: Self) -> null
+# }

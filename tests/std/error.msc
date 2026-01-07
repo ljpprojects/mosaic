@@ -1,0 +1,21 @@
+# Ripped from my implementation of the stdlib
+
+include devcore::mem;
+
+extern fn exit(code: i32) -> null;
+
+data Result {
+    mut value: *mut? any
+}
+
+type Result = data Result;
+
+fn Result::success(value: *mut? any) -> Result {
+    let self = guard alloc(16) else {
+        exit(1)
+
+        return (0 as i64) as Result
+    }
+
+    return self
+}

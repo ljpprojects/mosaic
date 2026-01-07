@@ -1,0 +1,12 @@
+include std::string
+
+type CString = *const i8
+type String = *const [i8]
+
+type MutCString = *mut i8
+type MutString = *mut [i8]
+
+extern fn puts(string: CString) -> null
+extern fn write(fd: i32, buf: CString, len: i32) -> i32
+
+fn print
