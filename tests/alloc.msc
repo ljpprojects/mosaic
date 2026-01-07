@@ -1,0 +1,34 @@
+# I think this is just how devcore::mem is implemented...
+
+extern fn malloc(size: i32) -> *mut? any
+extern fn memcpy(dest: *mut any, src: *const any, len: i32) -> *mut any
+extern fn memset(dest: *mut any, value: i32, count: i32) -> *mut any
+extern fn free(ptr: *mut any) -> null
+
+fn alloc(size: i32) export -> *mut? any {
+    let ptr = guard malloc(size) else {
+        return (0 as i64) as *mut? any
+    };
+
+    memset(ptr, 0, size)
+
+    return ptr as *mut? any
+}
+
+fn dealloc(ptr: *mut any) export -> null {
+    return free(ptr)
+}
+
+fn main -> i32 {
+    let p = guard alloc(4) else {
+        return 1
+    }
+
+    mut x = 4;
+
+    defer {
+        free(p)
+    }
+
+    return 0
+}

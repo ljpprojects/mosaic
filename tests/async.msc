@@ -1,0 +1,150 @@
+# Used to work but doesnt now I broke something, but shows some syntax
+
+include devcore::mem;
+include devstd::string;
+include devstd::io;
+
+type LibHandle = *mut any;
+type GenericFunction = *mut any;
+type pthread_t = *mut any;
+type maybe_pthread_t = *mut? any;
+type AsyncHandlerResult = *const? any;
+
+data AsyncHandler {
+    mut result: AsyncHandlerResult
+    mut finished: u8
+}
+
+type AsyncHandler = data AsyncHandler;
+type AsyncHandlerTask = fn(AsyncHandler) -> AsyncHandlerResult;
+
+extern fn memset(p: *mut any, d: i32, c: i32) -> null;
+extern fn memcpy(dist: *mut any, src: *mut any, l: i32) -> null;
+extern fn strlen(s: CString) -> i32;
+extern fn printf(fmt: CString, d: i64) -> null;
+extern fn puts(s: CString) -> null;
+extern fn exit(code: i32) -> null;
+extern fn free(p: *mut any) -> null;
+extern fn sleep(secs: u32) -> null;
+extern fn usleep(microsecs: u32) -> null;
+extern fn alloca(s: i32) -> *mut? any;
+extern fn dlopen(filename: CString, flags: i32) -> LibHandle;
+extern fn dlclose(handle: LibHandle) -> null;
+extern fn dlsym(handle: LibHandle, symbol: CString) -> GenericFunction;
+extern fn pthread_join(thread: pthread_t, idk: *mut? any) -> null;
+extern fn dlerror -> CString;
+extern fn _NSGetExecutablePath(buffer: CStringMut, size: *mut i32) -> i32;
+
+fn GenericFunction::address_of(file: String, name: String) export -> GenericFunction {
+    let lib = dlopen(file.to_c_string(), 1);
+    dlclose(lib);
+
+    return dlsym(lib, name.to_c_string());
+};
+
+fn AsyncHandlerResult::empty export -> AsyncHandlerResult {
+    return (0 as i64) as AsyncHandlerResult;
+};
+
+fn AsyncHandlerResult::clone_of(v: *const any, len: i32) export -> AsyncHandlerResult {
+    let p = alloc(sizeof AsyncHandlerResult);
+
+    memcopy(p, v, len);
+
+    return p;
+}
+
+fn AsyncHandlerResult::from(v: *const any) export -> AsyncHandlerResult {
+    return v;
+}
+
+extern fn pthread_create(thread: *mut pthread_t, f: *mut? any, task: fn(AsyncHandler) -> AsyncHandlerResult, handler: AsyncHandler) -> i32
+
+fn AsyncHandler::new alloc -> AsyncHandler {
+    let self = alloc(sizeof AsyncHandler) else {
+        printf("Could not allocate memory for AsyncHandler." as *const i8, 0 as i64);
+        exit(1);
+
+        return ((0 as i64) as *const any) as AsyncHandler;
+    };
+
+    return self as AsyncHandler;
+}
+
+fn AsyncHandler::complete(self: AsyncHandler) -> null {
+    AnyPtrMut::memset(self as *mut any, 1 as i8, sizeof u8);
+
+    return null
+}
+
+fn AsyncHandler::deinit(self: AsyncHandler) -> null {
+    return if (self.finished) {
+        dealloc(self as *mut any)
+    } else {
+        usleep(5000);
+        self.deinit()
+    }
+}
+
+fn AsyncHandler::await(self: AsyncHandler) -> AsyncHandlerResult {
+    return if (self.finished) {
+        self.result
+    } else {
+        usleep(5000);
+        self.await()
+    }
+}
+
+fn AsyncHandler::begin(self: AsyncHandler, task: AsyncHandlerTask) -> pthread_t {
+    memset(self as *mut any, 0, 1);
+
+    mut thread: pthread_t = (0 as i64) as pthread_t;
+
+    thread = pthread_create(&thread, (0 as i64) as *mut? any, task, self);
+
+    return thread;
+}
+
+fn wait(handler: AsyncHandler) export no_mangle -> AsyncHandlerResult {
+    sleep(2);
+    puts("Worker\0" as *const i8);
+    sleep(2);
+    handler.complete();
+
+    return AsyncHandlerResult::empty();
+}
+
+fn get_program_path export -> CString {
+    mut buf = guard alloc(1024) else {
+        exit(1);
+
+        return (0 as i64) as CString;
+    };
+
+    mut size = 1024;
+
+    if _NSGetExecutablePath(buf, &size) != 0 {
+        exit(1);
+    }
+
+    return buf;
+}
+
+# global mut lib_handle = dlopen(get_program_path(), 1);
+
+fn main(argc: i32, argv: *const *const i8) -> i32 {
+    let task: AsyncHandler = AsyncHandler::new();
+
+    let prog_name = String::from_c_string(argv[0]);
+    let wait_addr = GenericFunction::address_of(prog_name, "wait" as String);
+
+    task.begin(wait_addr);
+    task.await();
+    task.begin(wait_addr);
+
+    puts(argv[0]);
+
+    task.deinit();
+
+    return 0
+}

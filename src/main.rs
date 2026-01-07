@@ -3,6 +3,7 @@
 
 extern crate core;
 
+use std::alloc::alloc;
 use crate::cli::{Args, Command};
 use crate::compiler::cranelift::linker::Linker;
 use crate::compiler::cranelift::trace::Trace;
@@ -15,7 +16,9 @@ use crate::reader::CharReader;
 use clap::Parser;
 use std::path::PathBuf;
 use std::process::exit;
+use std::ptr::null;
 use std::str::FromStr;
+use std::thread;
 use cranelift_codegen::gimli;
 use cranelift_codegen::isa::lookup;
 use target_lexicon::{Architecture, Triple};
@@ -74,6 +77,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }?
     }
+
+    // thread::spawn(|| null());
 
     Ok(())
 }

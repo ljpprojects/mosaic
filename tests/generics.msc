@@ -1,0 +1,14 @@
+# Steps to implement:
+# 1. Look ahead for usages of 'nop'
+# 2. Verify that each usage of nop is correct
+# 3. Compile nop for each value of T
+
+# We used to have generics but now don't, good luck
+
+fn nop<T>(v: T) -> T {
+    return v
+}
+
+fn main -> i32 {
+    return nop(0)
+}

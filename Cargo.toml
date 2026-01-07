@@ -55,15 +55,15 @@ debug = "line-tables-only"
 
 
 [dependencies]
-cranelift-codegen = { version = "0.118.0" }
-cranelift-module = { version = "0.118.0" }
-cranelift-object = "0.118.0"
-cranelift-frontend = { version = "0.118.0" }
+cranelift-codegen = { version = "0.120.1" }
+cranelift-module = { version = "0.120.1" }
+cranelift-object = "0.120.1"
+cranelift-frontend = { version = "0.120.1" }
 colored = "3.0.0"
-clap = { version = "4.5.36", features = ["derive"] }
+clap = { version = "4.5.54", features = ["derive"] }
 either = "1.15.0"
-tokio = { version = "1.44.2", features = ["rt", "rt-multi-thread", "macros"] }
-downcast-rs = "2.0.1"
-target-lexicon = "0.13.2"
-mmap-rs = "0.6.1"
-homedir = "0.3.4"
+tokio = { version = "1.49", features = ["rt", "rt-multi-thread", "macros"] }
+downcast-rs = "2.0"
+target-lexicon = "0.13"
+mmap-rs = "0.7"
+homedir = "0.3"

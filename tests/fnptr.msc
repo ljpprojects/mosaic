@@ -1,0 +1,28 @@
+# Function pointer demo, which doesnt use stdlib and compiles on my machine...
+
+extern fn puts(s: *const i8) -> null
+extern fn dlopen(path: *const i8, mode: i32) -> *const any
+extern fn dlsym(lib: *const any, sym: *const i8) -> *const any
+extern fn dlclose(lib: *const any) -> null
+
+fn foo export no_mangle -> null {
+    return puts("FOOOOO\0" as *const i8)
+}
+
+fn do(task: fn() -> null) -> null {
+    return task()
+}
+
+fn main(argc: i32, argv: *const *const i8) -> i32 {
+    let lib = dlopen("./tests/fnptr\0" as *const i8, 1)
+
+    defer {
+        dlclose(lib)
+    }
+
+    let f = dlsym(lib, "foo\0" as *const i8) as fn() -> null
+
+    do(f)
+
+    return 0
+}

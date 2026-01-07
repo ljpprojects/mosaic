@@ -17,6 +17,7 @@ pub fn alignment_of_cranelift_type_on_architecture(ty: &CraneliftType, triple: &
     match (triple.architecture, triple.data_model().ok()?) {
         (Architecture::X86_64, CDataModel::LP64) | (Architecture::Riscv64(..), CDataModel::LP64) | (Architecture::S390x, _) | (Architecture::Aarch64(Aarch64Architecture::Aarch64), _) => match ty {
             CraneliftType::Any | CraneliftType::Generic(..) => None,
+            CraneliftType::Declared(_, t) => alignment_of_cranelift_type_on_architecture(t, triple),
             CraneliftType::Int8 | CraneliftType::UInt8 | CraneliftType::Null | CraneliftType::Bool => Some(1),
             CraneliftType::Int16 | CraneliftType::UInt16 => Some(2),
             CraneliftType::Int32 | CraneliftType::UInt32 => Some(4),

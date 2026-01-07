@@ -1,9 +1,12 @@
+use std::ops::Deref;
 use crate::compiler::cranelift::types::CraneliftType;
+use crate::parser::TypeBound;
 use crate::ternary;
 
 pub fn mangle_type(ty: &CraneliftType) -> String {
     match ty {
-        CraneliftType::Generic(..) => ty.to_string(), // panics
+        CraneliftType::Generic(name, _) => format!("G{}{name}", name.len()),
+        CraneliftType::Declared(_, t) => format!("{}", mangle_type(t.deref())),
         CraneliftType::Any => "A".into(),
         CraneliftType::Int8 => "c".into(),
         CraneliftType::Int16 => "s".into(),

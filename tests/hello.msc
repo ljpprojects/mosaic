@@ -1,0 +1,20 @@
+# Fancy hello world example, but devstd::io is just fancy abstraction of read/write syscalls
+# It compiles on my system, but not on yours unless you replace all the stdlib stuff
+
+include devstd::io
+
+fn main -> i32 {
+    let string = "Hello, World!" as *const [i8];
+
+    let maybe_stdout: MaybeStream = (guard Stream::stdout() else {
+        return 1
+    });
+
+    let stdout = maybe_stdout.unwrap();
+
+    stdout.write(string as ByteArray)
+
+    stdout.deinit()
+
+    return 0
+}

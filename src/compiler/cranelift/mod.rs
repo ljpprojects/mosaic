@@ -11,11 +11,10 @@ pub mod module;
 pub mod trace;
 pub mod types;
 pub mod value;
-pub mod indexing;
 
 use crate::cli::Command;
 use crate::compiler::cranelift::builders::VariableBuilder;
-use crate::compiler::cranelift::mangle::{mangle_function, mangle_method};
+use crate::compiler::cranelift::mangle::{mangle_function, mangle_method, mangle_type};
 use crate::compiler::cranelift::meta::{DataDeclMeta, FunctionMeta, MustFreeMeta};
 use crate::compiler::cranelift::module::CraneliftModule;
 use crate::compiler::cranelift::trace::{ContextKind, Trace};
@@ -32,7 +31,7 @@ use cranelift_codegen::entity::EntityRef;
 use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
 use cranelift_codegen::ir::immediates::Imm64;
 use cranelift_codegen::ir::stackslot::StackSize;
-use cranelift_codegen::ir::{AbiParam, Block, ExtFuncData, ExternalName, FuncRef, Function, GlobalValue, GlobalValueData, InstBuilder, MemFlags, Signature, StackSlot, StackSlotData, StackSlotKind, UserExternalName, UserExternalNameRef, UserFuncName, Value};
+use cranelift_codegen::ir::{AbiParam, Block, BlockArg, ExtFuncData, ExternalName, FuncRef, Function, GlobalValue, GlobalValueData, InstBuilder, MemFlags, Signature, StackSlot, StackSlotData, StackSlotKind, UserExternalName, UserExternalNameRef, UserFuncName, Value};
 use cranelift_codegen::isa::{Builder, CallConv, OwnedTargetIsa};
 use cranelift_codegen::settings::Configurable;
 use cranelift_codegen::{ir, isa, settings, Context};
@@ -44,11 +43,12 @@ use std::fs;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::rc::Rc;
-use downcast_rs::Downcast;
 use crate::compiler::align::{alignment_of_cranelift_type_on_architecture, calculate_data_cranelift};
+use crate::compiler::indexing::FileIndexer;
+use crate::ternary;
 
 macro_rules! get_fn {
-    ($self: expr, $name:expr) => {
+    ($self:expr, $name:expr) => {
         match $self.functions.get($name) {
             Some(f) => Some(f),
             None => {
@@ -85,7 +85,7 @@ macro_rules! get_fn_variant {
                         None => continue,
                     }
                 }
-                
+
                 res.map(|v| v.iter().map(|(a, b)| (a.downcast_ref::<CraneliftType>().unwrap().clone(), b.iter().map(|a| a.downcast_ref::<CraneliftType>().unwrap().clone()).collect::<Vec<_>>())).collect::<Vec<_>>())
             }
         }
@@ -155,9 +155,13 @@ pub struct CraneliftGenerator {
 
     /// Stores the argument given to the program
     command: Option<Command>,
-    
+
     /// A map of mangled function names to their cranelift FuncId for calling function pointers.
     fn_refs: HashMap<String, (Function, FuncId)>,
+
+    nodes: Vec<AstNode>,
+
+    //Indexer: FileIndexer,
 }
 
 impl CraneliftGenerator {
@@ -218,6 +222,7 @@ impl CraneliftGenerator {
             must_frees: HashSet::new(),
             command,
             fn_refs: HashMap::new(),
+            nodes: vec![],
         }
     }
 
@@ -231,8 +236,22 @@ impl CraneliftGenerator {
     ) -> Result<(Value, Type), Box<[CompilationError]>> {
         match &**op {
             "=" => {
-                let AstNode::Identifier(l, name) = left else {
-                    if let AstNode::IdxAccess(l, of, idx) = left {
+                match left {
+                    AstNode::Identifier(_, name) => {
+                        let (right, rty) = self.compile_body_expr(right, func, trace)?;
+
+                        self.var_builder.set_var(
+                            func,
+                            name,
+                            &right,
+                            &rty,
+                            self.file_path.clone(),
+                            trace,
+                        )?;
+
+                        Ok((right, rty))
+                    }
+                    AstNode::IdxAccess(_, of, idx) => {
                         let (right, rty) = self.compile_body_expr(right, func, trace)?;
 
                         let (of, ty) = self.compile_body_expr(
@@ -262,38 +281,70 @@ impl CraneliftGenerator {
                             0,
                         );
 
-                        return Ok((right, rty));
-                    } else if let AstNode::PrefixOp(_l, op, val) = left {
-                        if &**op == "*" {
-                            let (addr, _) = self.compile_body_expr(val, func, trace)?;
-                            let (right, rty) = self.compile_body_expr(right, func, trace)?;
-
-                            // TODO: Type checking
-
-                            func.ins()
-                                .store(self.var_builder.flags, right, addr, 0);
-
-                            return Ok((right, rty));
-                        } else {
-                            todo!("Assignment op with lhs {left}")
-                        }
-                    } else {
-                        todo!("Assignment op with lhs {left}")
+                        Ok((right, rty))
                     }
-                };
+                    AstNode::PrefixOp(_, op, val) if &**op == "*" => {
+                        let (addr, _) = self.compile_body_expr(val, func, trace)?;
+                        let (right, rty) = self.compile_body_expr(right, func, trace)?;
 
-                let (right, rty) = self.compile_body_expr(right, func, trace)?;
+                        // TODO: Type checking
 
-                self.var_builder.set_var(
-                    func,
-                    name,
-                    &right,
-                    &rty,
-                    self.file_path.clone(),
-                    trace,
-                )?;
+                        func.ins()
+                            .store(self.var_builder.flags, right, addr, 0);
 
-                Ok((right, rty))
+                        Ok((right, rty))
+                    }
+                    AstNode::MemberExpr(_, path) => {
+                        if path.len() != 2 {
+                            todo!("Chained member assignment")
+                        }
+
+                        let (ptr, pty) = self.var_builder.get_var(func, path.first().unwrap(), self.file_path.clone(), trace)?;
+                        let (right, rty) = self.compile_body_expr(right, func, trace)?;
+
+                        let pty = match pty {
+                            Type::Declared(_, inner) => inner.deref().clone(),
+                            ty => ty
+                        };
+
+                        let Type::DataPtr(name) = pty else {
+                            todo!("Handle error case: invalid member access type: {pty:?}")
+                        };
+
+                        let meta = self.data_declarations.get(&name).unwrap();
+                        let Some((offset, _, _, ty)) = meta.fields.iter().find(|(_, _, name, _)| name == path.get(1).unwrap()) else {
+                            todo!("Handle error case: field does not exist in member assignment")
+                        };
+
+                        let ty = ty.downcast_ref::<CraneliftType>().unwrap().clone();
+
+                        if rty != ty {
+                            todo!("Handle error case: invalid type")
+                        }
+
+                        let data = StackSlotData {
+                            kind: StackSlotKind::ExplicitSlot,
+                            size: rty.size_bytes(&self.isa) as u32,
+                            align_shift: 0
+                        };
+
+                        let slot = func.create_sized_stack_slot(data);
+                        let size = func.ins().iconst(ir::types::I32, rty.size_bytes(&self.isa) as i64);
+                        let addr = func.ins().stack_addr(self.isa.pointer_type(), slot, *offset as i32);
+
+                        let mut sig = self.module.make_signature();
+
+                        sig.params.extend([AbiParam::new(self.isa.pointer_type()), AbiParam::new(self.isa.pointer_type()), AbiParam::new(ir::types::I32)]);
+
+                        let fid = self.module.declare_function("memcpy", Linkage::Import, &sig).unwrap();
+                        let memcpy = self.module.declare_func_in_func(fid, func.func);
+
+                        func.ins().call(memcpy, &[ptr, addr, size]);
+
+                        Ok((right, rty))
+                    }
+                    _ => todo!("Handle error case: cannot assign to {left}")
+                }
             }
             ">>" => {
                 let (left, lty) = self.compile_body_expr(left, func, trace)?;
@@ -468,7 +519,7 @@ impl CraneliftGenerator {
                 let (right, _rty) = self.compile_body_expr(right, func, trace)?;
 
                 let (res, ty) = if matches!(lty, Type::Float32) || matches!(lty, Type::Float64) {
-                    (func.ins().fadd(left, right), Type::Float64)
+                    (func.ins().fadd(left, right), lty)
                 } else {
                     (func.ins().iadd(left, right), lty)
                 };
@@ -492,7 +543,7 @@ impl CraneliftGenerator {
                 let (right, _rty) = self.compile_body_expr(right, func, trace)?;
 
                 let (res, ty) = if matches!(lty, Type::Float32) || matches!(lty, Type::Float64) {
-                    (func.ins().fmul(left, right), Type::Float64)
+                    (func.ins().fmul(left, right), lty)
                 } else {
                     (func.ins().imul(left, right), lty)
                 };
@@ -557,41 +608,40 @@ impl CraneliftGenerator {
                 Ok((func.ins().ineg(right), Type::Bool))
             }
             "&" => {
-                if let AstNode::Identifier(_l, name) = right {
-                    if let Some(f) = get_fn!(self, name) {
-                        let user_name = UserExternalName {
-                            namespace: 0,
-                            index: self.functions.get(name).unwrap().index
+                match right {
+                    AstNode::MemberExpr(_, path) => {
+                        if path.len() != 2 {
+                            todo!("Chained member access")
+                        }
+
+                        let (ptr, pty) = self.var_builder.get_var(func, path.first().unwrap(), self.file_path.clone(), trace)?;
+
+                        let pty = match pty {
+                            Type::Declared(_, inner) => inner.deref().clone(),
+                            ty => ty
                         };
 
-                        let name_ref: UserExternalNameRef = func.func.declare_imported_user_function(user_name);
-
-                        let sig_ref = func.import_signature(self.functions.get(name).unwrap().sig.clone());
-
-                        let data = ExtFuncData {
-                            name: ExternalName::User(name_ref),
-                            signature: sig_ref,
-                            colocated: true,
+                        let Type::DataPtr(name) = pty.clone() else {
+                            todo!("Handle error case: invalid member access type: {pty:?}")
                         };
 
-                        let fn_ref = func.import_function(data);
-                        
-                        let ptr = func.ins().func_addr(self.isa.pointer_type(), fn_ref);
-                        let ty = Type::FuncPtr {
-                            ret_type: Box::new(f.return_type.downcast_ref::<CraneliftType>().unwrap().clone()),
-                            arg_types: f.arg_meta.iter().map(|(_, b)| Box::new(b.downcast_ref::<CraneliftType>().unwrap().clone())).collect(),
+                        let meta = self.data_declarations.get(&name).unwrap();
+                        let Some((offset, _, _, ty)) = meta.fields.iter().find(|(_, _, name, _)| name == path.get(1).unwrap()) else {
+                            todo!("Handler error case: field does not exist in member access")
                         };
-                        
-                        return Ok((ptr, ty))
+
+                        let offset_ptr = func.ins().iadd_imm(ptr, *offset as i64);
+
+                        Ok((offset_ptr, pty))
+                    },
+                    AstNode::Identifier(_, name) => {
+                        let (ptr, ty, mutable) =
+                            self.var_builder
+                                .get_var_ptr(func, name, self.file_path.clone(), trace)?;
+
+                        Ok((ptr, Type::CPtr(Indirection::new(ty), mutable, false)))
                     }
-                    
-                    let (ptr, ty, mutable) =
-                        self.var_builder
-                            .get_var_ptr(func, name, self.file_path.clone(), trace)?;
-
-                    Ok((ptr, Type::CPtr(Indirection::new(ty), mutable, false)))
-                } else {
-                    Err(Box::new([CompilationError::UndefinedOperator(self.file_path.clone(), trace.clone(), "& (on an expression)".to_string())]))
+                    _ => Err(Box::new([CompilationError::UndefinedOperator(self.file_path.clone(), trace.clone(), "& (on an expression)".to_string())]))
                 }
             }
             "*" => {
@@ -617,7 +667,7 @@ impl CraneliftGenerator {
         trace: &Trace,
     ) -> Result<(Value, Type), Box<[CompilationError]>> {
         match expr {
-            AstNode::SizeOf(_l, ty) => Ok((
+            AstNode::SizeOf(_, ty) => Ok((
                 func.ins().iconst(Type::Int32.into_cranelift(&self.isa), self.tg.compile_type_no_tgs(ty, &self.isa).size_bytes(&self.isa) as i64),
                 Type::Int32
             )),
@@ -637,12 +687,11 @@ impl CraneliftGenerator {
 
                 Ok((r.1, r.2))
             },
-            AstNode::BooleanLiteral(_l, b) if *b => {
-                Ok((func.ins().iconst(ir::types::I8, Imm64::new(1)), Type::Bool))
+
+            AstNode::BooleanLiteral(_, b) => {
+                Ok((func.ins().iconst(ir::types::I8, Imm64::new(ternary!(*b => 1; 0))), Type::Bool))
             }
-            AstNode::BooleanLiteral(..) => {
-                Ok((func.ins().iconst(ir::types::I8, Imm64::new(0)), Type::Bool))
-            }
+
             AstNode::NullLiteral(..) => {
                 Ok((func.ins().iconst(ir::types::I8, Imm64::new(0)), Type::Null))
             }
@@ -662,9 +711,16 @@ impl CraneliftGenerator {
 
                 let (ptr, pty) = self.var_builder.get_var(func, path.first().unwrap(), self.file_path.clone(), trace)?;
 
+                let pty = match pty {
+                    Type::Declared(_, inner) => inner.deref().clone(),
+                    ty => ty
+                };
+
                 let Type::DataPtr(name) = pty else {
                     todo!("Handle error case: invalid member access type: {pty:?}")
                 };
+
+                println!("Using data decl {name}");
 
                 let meta = self.data_declarations.get(&name).unwrap();
                 let Some((offset, _, _, ty)) = meta.fields.iter().find(|(_, _, name, _)| name == path.get(1).unwrap()) else {
@@ -718,6 +774,11 @@ impl CraneliftGenerator {
                 let (cond, cty) = self.compile_body_expr(cond.deref(), func, trace)?;
                 let check = func.ins().icmp_imm(IntCC::NotEqual, cond, 0);
 
+                let cty = match cty {
+                    Type::Declared(_, ty) => ty.deref().clone(),
+                    t => t
+                };
+
                 if !cty.is_pointer() {
                     todo!("Handle error case: invalid type for guard clause")
                 }
@@ -729,7 +790,7 @@ impl CraneliftGenerator {
                 let end_block = func.create_block();
                 let else_block = func.create_block();
 
-                func.ins().brif(check, end_block, &[cond], else_block, &[]);
+                func.ins().brif(check, end_block, &[], else_block, &[]);
                 func.switch_to_block(else_block);
 
                 let (_, filled) = self.compile_body(else_code, func, trace)?;
@@ -740,9 +801,7 @@ impl CraneliftGenerator {
 
                 func.switch_to_block(end_block);
 
-                let [val] = func.block_params(end_block) else {
-                    unreachable!()
-                };
+                let val = cond;
 
                 let new_type = match cty {
                     Type::CPtr(i, m, _) => Type::CPtr(i, m, false),
@@ -751,7 +810,7 @@ impl CraneliftGenerator {
                     _ => unreachable!()
                 };
 
-                Ok((*val, new_type))
+                Ok((val, new_type))
             },
             AstNode::IdxAccess(_l, of, idx) => {
                 let (of, ty) = self.compile_body_expr(of, func, trace)?;
@@ -779,12 +838,275 @@ impl CraneliftGenerator {
                 ))
             }
             AstNode::CallExpr { callee, args, .. } => {
-                let AstNode::Identifier(_l, name) = callee.as_ref() else {
-                    let AstNode::Path(_l, p) = callee.as_ref() else {
-                        let AstNode::MemberExpr(_l, p) = callee.as_ref() else {
-                            panic!("Implement error here (invalid callee)")
+                match callee.as_ref() {
+                    AstNode::Identifier(_, name) => {
+                        let mut value_args = vec![];
+                        let mut arg_types = vec![];
+
+                        for arg in args.iter() {
+                            let expr = self.compile_body_expr(
+                                arg,
+                                func,
+                                &trace.nested_ctx(ContextKind::FuncArg(name.clone())),
+                            )?;
+
+                            value_args.push(expr.0);
+
+                            arg_types.push(expr.1);
+                        }
+
+                        // we need to call a function pointer
+                        if let Ok((f, Type::FuncPtr { ret_type, arg_types })) = self.var_builder.get_var(func, name, self.file_path.clone(), trace) {
+                            let mut signature = self.module.make_signature();
+
+                            signature.returns.push(AbiParam::new(ret_type.clone().into_cranelift(&self.isa)));
+                            signature.params.extend(arg_types.iter().map(|ty| AbiParam::new(ty.clone().into_cranelift(&self.isa))));
+
+                            let sig_ref = func.import_signature(signature);
+
+                            let ret = func.ins().call_indirect(sig_ref, f, value_args.as_slice());
+                            let ret = func
+                                .inst_results(ret)
+                                .first()
+                                .copied()
+                                .unwrap_or(func.ins().iconst(ir::types::I8, 0));
+
+                            return Ok((ret, ret_type.deref().clone()))
+                        }
+
+                        let Some(fn_meta) = get_fn!(self, name) else {
+                            if let Some(variant) = get_fn_variant!(self, name) {
+                                let vec = variant
+                                    .iter()
+                                    .filter(|(_, args)| {
+                                        arg_types
+                                            .iter()
+                                            .enumerate()
+                                            .all(|(i, t)| t.cmp_eq(Rc::new(args.get(i).unwrap().clone()) as Rc<dyn CompilationType>))
+                                    })
+                                    .collect::<Vec<_>>();
+
+                                let Some((ret_type, _)) = vec.first() else {
+                                    return Err(Box::new([CompilationError::InvalidSignature(
+                                        self.file_path.clone(),
+                                        trace.clone(),
+                                        name.clone(),
+                                        Rc::new(Type::Any) as Rc<dyn CompilationType>,
+                                        arg_types.into_iter().map(|t| Rc::new(t) as Rc<dyn CompilationType>).collect(),
+                                    )]));
+                                };
+
+                                let mangled_name = mangle_function(name, arg_types.as_slice(), ret_type);
+
+                                let Some(fn_meta) = get_fn!(self, &mangled_name) else {
+                                    return Err(Box::new([CompilationError::InvalidSignature(
+                                        self.file_path.clone(),
+                                        trace.clone(),
+                                        name.clone(),
+                                        Rc::new(ret_type.clone()) as Rc<dyn CompilationType>,
+                                        arg_types.into_iter().map(|t| Rc::new(t) as Rc<dyn CompilationType>).collect(),
+                                    )]));
+                                };
+
+                                let fid = self
+                                    .module
+                                    .declare_function(&mangled_name, Linkage::Import, &fn_meta.sig)
+                                    .unwrap();
+
+                                let local_func = self.module.declare_func_in_func(fid, func.func);
+
+                                let ret = func.ins().call(local_func, value_args.as_slice());
+                                let ret = func
+                                    .inst_results(ret)
+                                    .first()
+                                    .map(|v| v.clone())
+                                    .unwrap_or(func.ins().iconst(ir::types::I8, 0));
+
+                                if fn_meta.modifiers.contains(&Modifier::AutoFree) {
+                                    if self.auto_frees.len() == 0 {
+                                        self.auto_frees.push(HashSet::new());
+                                    }
+
+                                    self.auto_frees.last_mut().unwrap().insert(ret.clone());
+                                } else if fn_meta.modifiers.contains(&Modifier::MustFree) {
+                                    self.must_frees
+                                        .insert((ret.clone(), mangled_name.clone()).into());
+                                }
+
+                                if value_args.len() != 0 && fn_meta.modifiers.contains(&Modifier::Dealloc) {
+                                    for item in self.must_frees.clone() {
+                                        if item.value != ret.clone() {
+                                            continue;
+                                        }
+
+                                        self.must_frees.remove(&item);
+
+                                        break;
+                                    }
+                                }
+
+                                return Ok((ret, fn_meta.return_type.downcast_ref::<CraneliftType>().unwrap().clone()));
+                            }
+
+                            let (f, fty) = self
+                                .var_builder
+                                .get_var(func, name, self.file_path.clone(), trace)
+                                .map_err(|_| {
+                                    Box::from(
+                                        [CompilationError::UndefinedFunction(
+                                            self.file_path.clone(),
+                                            trace.clone(),
+                                            name.clone(),
+                                        )]
+                                            .as_slice(),
+                                    )
+                                })?;
+
+                            let Type::FuncPtr {
+                                ret_type,
+                                arg_types,
+                            } = fty
+                            else {
+                                return Err(Box::from(
+                                    [CompilationError::UndefinedFunction(
+                                        self.file_path.clone(),
+                                        trace.clone(),
+                                        name.clone(),
+                                    )]
+                                        .as_slice(),
+                                ));
+                            };
+
+                            let mut sig = Signature::new(self.isa.default_call_conv());
+
+                            sig.returns.push(AbiParam::new(
+                                ret_type.deref().clone().into_cranelift(&self.isa),
+                            ));
+                            sig.params.extend(
+                                arg_types
+                                    .iter()
+                                    .map(|t| AbiParam::new(t.deref().clone().into_cranelift(&self.isa))),
+                            );
+
+                            let fid = self
+                                .module
+                                .declare_function(name, Linkage::Import, &sig)
+                                .unwrap();
+
+                            let local_func = self.module.declare_func_in_func(fid, func.func);
+
+                            let ret = func.ins().call(local_func, value_args.as_slice());
+
+                            let ret = func
+                                .inst_results(ret)
+                                .first()
+                                .map(|v| v.clone())
+                                .unwrap_or(func.ins().iconst(ir::types::I8, 0));
+
+                            return Ok((ret, ret_type.deref().clone()));
                         };
 
+                        let fid = self
+                            .module
+                            .declare_function(name, Linkage::Import, &fn_meta.sig)
+                            .unwrap();
+
+                        let local_func = self.module.declare_func_in_func(fid, func.func);
+
+                        let ret = func.ins().call(local_func, value_args.as_slice());
+                        let ret = func
+                            .inst_results(ret)
+                            .first()
+                            .cloned()
+                            .unwrap_or(func.ins().iconst(ir::types::I8, 0));
+
+                        Ok((ret, fn_meta.return_type.downcast_ref::<CraneliftType>().unwrap().clone()))
+                    },
+
+                    AstNode::Path(_, p) => {
+                        assert_eq!(p.len(), 2); // TODO: Handle this error case properly
+
+                        let of = p.first().unwrap();
+                        let method_name = p.last().unwrap();
+
+                        let mut value_args = vec![];
+                        let mut arg_types = vec![];
+
+                        for arg in args.iter() {
+                            let expr = self.compile_body_expr(
+                                arg,
+                                func,
+                                &trace.nested_ctx(ContextKind::FuncArg(method_name.clone())),
+                            )?;
+
+                            value_args.push(expr.0);
+
+                            arg_types.push(expr.1);
+                        }
+
+                        let Some(variant) = get_fn_variant!(self, method_name) else {
+                            return Err(Box::new([CompilationError::InvalidSignature(
+                                self.file_path.clone(),
+                                trace.clone(),
+                                format!("{of}::{method_name}"),
+                                Rc::new(Type::Any) as Rc<dyn CompilationType>,
+                                arg_types.into_iter().map(|t| Rc::new(t) as Rc<dyn CompilationType>).collect(),
+                            )]));
+                        };
+
+                        let vec = variant
+                            .iter()
+                            .filter(|(_, args)| {
+                                arg_types
+                                    .iter()
+                                    .enumerate()
+                                    .all(|(i, t)| t.cmp_eq(Rc::new(args.get(i).unwrap().clone()) as Rc<dyn CompilationType>))
+                            })
+                            .collect::<Vec<_>>();
+
+                        let Some((ret_type, _)) = vec.first() else {
+                            return Err(Box::new([CompilationError::InvalidSignature(
+                                self.file_path.clone(),
+                                trace.clone(),
+                                method_name.clone(),
+                                Rc::new(Type::Any) as Rc<dyn CompilationType>,
+                                arg_types.into_iter().map(|t| Rc::new(t) as Rc<dyn CompilationType>).collect(),
+                            )]));
+                        };
+
+                        let mangled_name =
+                            mangle_method(of, method_name, arg_types.as_slice(), ret_type);
+
+                        let Some(fn_meta) = get_fn!(self, &mangled_name) else {
+                            println!("(mangled = {mangled_name}) fns = {:?}", self.functions.iter().map(|(n, _)| n).collect::<Vec<_>>());
+
+                            return Err(Box::new([CompilationError::InvalidSignature(
+                                self.file_path.clone(),
+                                trace.clone(),
+                                method_name.clone(),
+                                Rc::new(ret_type.clone()) as Rc<dyn CompilationType>,
+                                arg_types.into_iter().map(|t| Rc::new(t) as Rc<dyn CompilationType>).collect(),
+                            )]));
+                        };
+
+                        let fid = self
+                            .module
+                            .declare_function(&mangled_name, Linkage::Import, &fn_meta.sig)
+                            .unwrap();
+
+                        let local_func = self.module.declare_func_in_func(fid, func.func);
+
+                        let ret = func.ins().call(local_func, value_args.as_slice());
+                        let ret = func
+                            .inst_results(ret)
+                            .first()
+                            .map(|v| v.clone())
+                            .unwrap_or(func.ins().iconst(ir::types::I8, 0));
+
+                        Ok((ret, fn_meta.return_type.downcast_ref::<CraneliftType>().unwrap().clone()))
+                    },
+
+                    AstNode::MemberExpr(_, p) => {
                         assert_eq!(p.len(), 2); // TODO: Handle this error case properly
 
                         let this =
@@ -806,7 +1128,7 @@ impl CraneliftGenerator {
 
                             arg_types.push(expr.1);
                         }
-                        
+
                         let Some(variant) = get_fn_variant!(self, method_name) else {
                             return Err(Box::new([CompilationError::InvalidSignature(
                                 self.file_path.clone(),
@@ -838,7 +1160,11 @@ impl CraneliftGenerator {
                         };
 
                         let mangled_name = mangle_method(
-                            &this.1.to_string(),
+                            &match &this.1 {
+                                Type::DataPtr(n) => n.clone(),
+                                Type::Declared(name, _) => name.clone(),
+                                _ => mangle_type(&this.1)
+                            },
                             method_name,
                             arg_types.as_slice(),
                             ret_type,
@@ -867,348 +1193,34 @@ impl CraneliftGenerator {
                             .first().copied()
                             .unwrap_or(func.ins().iconst(ir::types::I8, 0));
 
-                        if fn_meta.modifiers.contains(&Modifier::AutoFree) {
-                            if self.auto_frees.len() == 0 {
-                                self.auto_frees.push(HashSet::new());
-                            }
-
-                            self.auto_frees.last_mut().unwrap().insert(ret.clone());
-                        } else if fn_meta.modifiers.contains(&Modifier::MustFree) {
-                            self.must_frees
-                                .insert((ret.clone(), mangled_name.clone()).into());
-                        }
-
-                        if value_args.len() != 0 && fn_meta.modifiers.contains(&Modifier::Dealloc) {
-                            for item in self.must_frees.clone() {
-                                if item.value != ret.clone() {
-                                    continue;
-                                }
-
-                                self.must_frees.remove(&item);
-
-                                break;
-                            }
-                        }
-
-                        return Ok((ret, fn_meta.return_type.clone().downcast_ref::<CraneliftType>().unwrap().clone()));
-                    };
-
-                    assert_eq!(p.len(), 2); // TODO: Handle this error case properly
-
-                    let of = p.first().unwrap();
-                    let method_name = p.last().unwrap();
-
-                    let mut value_args = vec![];
-                    let mut arg_types = vec![];
-
-                    for arg in args.iter() {
-                        let expr = self.compile_body_expr(
-                            arg,
-                            func,
-                            &trace.nested_ctx(ContextKind::FuncArg(method_name.clone())),
-                        )?;
-
-                        value_args.push(expr.0);
-
-                        arg_types.push(expr.1);
+                        Ok((ret, fn_meta.return_type.clone().downcast_ref::<CraneliftType>().unwrap().clone()))
                     }
 
-                    let Some(variant) = get_fn_variant!(self, method_name) else {
-                        return Err(Box::new([CompilationError::InvalidSignature(
-                            self.file_path.clone(),
-                            trace.clone(),
-                            format!("{of}::{method_name}"),
-                            Rc::new(Type::Any) as Rc<dyn CompilationType>,
-                            arg_types.into_iter().map(|t| Rc::new(t) as Rc<dyn CompilationType>).collect(),
-                        )]));
-                    };
-
-                    let vec = variant
-                        .iter()
-                        .filter(|(_, args)| {
-                            arg_types
-                                .iter()
-                                .enumerate()
-                                .all(|(i, t)| t.cmp_eq(Rc::new(args.get(i).unwrap().clone()) as Rc<dyn CompilationType>))
-                        })
-                        .collect::<Vec<_>>();
-
-                    let Some((ret_type, _)) = vec.first() else {
-                        return Err(Box::new([CompilationError::InvalidSignature(
-                            self.file_path.clone(),
-                            trace.clone(),
-                            method_name.clone(),
-                            Rc::new(Type::Any) as Rc<dyn CompilationType>,
-                            arg_types.into_iter().map(|t| Rc::new(t) as Rc<dyn CompilationType>).collect(),
-                        )]));
-                    };
-
-                    let mangled_name =
-                        mangle_method(of, method_name, arg_types.as_slice(), ret_type);
-
-                    let Some(fn_meta) = get_fn!(self, &mangled_name) else {
-                        return Err(Box::new([CompilationError::InvalidSignature(
-                            self.file_path.clone(),
-                            trace.clone(),
-                            method_name.clone(),
-                            Rc::new(ret_type.clone()) as Rc<dyn CompilationType>,
-                            arg_types.into_iter().map(|t| Rc::new(t) as Rc<dyn CompilationType>).collect(),
-                        )]));
-                    };
-
-                    let fid = self
-                        .module
-                        .declare_function(&mangled_name, Linkage::Import, &fn_meta.sig)
-                        .unwrap();
-
-                    let local_func = self.module.declare_func_in_func(fid, func.func);
-
-                    let ret = func.ins().call(local_func, value_args.as_slice());
-                    let ret = func
-                        .inst_results(ret)
-                        .first()
-                        .map(|v| v.clone())
-                        .unwrap_or(func.ins().iconst(ir::types::I8, 0));
-
-                    if fn_meta.modifiers.contains(&Modifier::AutoFree) {
-                        if self.auto_frees.len() == 0 {
-                            self.auto_frees.push(HashSet::new());
-                        }
-
-                        self.auto_frees.last_mut().unwrap().insert(ret.clone());
-                    } else if fn_meta.modifiers.contains(&Modifier::MustFree) {
-                        self.must_frees
-                            .insert((ret.clone(), mangled_name.clone()).into());
-                    }
-
-                    if value_args.len() != 0 && fn_meta.modifiers.contains(&Modifier::Dealloc) {
-                        for item in self.must_frees.clone() {
-                            if item.value != ret.clone() {
-                                continue;
-                            }
-
-                            self.must_frees.remove(&item);
-
-                            break;
-                        }
-                    }
-
-                    return Ok((ret, fn_meta.return_type.downcast_ref::<CraneliftType>().unwrap().clone()));
-                };
-
-                let mut value_args = vec![];
-                let mut arg_types = vec![];
-
-                for arg in args.iter() {
-                    let expr = self.compile_body_expr(
-                        arg,
-                        func,
-                        &trace.nested_ctx(ContextKind::FuncArg(name.clone())),
-                    )?;
-
-                    value_args.push(expr.0);
-
-                    arg_types.push(expr.1);
+                    e => todo!("Handle error case: uncallable expression ({e:?}) called")
                 }
-                
-                // we need to call a function pointer
-                if let Ok((f, Type::FuncPtr { ret_type, arg_types })) = self.var_builder.get_var(func, name, self.file_path.clone(), trace) {
-                    let mut signature = self.module.make_signature();
-                    
-                    signature.returns.push(AbiParam::new(ret_type.clone().into_cranelift(&self.isa)));
-                    signature.params.extend(arg_types.iter().map(|ty| AbiParam::new(ty.clone().into_cranelift(&self.isa))));
-                    
-                    let sig_ref = func.import_signature(signature);
-                    
-                    let ret = func.ins().call_indirect(sig_ref, f, value_args.as_slice());
-                    let ret = func
-                        .inst_results(ret)
-                        .first()
-                        .copied()
-                        .unwrap_or(func.ins().iconst(ir::types::I8, 0));
-                    
-                    return Ok((ret, ret_type.deref().clone()))
-                }
-
-                let Some(fn_meta) = get_fn!(self, name) else {
-                    if let Some(variant) = get_fn_variant!(self, name) {
-                        let vec = variant
-                            .iter()
-                            .filter(|(_, args)| {
-                                arg_types
-                                    .iter()
-                                    .enumerate()
-                                    .all(|(i, t)| t.cmp_eq(Rc::new(args.get(i).unwrap().clone()) as Rc<dyn CompilationType>))
-                            })
-                            .collect::<Vec<_>>();
-
-                        let Some((ret_type, _)) = vec.first() else {
-                            return Err(Box::new([CompilationError::InvalidSignature(
-                                self.file_path.clone(),
-                                trace.clone(),
-                                name.clone(),
-                                Rc::new(Type::Any) as Rc<dyn CompilationType>,
-                                arg_types.into_iter().map(|t| Rc::new(t) as Rc<dyn CompilationType>).collect(),
-                            )]));
-                        };
-
-                        let mangled_name = mangle_function(name, arg_types.as_slice(), ret_type);
-
-                        let Some(fn_meta) = get_fn!(self, &mangled_name) else {
-                            return Err(Box::new([CompilationError::InvalidSignature(
-                                self.file_path.clone(),
-                                trace.clone(),
-                                name.clone(),
-                                Rc::new(ret_type.clone()) as Rc<dyn CompilationType>,
-                                arg_types.into_iter().map(|t| Rc::new(t) as Rc<dyn CompilationType>).collect(),
-                            )]));
-                        };
-
-                        let fid = self
-                            .module
-                            .declare_function(&mangled_name, Linkage::Import, &fn_meta.sig)
-                            .unwrap();
-
-                        let local_func = self.module.declare_func_in_func(fid, func.func);
-
-                        let ret = func.ins().call(local_func, value_args.as_slice());
-                        let ret = func
-                            .inst_results(ret)
-                            .first()
-                            .map(|v| v.clone())
-                            .unwrap_or(func.ins().iconst(ir::types::I8, 0));
-
-                        if fn_meta.modifiers.contains(&Modifier::AutoFree) {
-                            if self.auto_frees.len() == 0 {
-                                self.auto_frees.push(HashSet::new());
-                            }
-
-                            self.auto_frees.last_mut().unwrap().insert(ret.clone());
-                        } else if fn_meta.modifiers.contains(&Modifier::MustFree) {
-                            self.must_frees
-                                .insert((ret.clone(), mangled_name.clone()).into());
-                        }
-
-                        if value_args.len() != 0 && fn_meta.modifiers.contains(&Modifier::Dealloc) {
-                            for item in self.must_frees.clone() {
-                                if item.value != ret.clone() {
-                                    continue;
-                                }
-
-                                self.must_frees.remove(&item);
-
-                                break;
-                            }
-                        }
-
-                        return Ok((ret, fn_meta.return_type.downcast_ref::<CraneliftType>().unwrap().clone()));
-                    }
-
-                    let (f, fty) = self
-                        .var_builder
-                        .get_var(func, name, self.file_path.clone(), trace)
-                        .map_err(|_| {
-                            Box::from(
-                                [CompilationError::UndefinedFunction(
-                                    self.file_path.clone(),
-                                    trace.clone(),
-                                    name.clone(),
-                                )]
-                                .as_slice(),
-                            )
-                        })?;
-
-                    let Type::FuncPtr {
-                        ret_type,
-                        arg_types,
-                    } = fty
-                    else {
-                        return Err(Box::from(
-                            [CompilationError::UndefinedFunction(
-                                self.file_path.clone(),
-                                trace.clone(),
-                                name.clone(),
-                            )]
-                            .as_slice(),
-                        ));
-                    };
-
-                    let mut sig = Signature::new(self.isa.default_call_conv());
-
-                    sig.returns.push(AbiParam::new(
-                        ret_type.deref().clone().into_cranelift(&self.isa),
-                    ));
-                    sig.params.extend(
-                        arg_types
-                            .iter()
-                            .map(|t| AbiParam::new(t.deref().clone().into_cranelift(&self.isa))),
-                    );
-
-                    let fid = self
-                        .module
-                        .declare_function(name, Linkage::Import, &sig)
-                        .unwrap();
-
-                    let local_func = self.module.declare_func_in_func(fid, func.func);
-
-                    let ret = func.ins().call(local_func, value_args.as_slice());
-
-                    let ret = func
-                        .inst_results(ret)
-                        .first()
-                        .map(|v| v.clone())
-                        .unwrap_or(func.ins().iconst(ir::types::I8, 0));
-
-                    return Ok((ret, ret_type.deref().clone()));
-                };
-
-                let fid = self
-                    .module
-                    .declare_function(name, Linkage::Import, &fn_meta.sig)
-                    .unwrap();
-
-                let local_func = self.module.declare_func_in_func(fid, func.func);
-
-                let ret = func.ins().call(local_func, value_args.as_slice());
-                let ret = func
-                    .inst_results(ret)
-                    .first()
-                    .cloned()
-                    .unwrap_or(func.ins().iconst(ir::types::I8, 0));
-
-                if fn_meta.modifiers.contains(&Modifier::AutoFree) {
-                    if self.auto_frees.len() == 0 {
-                        self.auto_frees.push(HashSet::new());
-                    }
-
-                    self.auto_frees.last_mut().unwrap().insert(ret.clone());
-                } else if fn_meta.modifiers.contains(&Modifier::MustFree) {
-                    self.must_frees.insert((ret.clone(), name.clone()).into());
-                }
-
-                if value_args.len() != 0 && fn_meta.modifiers.contains(&Modifier::Dealloc) {
-                    for item in self.must_frees.clone() {
-                        if item.value != ret.clone() {
-                            continue;
-                        }
-
-                        self.must_frees.remove(&item);
-
-                        break;
-                    }
-                }
-
-                Ok((ret, fn_meta.return_type.downcast_ref::<CraneliftType>().unwrap().clone()))
             }
             AstNode::AsExpr(_l, val, ty) => {
                 let (val, vty) = self.compile_body_expr(val, func, &trace)?;
                 let ty = self.tg.compile_type_no_tgs(ty, &self.isa).downcast_ref::<CraneliftType>().unwrap().clone();
 
+                let (name, ty) = match ty {
+                    Type::Declared(n, t) => (Some(n), t.deref().clone()),
+                    t => (None, t),
+                };
+
+                let vty = match vty {
+                    Type::Declared(_, t) => t.deref().clone(),
+                    t => t,
+                };
+
                 if vty == ty {
                     return Ok((val, vty))
                 }
 
-                match (vty.clone(), ty.clone()) {
+                let (v, r) = match (vty.clone(), ty.clone()) {
+                    (Type::Int8, Type::Bool) | (Type::UInt8, Type::Bool) => Ok((val, ty)),
+                    (Type::Bool, Type::Int8) | (Type::Bool, Type::UInt8) => Ok((val, ty)),
+                    (Type::CPtr(i, ..), pty) if pty.is_pointer() && matches!(*i, Type::Any) => Ok((val, ty)),
                     (Type::CPtr(_, m1, n1), Type::CPtr(_, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => Ok((val, ty)),
                     (Type::Slice(_, _, m1, n1), Type::Slice(_, _, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => Ok((val, ty)),
                     (Type::Slice(_, _, m1, n1), Type::CPtr(_, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => Ok((val, ty)),
@@ -1266,13 +1278,18 @@ impl CraneliftGenerator {
 
                         Ok((casted, to))
                     }
-                    (Type::CPtr(i, ..), Type::FuncPtr { .. }) if *i == Type::Any => Ok((val, ty)),
                     (from, to) => Err(Box::new([CompilationError::InvalidCast(
                         self.file_path.clone(),
                         trace.clone(),
                         Rc::new(from) as Rc<dyn CompilationType>,
                         Rc::new(to) as Rc<dyn CompilationType>,
                     )])),
+                }.unwrap();
+
+                if let Some(name) = name {
+                    Ok((v, Type::Declared(name, Indirection::new(r))))
+                } else {
+                    Ok((v, r))
                 }
             }
             AstNode::IfExpr {
@@ -1330,6 +1347,11 @@ impl CraneliftGenerator {
 
         let (loop_in, lity) = self.compile_body_expr(r#in, func, trace)?;
 
+        let lity = match lity {
+            Type::Declared(_, ty) => ty.deref().clone(),
+             t => t,
+        };
+
         assert!(lity.iterable());
 
         let inner = lity.inner().unwrap();
@@ -1340,7 +1362,7 @@ impl CraneliftGenerator {
 
         let offset = func.ins().iconst(Type::Int64.into_cranelift(&self.isa), 0);
 
-        func.ins().jump(body_block, &[offset]);
+        func.ins().jump(body_block, &[BlockArg::Value(offset)]);
         func.switch_to_block(body_block);
 
         let ParseBlock::Plain(code) = body;
@@ -1352,7 +1374,7 @@ impl CraneliftGenerator {
                 loop_in,
                 0
             );
-            
+
             let one = func.ins().iconst(Type::Int32.into_cranelift(&self.isa), 1);
             let len = func.ins().isub(len, one);
 
@@ -1374,7 +1396,7 @@ impl CraneliftGenerator {
 
             let new_offset = func.ins().iadd_imm(offset, inner.size_bytes(&self.isa) as i64);
             let cond = func.ins().icmp(IntCC::UnsignedLessThan, index, len);
-            func.ins().brif(cond, body_block, &[new_offset], end_block, &[]);
+            func.ins().brif(cond, body_block, &[BlockArg::Value(new_offset)], end_block, &[]);
         } else if let Type::Slice(_, len, ..) = lity {
             let len = func.ins().iconst(Type::Int32.into_cranelift(&self.isa), len as i64);
 
@@ -1399,7 +1421,7 @@ impl CraneliftGenerator {
 
             let new_offset = func.ins().iadd_imm(offset, inner.size_bytes(&self.isa) as i64);
             let cond = func.ins().icmp(IntCC::UnsignedLessThan, index, len);
-            func.ins().brif(cond, body_block, &[new_offset], end_block, &[]);
+            func.ins().brif(cond, body_block, &[BlockArg::Value(new_offset)], end_block, &[]);
         } else {
             unimplemented!("For loops over {lity}")
         }
@@ -1585,7 +1607,7 @@ impl CraneliftGenerator {
         for (i, stmt) in body.iter().enumerate() {
             let res = match stmt {
                 AstNode::Identifier(_l, n) if n == "break" => {
-                    func.ins().jump(end_block, end_args);
+                    func.ins().jump(end_block, &*end_args.iter().map(|v| BlockArg::Value(*v)).collect::<Vec<_>>());
 
                     (None, true)
                 }
@@ -1741,7 +1763,7 @@ impl CraneliftGenerator {
             name: unmangled_name,
             ret_type,
             args,
-            type_generics: _,
+            type_generics,
             code,
             modifiers,
             ..
@@ -1750,10 +1772,19 @@ impl CraneliftGenerator {
             unreachable!();
         };
 
-        let ret_type = self.tg.compile_type_no_tgs(&ret_type, &self.isa).downcast_ref::<CraneliftType>().unwrap().clone();
+        /**** Search for calls of the function (if it has generics) ****/
+
+        /*if type_generics.len() > 0 {
+            // Stores arguments found in calls of the generic function
+            let mut usages = vec![];
+
+            let flattened_nodes = self.indexer.usages_of(unmangled_name);
+        }*/
+
+        let ret_type = self.tg.compile_type(&ret_type, &self.isa, type_generics).downcast_ref::<CraneliftType>().unwrap().clone();
         let arg_types = args
             .iter()
-            .map(|(_, ty, _)| self.tg.compile_type_no_tgs(ty, &self.isa).downcast_ref::<CraneliftType>().unwrap().clone())
+            .map(|(_, ty, _)| self.tg.compile_type(ty, &self.isa, type_generics).downcast_ref::<CraneliftType>().unwrap().clone())
             .collect::<Vec<_>>();
 
         let mangled_name = if modifiers.contains(&Modifier::NoMangle) || &**unmangled_name == "main" {
@@ -1781,7 +1812,7 @@ impl CraneliftGenerator {
         } else {
             Linkage::Local
         };
-        
+
         /*// main MUST have i32, *const i8 args
         if unmangled_name == "main" && arg_types != vec![CraneliftType::Int32, CraneliftType::CPtr(Indirection::new(CraneliftType::CPtr(Indirection::new(CraneliftType::Int8), false, false)), false, false)] {
             return Err(Box::new([CompilationError::MainMustHave2Args(self.file_path.clone())]))
@@ -1802,7 +1833,7 @@ impl CraneliftGenerator {
 
         let mut func =
             Function::with_name_signature(UserFuncName::user(0, fid.index() as u32), sig.clone());
-        
+
         self.fn_refs.insert(mangled_name.clone(), (func.clone(), fid));
 
         let mut ctx = FunctionBuilderContext::new();
@@ -1867,60 +1898,13 @@ impl CraneliftGenerator {
             );
         }
 
-        let Some(Command::Build { no_fptr_sugar, .. }) = self.command else {
-            todo!("Handle error case")
-        };
-        
-        /*if &*name == "main" && !no_fptr_sugar {
-            /**** Define data ****/
-            let dat = self.module.declare_data("__mosaic_injected$fnptr_opened_lib", Linkage::Local, true, false).unwrap();
-
-            self.module.define_data(dat, &DataDescription {
-                init: Init::Zeros { size: self.isa.pointer_bytes() as usize },
-                function_decls: Default::default(),
-                data_decls: Default::default(),
-                function_relocs: vec![],
-                data_relocs: vec![],
-                custom_segment_section: None,
-                align: None,
-            }).unwrap();
-            
-            let mut sig = self.module.make_signature();
-            
-            sig.returns.push(AbiParam::new(self.isa.pointer_type()));
-            
-            sig.params.extend([AbiParam::new(self.isa.pointer_type()), AbiParam::new(ir::types::I32)].into_iter());
-
-            /**** Import dlopen ****/
-            
-            let fid = self.module.declare_function(
-                "dlopen",
-                Linkage::Local,
-                &sig,
-            ).unwrap();
-            
-            /**** Call dlopen ****/
-            
-            let dlopen = self.module.declare_func_in_func(fid, fn_builder.func);
-            
-            let argv = fn_builder.block_params(block)[1];
-            let arg0 = fn_builder.ins().load(self.isa.pointer_type(), self.var_builder.flags, argv, 0);
-            let mode = fn_builder.ins().iconst(ir::types::I32, 1);
-            
-            let call = fn_builder.ins().call(dlopen, &[arg0, mode]);
-            let [ret] = fn_builder.inst_results(call) else { unreachable!() };
-            
-            /**** Assign to global data ****/
-            let val = self.module.declare_data_in_func(dat, fn_builder.func);
-            let val = fn_builder.ins().global_value(self.isa.pointer_type(), val);
-        }*/
-
         self.compile_body(code.as_ref(), &mut fn_builder, &mut trace)?;
 
         fn_builder.finalize();
 
         let mut context = Context::for_function(func.clone());
 
+        println!("{trace:?}");
         self.module.define_function(fid, &mut context).unwrap();
 
         Ok(())
@@ -1954,7 +1938,7 @@ impl CraneliftGenerator {
                 println!("align {:?}", meta.alignment);
                 println!("size {:?}", meta.size);
                 println!("fields {:?}", meta.fields.iter().map(|(a, b, c, _)| (a, b, c)).collect::<Vec<_>>());
-                
+
                 self.data_declarations.insert(name.clone(), meta);
 
                 Ok(())
@@ -2006,17 +1990,11 @@ impl CraneliftGenerator {
                 }
 
                 if !msc_path.exists() {
-                    eprintln!("Module not found {msc_path:?}");
-
                     return Err(Box::new([CompilationError::UnknownModule(
                         self.file_path.clone(),
                         Trace::new_root("GLOBAL".to_string()),
                         p.clone(),
                     )]));
-                }
-
-                if self.included_modules.iter().any(|m| m.mosaic_file == msc_path) || self.file_path == msc_path {
-                    return Ok(())
                 }
 
                 // SHADOW CODEGEN
@@ -2035,7 +2013,7 @@ impl CraneliftGenerator {
                     None,
                 );
 
-                let gen = shadow_cg.compile(true, obj_path.clone())?;
+                let gen = shadow_cg.compile(true, obj_path.clone()).unwrap();
 
                 self.tg.merge(&gen.tg);
                 self.included_modules.push(gen);
@@ -2043,13 +2021,15 @@ impl CraneliftGenerator {
                 Ok(())
             }
             AstNode::TypeAlias(_l, name, to) => {
+                eprintln!("type {name} = {to:?}");
+
                 let to = self.tg.compile_type_no_tgs(to, &self.isa);
 
-                self.tg.register_type(name, to);
+                self.tg.register_type(name, Box::new(Type::Declared(name.clone(), Indirection::new(to.downcast_ref::<CraneliftType>().unwrap().clone()))));
 
                 Ok(())
             }
-            n => unimplemented!("Global compilation of {n:?}"),
+            n => unimplemented!("Global compilation of {n:?} (in {:?})", self.file_path),
         }
     }
 
@@ -2067,6 +2047,8 @@ impl CraneliftGenerator {
                 Err(e) => errors.push(e),
             }
         }
+
+        self.nodes = nodes.clone();
 
         for node in nodes {
             match self.compile_global(&node) {
@@ -2172,7 +2154,7 @@ impl CraneliftGenerator {
         func.append_block_param(end_block, res_ty.clone().into_cranelift(&self.isa));
 
         if !filled {
-            func.ins().jump(end_block, &[res]);
+            func.ins().jump(end_block, &[BlockArg::Value(res)]);
         }
 
         /**** failure ****/
@@ -2186,7 +2168,7 @@ impl CraneliftGenerator {
             return Ok((None, filled));
         };
 
-        func.ins().jump(end_block, &[res]);
+        func.ins().jump(end_block, &[BlockArg::Value(res)]);
 
         func.switch_to_block(end_block);
 
@@ -2225,10 +2207,10 @@ impl CraneliftGenerator {
         let else_block = arm_blocks.last().unwrap();
 
         // compile the arms
-        
+
         let (left_part, right_part): (Vec<_>, Vec<_>) = arms.iter().enumerate().map(|(i, arm)| (i, (arm, arm_blocks[i]))).partition(|(_, (arm, _))| arm.is_else);
         let combined = [&*left_part, &*right_part].concat();
-        
+
         for (i, (arm, block)) in combined {
             // the previous block will be filled,
             // so we can just switch to this arm's block.
@@ -2274,7 +2256,7 @@ impl CraneliftGenerator {
 
                 if !filled {
                     if let Some((val, _)) = result {
-                        func.ins().jump(end_block, &[val]);
+                        func.ins().jump(end_block, &[BlockArg::Value(val)]);
                     } else {
                         func.ins().jump(end_block, &[]);
                     }
@@ -2293,7 +2275,7 @@ impl CraneliftGenerator {
                     if let Some((val, ty)) = result {
                         func.append_block_param(end_block, ty.into_cranelift(&self.isa));
 
-                        func.ins().jump(end_block, &[val]);
+                        func.ins().jump(end_block, &[BlockArg::Value(val)]);
                     } else {
                         func.ins().jump(end_block, &[]);
                     }

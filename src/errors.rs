@@ -559,6 +559,8 @@ impl Display for CompilationError {
                     file.to_string_lossy().bold().bright_red()
                 )?;
 
+                writeln!(f, "{:?}", trace)?;
+
                 write!(
                     f,
                     "{}{}{}{}{}{}{}{}",

@@ -16,9 +16,10 @@ use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::rc::Rc;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum CraneliftType {
     Generic(String, Option<TypeBound>),
+    Declared(String, Indirection<CraneliftType>),
     Any,
     Int8,
     Int16,
@@ -46,40 +47,6 @@ pub enum CraneliftType {
     DataPtr(String),
 }
 
-impl PartialEq for CraneliftType {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Any, _) => true,
-            (Self::Int8, Self::Int8) => true,
-            (Self::Int16, Self::Int16) => true,
-            (Self::Int32, Self::Int32) => true,
-            (Self::Int64, Self::Int64) => true,
-            (Self::UInt8, Self::UInt8) => true,
-            (Self::UInt16, Self::UInt16) => true,
-            (Self::UInt32, Self::UInt32) => true,
-            (Self::UInt64, Self::UInt64) => true,
-            (Self::Bool, Self::Bool) => true,
-            (Self::Null, Self::Null) => true,
-            (Self::CPtr(ty, ..), Self::CPtr(ty2, ..)) => ty == ty2,
-            (Self::FatPtr(ty, ..), Self::FatPtr(ty2, ..)) => ty == ty2,
-            (Self::Float32, Self::Float32) => true,
-            (Self::Float64, Self::Float64) => true,
-            (
-                Self::FuncPtr {
-                    ret_type,
-                    arg_types,
-                },
-                Self::FuncPtr {
-                    ret_type: ret_type2,
-                    arg_types: arg_types2,
-                },
-            ) => ret_type == ret_type2 && arg_types == arg_types2,
-            (Self::Slice(ty, size, ..), Self::Slice(ty2, size2, ..)) => ty == ty2 && size == size2,
-            _ => false,
-        }
-    }
-}
-
 impl CraneliftType {
     pub fn into_cranelift(self, isa: &OwnedTargetIsa) -> Type {
         match self {
@@ -97,6 +64,7 @@ impl CraneliftType {
             Self::DataPtr(..) | Self::FuncPtr { .. } | Self::CPtr(..) | Self::Slice(..) | Self::FatPtr(..) => {
                 isa.pointer_type()
             }
+            Self::Declared(_, t) => t.into_cranelift(isa),
         }
     }
 }
@@ -107,6 +75,7 @@ impl Display for CraneliftType {
             CraneliftType::Generic(name, ..) => {
                 panic!("The compiler has not evaluated the generic type '{name}'. This is a bug.")
             }
+            CraneliftType::Declared(_, ty) => write!(f, "(declared) {ty}"),
             CraneliftType::Any => write!(f, "any"),
             CraneliftType::Int8 => write!(f, "i8"),
             CraneliftType::Int16 => write!(f, "i16"),
@@ -144,6 +113,10 @@ impl CompilationType for CraneliftType {
     }
 
     fn is_pointer(&self) -> bool {
+        if let Self::Declared(_, ty) = self {
+            return ty.is_pointer();
+        }
+
         matches!(self, Self::DataPtr(..) | Self::CPtr(..) | Self::FuncPtr { .. } | Self::Slice(..) | Self::FatPtr(..))
     }
 
@@ -153,12 +126,14 @@ impl CompilationType for CraneliftType {
     }
 
     fn is_signed(&self) -> bool {
-        matches!(self, Self::Int8
-            | Self::Int16
-            | Self::Int32
-            | Self::Int64
-            | Self::Float32
-            | Self::Float64)
+        matches!(self, 
+            Self::Int8    | 
+            Self::Int16   | 
+            Self::Int32   | 
+            Self::Int64   | 
+            Self::Float32 | 
+            Self::Float64
+        )
     }
 
     fn nullable(&self) -> bool {
@@ -203,6 +178,7 @@ impl CompilationType for CraneliftType {
                 panic!("The compiler has not evaluated the generic type '{name}'. This is a bug.")
             }
             Self::Any => panic!("Cannot get size of type 'any'."),
+            Self::Declared(_, t) => t.size_bytes(isa),
             Self::Int8 | Self::UInt8 => 1,
             Self::Int16 | Self::UInt16 => 2,
             Self::Int32 | Self::UInt32 => 4,
@@ -221,6 +197,10 @@ impl CompilationType for CraneliftType {
     }
 
     fn inner(&self) -> Option<Rc<dyn CompilationType>> {
+        if let Self::Declared(_, ty) = self {
+            return ty.inner();
+        };
+
         match self {
             CraneliftType::CPtr(i, ..) => Some(Rc::new(i.deref().clone())),
             CraneliftType::Slice(i, ..) => Some(Rc::new(i.deref().clone())),
@@ -239,10 +219,20 @@ impl CompilationType for CraneliftType {
 
     fn cmp_eq(&self, other: Rc<dyn CompilationType>) -> bool {
         let other = other.downcast_ref::<Self>().unwrap();
+
+        let other = match other {
+            Self::Declared(_, t) => t.deref().clone(),
+            t => t.clone(),
+        };
+
+        let this = match self {
+            Self::Declared(_, t) => t.deref().clone(),
+            t => t.clone(),
+        };
         
-        (self.is_numeric() && other.is_numeric())
-            || (self.is_pointer() && other.is_pointer())
-            || (self == other)
+        (this.is_numeric() && other.is_numeric())
+            || (this.is_pointer() && other.is_pointer())
+            || (this == other)
     }
 
     fn matches_bound(
@@ -285,6 +275,10 @@ impl CompilationType for CraneliftType {
     }
 
     fn iterable(&self) -> bool {
+        if let Self::Declared(_, ty) = self {
+            return ty.iterable();
+        };
+
         matches!(self, Self::Slice(..) | Self::FatPtr(..))
     }
 }
@@ -352,13 +346,16 @@ impl traits::TypeGenerator for CraneliftTypeGenerator {
         tgs: &HashMap<String, Option<TypeBound>>,
     ) -> Box<dyn CompilationType> {
         Box::new(match ty {
+            ParseType::DataPtr(name) => CraneliftType::DataPtr(name.clone()),
+            
             ParseType::IdentType(i) if tgs.contains_key(i) => {
                 CraneliftType::Generic(i.clone(), tgs.get(i).unwrap().clone())
             }
+            
             ParseType::IdentType(i) => self
                 .types
                 .get(i)
-                .expect(&*format!("Unknown type '{i}'"))
+                .expect(&*format!("Unknown type '{i}' (in {:?})", self.types.keys()))
                 .clone(),
             ParseType::PointerType {
                 points_to,

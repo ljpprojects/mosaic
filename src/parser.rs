@@ -5,7 +5,7 @@ use crate::lexer::StreamedLexer;
 use crate::states::{ParserState, WithState};
 use crate::tokens::{LineInfo, Token};
 use crate::utils::Indirection;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -94,6 +94,8 @@ pub enum ParseType {
     },
 
     FuncPtr(Box<[ParseType]>, Rc<ParseType>),
+
+    DataPtr(String),
 }
 
 impl Debug for ParseType {
@@ -106,6 +108,7 @@ impl Display for ParseType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ParseType::IdentType(t) => write!(f, "{t}"),
+            ParseType::DataPtr(name) => write!(f, "data {name}"),
             ParseType::PointerType {
                 points_to,
                 is_nullable,
@@ -278,6 +281,8 @@ pub enum AstNode {
         fields: Vec<(String, Indirection<AstNode>)>,
         line_info: LineInfo,
     },
+
+    SizeOf(LineInfo, ParseType),
     
     // --- Statements and expressions at the same time? --- //
     
@@ -366,7 +371,6 @@ pub enum AstNode {
     TypeAlias(LineInfo, String, ParseType),
 
     // --- special --- //
-    SizeOf(LineInfo, ParseType), // @sizeof builtin macro
     MacroUseArg(LineInfo, String), // $X
 }
 
@@ -441,7 +445,7 @@ impl Display for AstNode {
             AstNode::ForCondStmt { var, operator, threshold, block, .. } => write!(f, "for {var} {operator} {threshold} {{\n{block}\n}}"),
             AstNode::DeferStmt(_, block, ..) => write!(f, "defer {{\n{block}\n}}"),
             AstNode::ByteLiteral(_, b, ..) => write!(f, "'{C}'", C = *b as char),
-            AstNode::SizeOf(_, t, ..) => write!(f, "@sizeof({t})"),
+            AstNode::SizeOf(t, ..) => write!(f, "@sizeof({t})"),
             AstNode::MacroUseArg(_, name, ..) => write!(f, "${name}"),
         }
     }
@@ -483,8 +487,8 @@ impl AstNode {
             AstNode::DataStmt { line_info, .. } => line_info,
             AstNode::ReturnStmt(l, ..) => l,
             AstNode::TypeAlias(l, ..) => l,
-            AstNode::SizeOf(l, ..) => l,
             AstNode::MacroUseArg(l, ..) => l,
+            AstNode::SizeOf(l, _) => l,
         }
     }
     
@@ -502,7 +506,7 @@ impl AstNode {
     }
 
     fn is_special(&self) -> bool {
-        matches!(self, Self::MacroUseArg(..) | Self::SizeOf(..))
+        matches!(self, Self::MacroUseArg(..))
     }
     
     fn is_expr(&self) -> bool {
@@ -576,7 +580,7 @@ impl StreamedParser {
 
         iter.collect::<Vec<_>>().into_iter()
     }
-
+    
     pub fn new(lexer: StreamedLexer) -> Self {
         let file = lexer.reader.reader.path().to_path_buf();
 
@@ -585,6 +589,58 @@ impl StreamedParser {
                 arguments: [("ty".into(), MacroArgKind::Type)].into(),
             })
         ].into() }
+    }
+    
+    pub fn parse_complete(mut self) -> Result<ParsedFile, Vec<ParseError>> {
+        let (mut nodes, mut errors) = (vec![], vec![]);
+        
+        for node in self {
+            match node {
+                Ok(node) => nodes.push(node),
+                Err(error) => errors.push(error),
+            }
+        }
+        
+        if !errors.is_empty() {
+            return Err(errors);
+        }
+        
+        // Get all included modules (and their paths)
+        let included_module_paths = nodes.iter()
+            .filter(|n| matches!(n, AstNode::IncludeStmt(..)))
+            .map(|n| {
+                let AstNode::IncludeStmt(_, p, ..) = n else {
+                    unreachable!()
+                };
+                
+                let search_path = p.as_ref().split_last().unwrap().1.join("/");
+                let mut msc_path: PathBuf = [search_path.clone(), format!("{}.msc", p.last().unwrap())].iter().collect();
+                
+                if !msc_path.exists() {
+                    let home = homedir::my_home().unwrap().clone().unwrap();
+                    let home = home.to_str();
+
+                    if cfg!(target_os = "windows") {
+                        msc_path = [home.unwrap(), "AppData", "Mosaic", "Modules", &*search_path, &*format!("{}.msc", p.last().unwrap())].iter().collect::<PathBuf>()
+                    } else if cfg!(target_os = "macos") {
+                        msc_path = [home.unwrap(), "Library", "Application Support", "Mosaic", "Modules", &*search_path, &*format!("{}.msc", p.last().unwrap())].iter().collect::<PathBuf>()
+                    } else {
+                        msc_path = [home.unwrap(), ".msc", "modules", &*search_path, &*format!("{}.msc", p.last().unwrap())].iter().collect::<PathBuf>()
+                    };
+                }
+                
+                msc_path
+            })
+            .collect::<HashSet<_>>();
+        
+        Ok(ParsedFile {
+            nodes,
+            included_module_paths,
+            external_functions: Default::default(),
+            declared_functions: Default::default(),
+            declared_types: Default::default(),
+            declared_data_structures: Default::default(),
+        })
     }
 
     pub fn expect_ident(
@@ -747,6 +803,28 @@ impl StreamedParser {
 
         if &*t == "fn" {
             return self.parse_fn_type();
+        }
+
+        if &*t == "data" {
+            let name = match self.lexer.next_token() {
+                Some(Ok(Token::Ident(t, _))) => t,
+                Some(Ok(tk)) => {
+                    return Err(ParseError::ExpectedToken(
+                        self.file.clone(),
+                        Token::Debug("TYPE_NAME".into()),
+                        tk,
+                    ))
+                }
+                Some(Err(e)) => return Err(e),
+                None => {
+                    return Err(ParseError::UnexpectedEOF(
+                        self.file.clone(),
+                        "DATA TYPE NAME".to_string(),
+                    ))
+                }
+            };
+
+            return Ok(ParseType::DataPtr(name));
         }
 
         Ok(ParseType::IdentType(t))
@@ -2230,6 +2308,8 @@ impl StreamedParser {
     }
 
     pub fn parse_for_in_expr(&mut self) -> Option<Result<AstNode, ParseError>> {
+        println!("FOR");
+
         let start = self.expect_ident(&"for", true).unwrap();
 
         let var = match self.lexer.next_token() {
@@ -2250,9 +2330,11 @@ impl StreamedParser {
             }
         };
 
-        let _ = self.expect_ident(&"in", true);
+        let _ = self.expect_ident(&"in", true).unwrap();
 
-        let of = match self.next_ast_node()? {
+        println!("FOR2");
+
+        let of = match self.parse_primary_expr()? {
             Err(e) => return Some(Err(e)),
             Ok(n) => n,
         };
@@ -2625,6 +2707,25 @@ impl StreamedParser {
         }))
     }
 
+    pub fn parse_sizeof_expr(&mut self) -> Option<Result<AstNode, ParseError>> {
+        let start = self.expect_ident(&"sizeof", true).unwrap();
+
+        let ty = match self.parse_type() {
+            Ok(node) => node,
+            Err(e) => return Some(Err(e)),
+        };
+
+        Some(Ok(AstNode::SizeOf(
+            LineInfo::new(
+                start.begin_char(),
+                self.lexer.state().current_char,
+                start.begin_line(),
+                self.lexer.state().current_line,
+            ),
+            ty
+        )))
+    }
+
     pub fn next_ast_node(&mut self) -> Option<Result<AstNode, ParseError>> {
         if let Some(Ok(Token::Ident(ident, _))) = self.lexer.peek_next_token() {
             match ident.as_str() {
@@ -2642,6 +2743,7 @@ impl StreamedParser {
                 "defer" => self.parse_defer_stmt(),
                 "match" => self.parse_match_stmt(),
                 "guard" => self.parse_guard_clause(),
+                "sizeof" => self.parse_sizeof_expr(),
                 _ => self.parse_bitwise_expr(),
             }
         } else if let Some(Ok(Token::Char(c, _))) = self.lexer.peek_next_token() {
@@ -2666,4 +2768,35 @@ impl StreamedParser {
 
         node
     }
+}
+
+type ParsedFunctionDeclaration = (Vec<Modifier>, HashMap<String, Option<TypeBound>>, Vec<ParseType>, ParseType);
+
+fn modifiers_of(def: &ParsedFunctionDeclaration) -> &Vec<Modifier> {
+    &def.0
+}
+
+fn generics_of(def: &ParsedFunctionDeclaration) -> &HashMap<String, Option<TypeBound>> {
+    &def.1
+}
+
+fn argument_types_of(def: &ParsedFunctionDeclaration) -> &Vec<ParseType> {
+    &def.2
+}
+
+fn return_type_of(def: &ParsedFunctionDeclaration) -> &ParseType {
+    &def.3
+}
+
+type ParsedTypeDeclaration = ParseType;
+type ParsedDataDeclaration = HashMap<String, (ParseType, bool)>;
+
+/// Stores the nodes, includes and declarations of a parsed file
+pub struct ParsedFile {
+    pub nodes: Vec<AstNode>,
+    pub included_module_paths: HashSet<PathBuf>,
+    pub external_functions: HashMap<String, ParsedFunctionDeclaration>,
+    pub declared_functions: HashMap<String, ParsedFunctionDeclaration>,
+    pub declared_types: HashMap<String, ParsedTypeDeclaration>,
+    pub declared_data_structures: HashMap<String, ParsedDataDeclaration>,
 }

@@ -43,15 +43,15 @@ impl VariableBuilder {
         let variable = Variable::new(self.index);
 
         builder.declare_var(variable, self.isa.pointer_type());
-        
+
         let slot = builder.create_sized_stack_slot(StackSlotData {
             kind: StackSlotKind::ExplicitSlot,
             size: ty.size_bytes(&self.isa) as StackSize,
             align_shift: 0,
         });
-        
+
         builder.ins().stack_store(value, slot, 0);
-        
+
         let ptr = builder.ins().stack_addr(self.isa.pointer_type(), slot, 0);
 
         builder.def_var(variable, ptr);
@@ -115,7 +115,7 @@ impl VariableBuilder {
                 Rc::new(vty.clone()),
             ))
         }
-        
+
         if !errors.is_empty() {
             return Err(errors.into());
         }
