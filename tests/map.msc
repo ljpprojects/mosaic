@@ -1,6 +1,17 @@
 # Simple map implementation ported from C into Mosaic
 
 include std::io
+include std::string
+
+data _StrDictNode {
+  key: String,
+  value: String
+};
+
+/// A map that has strings as the keys and values
+typedef struct {
+  StrDictNode *root;
+} StrDict;
 
 fn main -> i32 {
     let string = "Hello, World!\n" as *const [i8];
