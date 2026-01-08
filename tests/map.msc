@@ -4,32 +4,45 @@ include std::io
 include std::string
 
 data _StrDictNode {
-  key: String,
-  value: String
+  let key: String
+  let value: String
+
+  mut left: *mut data _StrDictNode
+  mut right: *mut data _StrDictNode
 };
 
-/// A map that has strings as the keys and values
-typedef struct {
-  StrDictNode *root;
-} StrDict;
+type StrDictNode = data _StrDictNode;
 
-fn main -> i32 {
-    let string = "Hello, World!\n" as *const [i8];
+data _StrDict {
+    mut root: *mut? StrDictNode
+};
 
-    let maybe_stdout: MaybeStream = (guard Stream::stdout() else {
-        return 1
-    });
+type StrDict = data _StrDict;
 
-    let stdout = maybe_stdout.unwrap();
-    mut counter = 0;
+fn StrDict::new() alloc -> StrDict {
+    return _StrDict {
+        .root = (0 as i64) as StrDictNode
+    }
+}
 
-    while counter < 5 {
-        stdout.write(string as ByteArray)
+fn nop -> null {
+    return null
+}
 
-        counter = counter + 1
+fn StrDict::insert(self: *mut StrDict, key: String, value: MaybeStringMut) -> MaybeStringMut {
+    let this: StrDict = *self;
+    mut node: *mut? StrDictNode = (this).root;
+
+    let ptr = guard (node) else {
+        return (0 as i64) as *mut? any
     };
 
-    stdout.deinit()
+    nop()
 
+
+    return (0 as i64) as MaybeStringMut
+}
+
+fn main export -> i32 {
     return 0
 }

@@ -4,10 +4,7 @@
 
 WELCOME TRAVELLER
 
-`tests/hello.msc` is the only working test, and it requires the standard
-library, which only I have lol so yeah good luck
-
-A simple compiled programming language "heavily inspired" by Rust.
+Mosaic is a simple (?) compiled programming language.
 
 ## Admission of Responsiblity
 

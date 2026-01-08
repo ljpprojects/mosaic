@@ -77,7 +77,9 @@ impl Linker {
             link_files.insert(assoc_obj.display().to_string());
         }
 
-        for (mosaic_file, assoc_obj) in module.prev_includes {
+        for m in module.prev_includes {
+            let (mosaic_file, assoc_obj) = (m.mosaic_file, m.assoc_obj);
+
             let p = mosaic_file.display().to_string();
 
             let mosaic_file = file::File::new(p).unwrap();
@@ -85,7 +87,7 @@ impl Linker {
 
             let lexer = StreamedLexer::new(reader);
             let parser = StreamedParser::new(lexer);
-            
+
             let updated_command = Command::Build {
                 file: mosaic_file.path().display().to_string(),
                 out_file: None,
@@ -101,7 +103,7 @@ impl Linker {
                 no_fptr_sugar: *no_fptr_sugar,
             };
 
-            let cg = CraneliftGenerator::new(parser, lookup(triple.clone()).unwrap(), Some(updated_command));
+            let cg = CraneliftGenerator::new(parser, lookup(triple.clone()).unwrap(), Some(updated_command), None, None);
             let compiled = cg.compile(true, assoc_obj).map_err(|e| e.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n"))?;
 
             link_files.insert(compiled.out_file.display().to_string().replace(" ", "\\ "));
@@ -110,7 +112,7 @@ impl Linker {
                 link_files.insert(assoc_obj.display().to_string());
             }
         }
-        
+
         let link_command = format!("{linker} {FLG} {INP}", FLG = custom_link_flags.clone().map(|args| args.replace(",", " ").replace("{DST}", &out_file.clone().unwrap_or(dist.display().to_string()))).clone().unwrap_or(link_flags.join(" ")), INP = link_files.into_iter().collect::<Vec<_>>().join(" "));
 
         println!("{link_command}");
@@ -133,7 +135,7 @@ impl Linker {
                 }
             }
         }
-        
+
         Ok(())
     }
 }

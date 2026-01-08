@@ -1,33 +1,37 @@
-# I think this is just how devcore::mem is implemented...
+# Showcase the core::mem usage
 
-extern fn malloc(size: i32) -> *mut? any
-extern fn memcpy(dest: *mut any, src: *const any, len: i32) -> *mut any
-extern fn memset(dest: *mut any, value: i32, count: i32) -> *mut any
-extern fn free(ptr: *mut any) -> null
+include core::mem; # cwd must be tests for this to be resolved, or it must be installed system-wide (see install.sh)
 
-fn alloc(size: i32) export -> *mut? any {
-    let ptr = guard malloc(size) else {
-        return (0 as i64) as *mut? any
+extern fn puts(c: *const i8) -> null; # Print to stdout without using std, usually you would use std
+
+fn main export -> i32 {
+    puts("Allocating memory...\0");
+
+    # Allocate a pointer
+    # Allocated memory is zeroed always
+    let m_ptr: MaybeAnyPtrMut = alloc(4 as usize);
+
+    # Use the guard clause to exit if it is null (and cast it to a usable AnyPtrMut, which cannot be done with the 'as' operator)
+    let ptr: AnyPtrMut = guard m_ptr else {
+        puts("OOM?\0");
+
+        return 1 # The parser does not like it if you give the last statement in a block a semicolon, so DON'T!
     };
 
-    memset(ptr, 0, size)
-
-    return ptr as *mut? any
-}
-
-fn dealloc(ptr: *mut any) export -> null {
-    return free(ptr)
-}
-
-fn main -> i32 {
-    let p = guard alloc(4) else {
-        return 1
+    # Use defer to free the pointer at the end of the function (before return)
+    defer {
+        puts("Freeing memory...\0"); # Null terminator is explicit, the default type for strings is an array, which stores length information at compile time only
+        ptr.dealloc()
     }
 
-    mut x = 4;
+    # Now we can use the pointer
+    # We will use it to point to a i32
 
-    defer {
-        free(p)
+    let num_ptr: *mut i32 = ptr as *mut i32; # The cast here is implicit
+
+    while (*num_ptr) < 5 {
+        puts(".\0" as *const i8);
+        (*num_ptr) = (*num_ptr) + 1
     }
 
     return 0

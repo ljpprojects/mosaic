@@ -12,10 +12,12 @@ pub fn mangle_type(ty: &CraneliftType) -> String {
         CraneliftType::Int16 => "s".into(),
         CraneliftType::Int32 => "w".into(),
         CraneliftType::Int64 => "l".into(),
+        CraneliftType::IntSize => "p".into(), // p for pointer sized
         CraneliftType::UInt8 => "Uc".into(),
         CraneliftType::UInt16 => "Us".into(),
         CraneliftType::UInt32 => "Uw".into(),
         CraneliftType::UInt64 => "Ul".into(),
+        CraneliftType::UIntSize => "Up".into(),
         CraneliftType::Float32 => "f".into(),
         CraneliftType::Float64 => "d".into(),
         CraneliftType::Null => "v".into(),

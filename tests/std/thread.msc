@@ -1,11 +1,8 @@
 # Ripped from my implementation of the stdlib
 
-include devcore::mem
+include core::mem
 
-type LibHandle = *mut any
-type GenericFunction = *mut any
 type pthread_t = *mut any
-type maybe_pthread_t = *mut? any
 
 extern fn memset(p: *mut any, d: i32, c: i32) -> null
 extern fn malloc(size: i32) -> *mut? any
@@ -16,7 +13,7 @@ extern fn free(p: *mut any) -> null
 extern fn usleep(microsecs: u32) -> null
 
 data AsyncHandler {
-    mut finished: u8
+    mut finished: bool
 }
 
 type AsyncHandler = data AsyncHandler;
@@ -24,29 +21,30 @@ type AsyncHandler = data AsyncHandler;
 extern fn pthread_create(thread: *mut pthread_t, f: *mut? any, task: fn(AsyncHandler) -> null, handler: AsyncHandler) -> i32
 
 fn AsyncHandler::new alloc -> AsyncHandler {
-    let self = guard malloc(1) else {
+    let self = guard malloc(sizeof AsyncHandler) else {
         printf("Could not allocate memory for AsyncHandler." as *const i8, 0 as i64)
         exit(1)
 
         return ((0 as i64) as *const any) as AsyncHandler
     };
 
+    self.finished = 0;
+
     return self
 }
 
 fn AsyncHandler::complete(self: AsyncHandler) -> null {
-    memset(self as *mut any, 1, 1)
+    self.finished = true;
 
     return null
 }
 
 fn while_loop(h: AsyncHandler) -> null {
-    return if (*((h as *mut any) as *mut u8)) {
-        null
-    } else {
+    while !self.finished {
         usleep(500)
-        while_loop(h)
     }
+
+    return null
 }
 
 fn AsyncHandler::deinit(self: AsyncHandler) -> null {
@@ -60,11 +58,11 @@ fn AsyncHandler::await(self: AsyncHandler) -> null {
 }
 
 fn AsyncHandler::begin(self: AsyncHandler, task: fn(AsyncHandler) -> null) -> pthread_t {
-    memset(self as *mut any, 0, 1)
+    self.finished = false;
 
     mut thread: pthread_t = (0 as i64) as pthread_t;
 
-    thread = pthread_create(&thread, (0 as i64) as *mut? any, task, self);
+    pthread_create(&thread, (0 as i64) as *mut? any, task, self);
 
-    return thread
+    return (0 as i64) as pthread_t
 }

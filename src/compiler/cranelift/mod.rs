@@ -2,6 +2,8 @@
 #![allow(clippy::expect_used)]
 #![forbid(unsafe_code)]
 
+use crate::compiler::analyser::{UsageKind, get_usages_of};
+use crate::compiler::cranelift::ast::flatten_ast;
 use crate::compiler::traits::CompilationModule;
 pub mod builders;
 pub mod linker;
@@ -11,6 +13,7 @@ pub mod module;
 pub mod trace;
 pub mod types;
 pub mod value;
+pub mod ast;
 
 use crate::cli::Command;
 use crate::compiler::cranelift::builders::VariableBuilder;
@@ -38,7 +41,7 @@ use cranelift_codegen::{ir, isa, settings, Context};
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{default_libcall_names, DataDescription, FuncId, Init, Linkage, Module};
 use cranelift_object::{ObjectBuilder, ObjectModule};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -86,7 +89,7 @@ macro_rules! get_fn_variant {
                     }
                 }
 
-                res.map(|v| v.iter().map(|(a, b)| (a.downcast_ref::<CraneliftType>().unwrap().clone(), b.iter().map(|a| a.downcast_ref::<CraneliftType>().unwrap().clone()).collect::<Vec<_>>())).collect::<Vec<_>>())
+                res.map(|v| v.iter().map(|(a, b)| (a.clone(), b.iter().cloned().collect::<Vec<_>>())).collect::<Vec<_>>())
             }
         }
     };
@@ -135,8 +138,11 @@ pub struct CraneliftGenerator {
     /// Used to compile types.
     tg: CraneliftTypeGenerator,
 
-    /// A list of every module that the current module has included.
-    included_modules: Vec<CraneliftModule>,
+    /// A list of every module that the current module (or previous modules referencing it) has included.
+    included_modules: BTreeSet<CraneliftModule>,
+
+    /// A set of module names that are currently being compiled AND SHOULD NOT GET RECOMPILED
+    compiling_list: BTreeSet<String>,
 
     /// A function-scoped list of values that will be freed at the end of their function, not scopes.
     auto_frees: Vec<HashSet<Value>>,
@@ -165,7 +171,7 @@ pub struct CraneliftGenerator {
 }
 
 impl CraneliftGenerator {
-    pub fn new(parser: StreamedParser, isa_builder: Builder, command: Option<Command>) -> Self {
+    pub fn new(parser: StreamedParser, isa_builder: Builder, command: Option<Command>, previously_included_mods: Option<BTreeSet<CraneliftModule>>, previously_compiling: Option<BTreeSet<String>>) -> Self {
         let file_path: PathBuf = if let Some(Command::Build { file, .. }) = command.clone() {
             file.into()
         } else {
@@ -175,16 +181,9 @@ impl CraneliftGenerator {
         let mut shared_builder = settings::builder();
 
         shared_builder.enable("is_pic").unwrap();
-        shared_builder.set("enable_pcc", "false").unwrap();
-        shared_builder.enable("enable_jump_tables").unwrap();
-        shared_builder.enable("enable_verifier").unwrap();
         shared_builder.enable("enable_alias_analysis").unwrap();
-
-        shared_builder.set("unwind_info", "false").unwrap();
-        shared_builder.set("opt_level", "speed_and_size").unwrap();
-        shared_builder
-            .set("regalloc_algorithm", "backtracking")
-            .unwrap();
+        shared_builder.set("opt_level", "speed").unwrap();
+        shared_builder.set("regalloc_algorithm", "backtracking").unwrap();
 
         let shared_flags = settings::Flags::new(shared_builder);
 
@@ -194,10 +193,20 @@ impl CraneliftGenerator {
 
         let module_name = file_path.file_stem().unwrap().to_str().unwrap().to_string();
 
-        let obj_builder =
+        let mut obj_builder =
             ObjectBuilder::new(isa.clone(), module_name.clone(), default_libcall_names()).unwrap();
 
-        let module = ObjectModule::new(obj_builder);
+        let mut module = ObjectModule::new(obj_builder);
+
+        let tag_data = module.declare_data("INFO", Linkage::Local, false, false).unwrap();
+
+        let mut desc = DataDescription::new();
+        desc.define(Box::from("LOL THIS FUCKING IDIOT USED MOSAIC".as_bytes()));
+
+        module.define_data(tag_data, &desc).unwrap();
+
+        let mut compiling_list = previously_compiling.unwrap_or_default();
+        compiling_list.insert(module_name.clone());
 
         Self {
             counter: 0,
@@ -214,7 +223,8 @@ impl CraneliftGenerator {
             fn_counter: 0,
             isa_builder,
             tg: CraneliftTypeGenerator::new(),
-            included_modules: vec![],
+            included_modules: previously_included_mods.unwrap_or_default(),
+            compiling_list,
             auto_frees: vec![],
             deferred_items: vec![],
             allocator_fns: HashSet::new(),
@@ -294,13 +304,10 @@ impl CraneliftGenerator {
 
                         Ok((right, rty))
                     }
-                    AstNode::MemberExpr(_, path) => {
-                        if path.len() != 2 {
-                            todo!("Chained member assignment")
-                        }
+                    AstNode::MemberExpr(_, root, prop) => {
+                        let (ptr, pty) = self.compile_body_expr(root, func, trace)?;
 
-                        let (ptr, pty) = self.var_builder.get_var(func, path.first().unwrap(), self.file_path.clone(), trace)?;
-                        let (right, rty) = self.compile_body_expr(right, func, trace)?;
+                         let (right, rty) = self.compile_body_expr(right, func, trace)?;
 
                         let pty = match pty {
                             Type::Declared(_, inner) => inner.deref().clone(),
@@ -312,17 +319,18 @@ impl CraneliftGenerator {
                         };
 
                         let meta = self.data_declarations.get(&name).unwrap();
-                        let Some((offset, _, _, ty)) = meta.fields.iter().find(|(_, _, name, _)| name == path.get(1).unwrap()) else {
+                        let Some((offset, _, _, ty)) = meta.fields.iter().find(|(_, _, name, _)| name == prop) else {
                             todo!("Handle error case: field does not exist in member assignment")
                         };
 
-                        let ty = ty.downcast_ref::<CraneliftType>().unwrap().clone();
+                        let ty = ty.clone();
 
                         if rty != ty {
                             todo!("Handle error case: invalid type")
                         }
 
                         let data = StackSlotData {
+                            key: None,
                             kind: StackSlotKind::ExplicitSlot,
                             size: rty.size_bytes(&self.isa) as u32,
                             align_shift: 0
@@ -399,7 +407,7 @@ impl CraneliftGenerator {
                 let (left, lty) = self.compile_body_expr(left, func, trace)?;
                 let (right, rty) = self.compile_body_expr(right, func, trace)?;
 
-                if !lty.cmp_eq(Rc::new(rty)) {
+                if !lty.cmp_eq(&rty) {
                     return Ok((func.ins().iconst(ir::types::I8, 0), Type::Bool));
                 }
 
@@ -431,7 +439,7 @@ impl CraneliftGenerator {
                 let (left, lty) = self.compile_body_expr(left, func, trace)?;
                 let (right, rty) = self.compile_body_expr(right, func, trace)?;
 
-                if !lty.cmp_eq(Rc::new(rty)) {
+                if !lty.cmp_eq(&rty) {
                     return Ok((func.ins().iconst(ir::types::I8, 0), Type::Bool));
                 }
 
@@ -572,7 +580,7 @@ impl CraneliftGenerator {
                 let (res, ty) = if lty.is_signed() {
                     (func.ins().srem(left, right), Type::Int64)
                 } else {
-                    (func.ins().urem(left, right), lty.to_unsigned().unwrap().downcast_ref::<CraneliftType>().unwrap().clone())
+                    (func.ins().urem(left, right), lty.to_unsigned().unwrap())
                 };
 
                 Ok((res, ty))
@@ -609,12 +617,8 @@ impl CraneliftGenerator {
             }
             "&" => {
                 match right {
-                    AstNode::MemberExpr(_, path) => {
-                        if path.len() != 2 {
-                            todo!("Chained member access")
-                        }
-
-                        let (ptr, pty) = self.var_builder.get_var(func, path.first().unwrap(), self.file_path.clone(), trace)?;
+                    AstNode::MemberExpr(_, root, prop) => {
+                        let (ptr, pty) = self.compile_body_expr(root, func, trace)?;
 
                         let pty = match pty {
                             Type::Declared(_, inner) => inner.deref().clone(),
@@ -626,7 +630,7 @@ impl CraneliftGenerator {
                         };
 
                         let meta = self.data_declarations.get(&name).unwrap();
-                        let Some((offset, _, _, ty)) = meta.fields.iter().find(|(_, _, name, _)| name == path.get(1).unwrap()) else {
+                        let Some((offset, _, _, ty)) = meta.fields.iter().find(|(_, _, name, _)| name == prop) else {
                             todo!("Handler error case: field does not exist in member access")
                         };
 
@@ -648,13 +652,13 @@ impl CraneliftGenerator {
                 let (ptr, pty) = self.compile_body_expr(right, func, trace)?;
 
                 let value = func.ins().load(
-                    pty.inner().unwrap().downcast_ref::<CraneliftType>().unwrap().clone().into_cranelift(&self.isa),
+                    pty.inner().unwrap().into_cranelift(&self.isa),
                     self.var_builder.flags,
                     ptr,
                     0,
                 );
 
-                Ok((value, pty.inner().unwrap().downcast_ref::<CraneliftType>().unwrap().clone()))
+                Ok((value, pty.inner().unwrap()))
             }
             _ => todo!("Handle error here"),
         }
@@ -669,7 +673,7 @@ impl CraneliftGenerator {
         match expr {
             AstNode::SizeOf(_, ty) => Ok((
                 func.ins().iconst(Type::Int32.into_cranelift(&self.isa), self.tg.compile_type_no_tgs(ty, &self.isa).size_bytes(&self.isa) as i64),
-                Type::Int32
+                Type::UIntSize
             )),
             AstNode::NumberLiteral(_l, i) if i.fract() == 0f64 => {
                 let ty = Type::Int32;
@@ -704,32 +708,24 @@ impl CraneliftGenerator {
             AstNode::PrefixOp(_l, op, r) => self.compile_prefix_op(op, r, func, trace),
             AstNode::PostfixOp(..) => todo!(),
             AstNode::Path(..) => todo!(),
-            AstNode::MemberExpr(_, path) => {
-                if path.len() != 2 {
-                    todo!("Chained member access")
-                }
-
-                let (ptr, pty) = self.var_builder.get_var(func, path.first().unwrap(), self.file_path.clone(), trace)?;
+            AstNode::MemberExpr(_, root, prop) => {
+                let (ptr, pty) = self.compile_body_expr(root, func, trace)?;
 
                 let pty = match pty {
                     Type::Declared(_, inner) => inner.deref().clone(),
                     ty => ty
                 };
 
-                let Type::DataPtr(name) = pty else {
+                let Type::DataPtr(name) = pty.clone() else {
                     todo!("Handle error case: invalid member access type: {pty:?}")
                 };
 
-                println!("Using data decl {name}");
-
                 let meta = self.data_declarations.get(&name).unwrap();
-                let Some((offset, _, _, ty)) = meta.fields.iter().find(|(_, _, name, _)| name == path.get(1).unwrap()) else {
+                let Some((offset, _, _, ty)) = meta.fields.iter().find(|(_, _, name, _)| name == prop) else {
                     todo!("Handler error case: field does not exist in member access")
                 };
 
-                let ty = ty.downcast_ref::<CraneliftType>().unwrap().clone();
-
-                println!("LOADING {ty}");
+                let ty = ty.clone();
 
                 Ok((func.ins().load(ty.clone().into_cranelift(&self.isa), self.var_builder.flags, ptr, *offset as i32), ty))
             },
@@ -742,6 +738,7 @@ impl CraneliftGenerator {
 
                 if let Some(meta) = self.data_declarations.get(name) {
                     let slot_data = StackSlotData {
+                        key: None,
                         kind: StackSlotKind::ExplicitSlot,
                         size: meta.size as StackSize,
                         align_shift: meta.alignment.ilog2() as u8,
@@ -754,7 +751,7 @@ impl CraneliftGenerator {
                             todo!("Handle invalid field in data initialiser")
                         };
 
-                        if !vty.cmp_eq(ty.clone()) {
+                        if !vty.cmp_eq(&ty) {
                             todo!("Handle type mismatch in data initialiser")
                         }
 
@@ -829,12 +826,12 @@ impl CraneliftGenerator {
 
                 Ok((
                     func.ins().load(
-                        inner_ty.downcast_ref::<CraneliftType>().unwrap().clone().into_cranelift(&self.isa),
+                        inner_ty.clone().into_cranelift(&self.isa),
                         MemFlags::trusted().with_checked(),
                         computed_addr,
                         0,
                     ),
-                    inner_ty.downcast_ref::<CraneliftType>().unwrap().clone(),
+                    inner_ty,
                 ))
             }
             AstNode::CallExpr { callee, args, .. } => {
@@ -882,7 +879,7 @@ impl CraneliftGenerator {
                                         arg_types
                                             .iter()
                                             .enumerate()
-                                            .all(|(i, t)| t.cmp_eq(Rc::new(args.get(i).unwrap().clone()) as Rc<dyn CompilationType>))
+                                            .all(|(i, t)| t.cmp_eq(args.get(i).unwrap()))
                                     })
                                     .collect::<Vec<_>>();
 
@@ -896,9 +893,11 @@ impl CraneliftGenerator {
                                     )]));
                                 };
 
-                                let mangled_name = mangle_function(name, arg_types.as_slice(), ret_type);
+                                let mangled_name = mangle_function(name, &*arg_types, ret_type);
 
                                 let Some(fn_meta) = get_fn!(self, &mangled_name) else {
+                                    eprintln!("SIGNATURES of {name} -> {:?}", self.functions.iter().map(|(n, _)| n).collect::<Vec<_>>());
+
                                     return Err(Box::new([CompilationError::InvalidSignature(
                                         self.file_path.clone(),
                                         trace.clone(),
@@ -945,7 +944,7 @@ impl CraneliftGenerator {
                                     }
                                 }
 
-                                return Ok((ret, fn_meta.return_type.downcast_ref::<CraneliftType>().unwrap().clone()));
+                                return Ok((ret, fn_meta.return_type.clone()));
                             }
 
                             let (f, fty) = self
@@ -1020,7 +1019,7 @@ impl CraneliftGenerator {
                             .cloned()
                             .unwrap_or(func.ins().iconst(ir::types::I8, 0));
 
-                        Ok((ret, fn_meta.return_type.downcast_ref::<CraneliftType>().unwrap().clone()))
+                        Ok((ret, fn_meta.return_type.clone()))
                     },
 
                     AstNode::Path(_, p) => {
@@ -1060,7 +1059,7 @@ impl CraneliftGenerator {
                                 arg_types
                                     .iter()
                                     .enumerate()
-                                    .all(|(i, t)| t.cmp_eq(Rc::new(args.get(i).unwrap().clone()) as Rc<dyn CompilationType>))
+                                    .all(|(i, t)| t.cmp_eq(args.get(i).unwrap()))
                             })
                             .collect::<Vec<_>>();
 
@@ -1103,16 +1102,13 @@ impl CraneliftGenerator {
                             .map(|v| v.clone())
                             .unwrap_or(func.ins().iconst(ir::types::I8, 0));
 
-                        Ok((ret, fn_meta.return_type.downcast_ref::<CraneliftType>().unwrap().clone()))
+                        Ok((ret, fn_meta.return_type.clone()))
                     },
 
-                    AstNode::MemberExpr(_, p) => {
-                        assert_eq!(p.len(), 2); // TODO: Handle this error case properly
-
+                    AstNode::MemberExpr(_, root, prop) => {
                         let this =
-                            self.var_builder
-                                .get_var(func, &p[0], self.file_path.clone(), trace)?;
-                        let method_name = p.last().unwrap();
+                            self.compile_body_expr(root, func, trace)?;
+                        let method_name = prop;
 
                         let mut value_args = vec![this.0];
                         let mut arg_types = vec![this.1.clone()];
@@ -1145,7 +1141,7 @@ impl CraneliftGenerator {
                                 arg_types
                                     .iter()
                                     .enumerate()
-                                    .all(|(i, t)| t.cmp_eq(Rc::new(args.get(i).unwrap().clone()) as Rc<dyn CompilationType>))
+                                    .all(|(i, t)| t.cmp_eq(args.get(i).unwrap()))
                             })
                             .collect::<Vec<_>>();
 
@@ -1193,7 +1189,7 @@ impl CraneliftGenerator {
                             .first().copied()
                             .unwrap_or(func.ins().iconst(ir::types::I8, 0));
 
-                        Ok((ret, fn_meta.return_type.clone().downcast_ref::<CraneliftType>().unwrap().clone()))
+                        Ok((ret, fn_meta.return_type.clone()))
                     }
 
                     e => todo!("Handle error case: uncallable expression ({e:?}) called")
@@ -1201,7 +1197,7 @@ impl CraneliftGenerator {
             }
             AstNode::AsExpr(_l, val, ty) => {
                 let (val, vty) = self.compile_body_expr(val, func, &trace)?;
-                let ty = self.tg.compile_type_no_tgs(ty, &self.isa).downcast_ref::<CraneliftType>().unwrap().clone();
+                let ty = self.tg.compile_type_no_tgs(ty, &self.isa);
 
                 let (name, ty) = match ty {
                     Type::Declared(n, t) => (Some(n), t.deref().clone()),
@@ -1217,17 +1213,21 @@ impl CraneliftGenerator {
                     return Ok((val, vty))
                 }
 
+                eprintln!("{trace:?}");
+
                 let (v, r) = match (vty.clone(), ty.clone()) {
                     (Type::Int8, Type::Bool) | (Type::UInt8, Type::Bool) => Ok((val, ty)),
                     (Type::Bool, Type::Int8) | (Type::Bool, Type::UInt8) => Ok((val, ty)),
                     (Type::CPtr(i, ..), pty) if pty.is_pointer() && matches!(*i, Type::Any) => Ok((val, ty)),
                     (Type::CPtr(_, m1, n1), Type::CPtr(_, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => Ok((val, ty)),
                     (Type::Slice(_, _, m1, n1), Type::Slice(_, _, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => Ok((val, ty)),
+                    (Type::FatPtr(_, m1, n1), Type::FatPtr(_, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => Ok((val, ty)),
                     (Type::Slice(_, _, m1, n1), Type::CPtr(_, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => Ok((val, ty)),
                     (Type::FatPtr(_, m1, n1), Type::CPtr(_, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => Ok((val, ty)),
                     (Type::CPtr(_, m1, n1), Type::FatPtr(_, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => Ok((val, ty)),
                     (Type::Slice(inner, len, m1, n1), Type::FatPtr(_, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => {
                         let slot = func.create_sized_stack_slot(StackSlotData {
+                            key: None,
                             kind: StackSlotKind::ExplicitSlot,
                             size: (len * inner.size_bytes(&self.isa) as u32 + 4) as StackSize,
                             align_shift: 0,
@@ -1261,17 +1261,20 @@ impl CraneliftGenerator {
                             Ok((func.ins().fcvt_to_uint(to.clone().into_cranelift(&self.isa), val), to))
                         }
                     }
-                    (Type::Int64, p) if p.is_pointer() => Ok((val, ty)),
-                    (p, Type::Int64) if p.is_pointer() => Ok((val, ty)),
+                    (Type::IntSize, p) | (Type::UIntSize, p) if p.is_pointer() => Ok((val, ty)),
+                    (p, Type::IntSize) | (p, Type::UIntSize) if p.is_pointer() => Ok((val, ty)),
                     (from, to)
                         if (from.is_numeric() || matches!(from, Type::Bool)) && to.is_numeric() =>
                     {
                         let casted = if from.size_bytes(&self.isa) > to.size_bytes(&self.isa) {
                             func.ins()
                                 .ireduce(to.clone().into_cranelift(&self.isa), val)
-                        } else if from.size_bytes(&self.isa) < to.size_bytes(&self.isa) {
+                        } else if from.size_bytes(&self.isa) < to.size_bytes(&self.isa) && to.is_signed() {
                             func.ins()
                                 .sextend(to.clone().into_cranelift(&self.isa), val)
+                        } else if from.size_bytes(&self.isa) < to.size_bytes(&self.isa) /*implied && !to.is_signed()*/ {
+                            func.ins()
+                                .uextend(to.clone().into_cranelift(&self.isa), val)
                         } else {
                             val
                         };
@@ -1282,7 +1285,7 @@ impl CraneliftGenerator {
                         self.file_path.clone(),
                         trace.clone(),
                         Rc::new(from) as Rc<dyn CompilationType>,
-                        Rc::new(to) as Rc<dyn CompilationType>,
+                        Rc::new(ty) as Rc<dyn CompilationType>,
                     )])),
                 }.unwrap();
 
@@ -1321,11 +1324,7 @@ impl CraneliftGenerator {
 
         let ParseBlock::Plain(code) = code;
 
-        for nd in code {
-            eprintln!("WHILE CODE {nd}");
-        }
-
-        let (_, filled) = self.compile_body(code.as_ref(), func, trace)?;
+        let (_, filled) = self.compile_while_body(code.as_ref(), func, trace, end_block, &[])?;
 
         if !filled {
             let (cond, _) = self.compile_body_expr(cond_node, func, trace)?;
@@ -1389,13 +1388,13 @@ impl CraneliftGenerator {
             let ptr = func.ins().iadd(loop_in, offset);
 
             let current = func.ins().load(
-                inner.downcast_ref::<CraneliftType>().unwrap().clone().into_cranelift(&self.isa),
+                inner.clone().into_cranelift(&self.isa),
                 self.var_builder.flags,
                 ptr,
                 4
             );
 
-            self.var_builder.create_var(func, current, inner.downcast_ref::<CraneliftType>().unwrap().clone(), r#for.clone(), true);
+            self.var_builder.create_var(func, current, inner.clone(), r#for.clone(), true);
 
             self.compile_body(code, func, trace)?;
 
@@ -1414,13 +1413,13 @@ impl CraneliftGenerator {
             let ptr = func.ins().iadd(loop_in, offset);
 
             let current = func.ins().load(
-                inner.downcast_ref::<CraneliftType>().unwrap().clone().into_cranelift(&self.isa),
+                inner.clone().into_cranelift(&self.isa),
                 self.var_builder.flags,
                 ptr,
                 0
             );
 
-            self.var_builder.create_var(func, current, inner.downcast_ref::<CraneliftType>().unwrap().clone(), r#for.clone(), true);
+            self.var_builder.create_var(func, current, inner.clone(), r#for.clone(), true);
 
             self.compile_body(code, func, trace)?;
 
@@ -1466,7 +1465,7 @@ impl CraneliftGenerator {
                         self.compile_body_expr(value, func, &trace.nested_ctx(ContextKind::Def))?;
 
                     let ty = if let Some(dty) = def_type {
-                        self.tg.compile_type_no_tgs(dty, &self.isa).downcast_ref::<CraneliftType>().unwrap().clone()
+                        self.tg.compile_type_no_tgs(dty, &self.isa)
                     } else {
                         vty
                     };
@@ -1491,7 +1490,7 @@ impl CraneliftGenerator {
                         self.compile_body_expr(value, func, &trace.nested_ctx(ContextKind::Def))?;
 
                     let ty = if let Some(dty) = def_type {
-                        self.tg.compile_type_no_tgs(dty, &self.isa).downcast_ref::<CraneliftType>().unwrap().clone()
+                        self.tg.compile_type_no_tgs(dty, &self.isa)
                     } else {
                         vty
                     };
@@ -1611,15 +1610,11 @@ impl CraneliftGenerator {
 
         for (i, stmt) in body.iter().enumerate() {
             let res = match stmt {
-                AstNode::Identifier(_l, n) if n == "break" => {
+                AstNode::BreakStmt(_l) => {
                     func.ins().jump(end_block, &*end_args.iter().map(|v| BlockArg::Value(*v)).collect::<Vec<_>>());
 
                     (None, true)
                 }
-                AstNode::IfStmt { cond, block, .. } => (
-                    None,
-                    self.compile_if_stmt(cond.as_ref(), block, func, Some(end_block), &[], trace)?,
-                ),
                 stmt => self.compile_body(&[stmt.clone()], func, trace)?,
             };
 
@@ -1646,11 +1641,11 @@ impl CraneliftGenerator {
         let mut sig = Signature::new(self.call_conv);
 
         sig.returns
-            .push(AbiParam::new(ret_type.downcast_ref::<CraneliftType>().unwrap().clone().into_cranelift(&self.isa)));
+            .push(AbiParam::new(ret_type.clone().into_cranelift(&self.isa)));
         sig.params.extend(
             arg_types
                 .iter()
-                .map(|ty| AbiParam::new(ty.downcast_ref::<CraneliftType>().unwrap().clone().into_cranelift(&self.isa))),
+                .map(|ty| AbiParam::new(ty.clone().into_cranelift(&self.isa))),
         );
 
         self.module
@@ -1665,10 +1660,10 @@ impl CraneliftGenerator {
             .collect::<Vec<_>>();
 
         if let Some(variants) = self.function_variants.get_mut(name) {
-            variants.push((ret_type.downcast_ref::<CraneliftType>().unwrap().clone(), arg_types.iter().map(|a| a.downcast_ref::<CraneliftType>().unwrap().clone()).collect::<Vec<_>>()))
+            variants.push((ret_type.clone(), arg_types.iter().cloned().collect::<Vec<_>>()))
         } else {
             self.function_variants
-                .insert(name.clone(), vec![(ret_type.downcast_ref::<CraneliftType>().unwrap().clone(), arg_types.iter().map(|a| a.downcast_ref::<CraneliftType>().unwrap().clone()).collect::<Vec<_>>())]);
+                .insert(name.clone(), vec![(ret_type.clone(), arg_types.iter().cloned().collect::<Vec<_>>())]);
         }
 
         self.functions.insert(
@@ -1676,8 +1671,8 @@ impl CraneliftGenerator {
             FunctionMeta {
                 modifiers: vec![].into_boxed_slice(),
                 arity: args.len(),
-                arg_meta: arg_meta.into_iter().map(|(a, b)| (a.clone(), Rc::from(b))).collect::<Vec<_>>(),
-                return_type: Rc::from(ret_type),
+                arg_meta: arg_meta.into_iter().map(|(a, b)| (a.clone(), b)).collect::<Vec<_>>(),
+                return_type: ret_type,
                 sig,
                 index: self.fn_counter,
                 auto_free_idx: None,
@@ -1698,6 +1693,7 @@ impl CraneliftGenerator {
         let (_, inner_type) = values.first().unwrap();
 
         let slot = func.create_sized_stack_slot(StackSlotData {
+            key: None,
             kind: StackSlotKind::ExplicitSlot,
             size: (inner_type.size_bytes(&self.isa) as usize * array.len()) as u32,
             align_shift: 0,
@@ -1762,6 +1758,98 @@ impl CraneliftGenerator {
         ))
     }
 
+    pub fn estimate_type_of(&self, of: &AstNode) -> Option<Type> {
+        match of {
+            AstNode::NumberLiteral(_, n) => Some(Type::Int32),
+            AstNode::StringLiteral(_, string) => Some(Type::Slice(Indirection::new(Type::Int8), string.len() as u32, false, false)),
+            AstNode::BooleanLiteral(..) => Some(Type::Bool),
+            AstNode::ByteLiteral(..) => Some(Type::UInt8),
+            AstNode::DataInitExpr { name, .. } => Some(Type::DataPtr(self.data_declarations.get(name).map(|_| name.clone())?)),
+            AstNode::NullLiteral(..) => Some(Type::Null),
+            AstNode::Identifier(_, name) => self.var_builder.get_var_type(name),
+            AstNode::CallExpr { callee, .. } => match callee.as_ref() {
+                AstNode::Identifier(_, name) => self.functions.get(name).map(|m| m.return_type.clone()),
+                AstNode::Path(_, p) => self.functions.get(&p[1]).map(|m| m.return_type.clone()),
+                _ => None,
+            },
+            AstNode::GuardClause { cond, .. } => {
+                let old_type = self.estimate_type_of(cond)?;
+
+                if !old_type.is_pointer() {
+                    return None;
+                }
+
+                match old_type {
+                    Type::CPtr(i, m, _) => Some(Type::CPtr(i, m, false)),
+                    Type::FatPtr(i, m, _) => Some(Type::FatPtr(i, m, false)),
+                    Type::Slice(i, l, m, _) => Some(Type::Slice(i, l, m, false)),
+                    _ => unreachable!()
+                }
+            }
+            AstNode::ArrayLiteral(_, v) => Some(Type::Slice(Box::new(self.estimate_type_of(v.first()?)?), v.len() as u32, false, false)),
+            AstNode::AsExpr(_l, val, ty) => {
+                let vty = self.estimate_type_of(val.as_ref())?;
+                let ty = self.tg.compile_type_no_tgs(ty, &self.isa);
+
+                let (name, ty) = match ty {
+                    Type::Declared(n, t) => (Some(n), t.deref().clone()),
+                    t => (None, t),
+                };
+
+                let vty = match vty {
+                    Type::Declared(_, t) => t.deref().clone(),
+                    t => t,
+                };
+
+                if vty == ty {
+                    return Some(ty)
+                }
+
+                let r = match (vty.clone(), ty.clone()) {
+                    (Type::Int8, Type::Bool) | (Type::UInt8, Type::Bool) |(Type::Bool, Type::Int8) | (Type::Bool, Type::UInt8) => ty,
+                    (Type::CPtr(i, ..), pty) if pty.is_pointer() && matches!(*i, Type::Any) => ty,
+                    (Type::CPtr(_, m1, n1), Type::CPtr(_, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => ty,
+                    (Type::Slice(_, _, m1, n1), Type::Slice(_, _, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => ty,
+                    (Type::Slice(_, _, m1, n1), Type::CPtr(_, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => ty,
+                    (Type::FatPtr(_, m1, n1), Type::CPtr(_, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => ty,
+                    (Type::CPtr(_, m1, n1), Type::FatPtr(_, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => ty,
+                    (Type::Slice(inner, len, m1, n1), Type::FatPtr(_, m2, n2)) if (m1 == m2 || (m1 && !m2)) && n1 == n2 => ty,
+                    (from, Type::Float32 | Type::Float64) if from.is_numeric() => ty,
+                    (Type::DataPtr(..), Type::CPtr(inner, ..)) if matches!(inner.deref(), Type::Any) => ty,
+                    (Type::Float32 | Type::Float64, to) if to.is_numeric() => ty,
+                    (Type::Int64, p) | (p, Type::Int64) if p.is_pointer() => ty,
+                    (from, to)
+                        if (from.is_numeric() || matches!(from, Type::Bool)) && to.is_numeric() => to,
+                    (from, to) => return None,
+                };
+
+                if let Some(name) = name {
+                    Some(Type::Declared(name, Indirection::new(r)))
+                } else {
+                    Some(r)
+                }
+            },
+            _ => None,
+        }
+    }
+
+    fn get_calls_of_func(
+        &mut self,
+        name: &String,
+    ) -> Result<Vec<Box<[Type]>>, Box<[CompilationError]>> {
+        let usages = get_usages_of(name, &*self.nodes);
+        let calls = usages[1..]
+            .into_iter()
+            .filter_map(|usage| match usage.kind {
+                UsageKind::Call(ref args) => Some(args),
+                _ => None,
+            })
+            .map(|args| args.iter().filter_map(|n| self.estimate_type_of(n)).collect::<Vec<_>>().into_boxed_slice())
+            .collect::<Vec<_>>();
+
+        Ok(calls)
+    }
+
     pub fn compile_func(&mut self, node: &AstNode) -> Result<(), Box<[CompilationError]>> {
         let AstNode::FnStmt {
             of,
@@ -1779,17 +1867,17 @@ impl CraneliftGenerator {
 
         /**** Search for calls of the function (if it has generics) ****/
 
-        /*if type_generics.len() > 0 {
-            // Stores arguments found in calls of the generic function
-            let mut usages = vec![];
+        //if type_generics.len() > 0 {
+        //    // Stores arguments found in calls of the generic function
+        //    let mut usages = self.get_calls_of_func(unmangled_name)?;
 
-            let flattened_nodes = self.indexer.usages_of(unmangled_name);
-        }*/
+        //    eprintln!("USAGES of {unmangled_name} -> {usages:#?}");
+        //}
 
-        let ret_type = self.tg.compile_type(&ret_type, &self.isa, type_generics).downcast_ref::<CraneliftType>().unwrap().clone();
+        let ret_type = self.tg.compile_type(&ret_type, &self.isa, type_generics);
         let arg_types = args
             .iter()
-            .map(|(_, ty, _)| self.tg.compile_type(ty, &self.isa, type_generics).downcast_ref::<CraneliftType>().unwrap().clone())
+            .map(|(_, ty, _)| self.tg.compile_type(ty, &self.isa, type_generics))
             .collect::<Vec<_>>();
 
         let mangled_name = if modifiers.contains(&Modifier::NoMangle) || &**unmangled_name == "main" {
@@ -1799,6 +1887,8 @@ impl CraneliftGenerator {
         } else {
             mangle_function(unmangled_name, &arg_types, &ret_type)
         };
+
+        println!("{unmangled_name} -> {mangled_name}");
 
         let mut sig = Signature::new(self.call_conv);
 
@@ -1823,8 +1913,6 @@ impl CraneliftGenerator {
             return Err(Box::new([CompilationError::MainMustHave2Args(self.file_path.clone())]))
         }*/
 
-        let name = &mangled_name;
-
         let mut auto_free_idx = None;
 
         if modifiers.contains(&Modifier::AutoFree) {
@@ -1832,7 +1920,7 @@ impl CraneliftGenerator {
             auto_free_idx = Some(self.auto_frees.len() - 1);
         }
 
-        let fid = self.module.declare_function(&name, linkage, &sig).unwrap();
+        let fid = self.module.declare_function(&*mangled_name, linkage, &sig).unwrap();
 
         self.fn_counter += 1;
 
@@ -1846,9 +1934,9 @@ impl CraneliftGenerator {
         let mut fn_builder = FunctionBuilder::new(&mut func, &mut ctx);
 
         if modifiers.contains(&Modifier::Alloc) {
-            self.allocator_fns.insert(name.clone());
+            self.allocator_fns.insert(mangled_name.clone());
         } else if modifiers.contains(&Modifier::Dealloc) {
-            self.deallocator_fns.insert(name.clone());
+            self.deallocator_fns.insert(mangled_name.clone());
         }
 
         let arg_meta = args
@@ -1863,7 +1951,7 @@ impl CraneliftGenerator {
         fn_builder.switch_to_block(block);
         fn_builder.seal_block(block);
 
-        if let Some(variants) = self.function_variants.get_mut(name) {
+        if let Some(variants) = self.function_variants.get_mut(&mangled_name) {
             variants.push((ret_type.clone(), arg_types.clone()))
         } else {
             self.function_variants.insert(
@@ -1873,26 +1961,26 @@ impl CraneliftGenerator {
         }
 
         self.functions.insert(
-            name.clone(),
+            mangled_name.clone(),
             FunctionMeta {
                 auto_free_idx,
                 modifiers: modifiers.clone(),
                 arity: args.len(),
-                arg_meta: arg_meta.into_iter().map(|(a, b)| (a.clone(), Rc::from(b))).collect::<Vec<_>>(),
-                return_type: Rc::new(ret_type),
+                arg_meta: arg_meta.into_iter().map(|(a, b)| (a.clone(), b)).collect::<Vec<_>>(),
+                return_type: ret_type,
                 sig,
                 index: self.fn_counter,
                 start_block: Some(block),
             },
         );
 
-        let mut trace = Trace::new_root(name.clone());
+        let mut trace = Trace::new_root(mangled_name);
 
         self.var_builder.create_scope();
 
         for (i, (arg_name, arg_type, _)) in args.iter().enumerate() {
             let p = fn_builder.block_params(block)[i];
-            let ty = self.tg.compile_type_no_tgs(arg_type, &self.isa).downcast_ref::<CraneliftType>().unwrap().clone();
+            let ty = self.tg.compile_type_no_tgs(arg_type, &self.isa);
 
             self.var_builder.create_var(
                 &mut fn_builder,
@@ -1930,19 +2018,15 @@ impl CraneliftGenerator {
                 ..
             } => {
                 let fields = fields.into_iter().map(|(m, n, t)| (m, n, self.tg.compile_type_no_tgs(t, &self.isa))).collect::<Vec<_>>();
-                let (alignments, sizes): (Vec<u8>, Vec<u8>) = fields.iter().map(|(_, _, t)| (alignment_of_cranelift_type_on_architecture(t.downcast_ref().unwrap(), self.isa.triple()).unwrap(), t.size_bytes(&self.isa))).unzip();
+                let (alignments, sizes): (Vec<u8>, Vec<u8>) = fields.iter().map(|(_, _, t)| (alignment_of_cranelift_type_on_architecture(t, self.isa.triple()).unwrap(), t.size_bytes(&self.isa))).unzip();
 
                 let (data_size, data_offsets) = calculate_data_cranelift(&*alignments, &*sizes);
 
                 let meta = DataDeclMeta {
                     size: data_size,
                     alignment: alignments.iter().max().unwrap_or(&1).clone(),
-                    fields: fields.into_iter().map(|(m, n, t)| (m.clone(), n.clone(), Rc::from(t))).zip(data_offsets).map(|((a, b, c), d)| (d, a, b, c)).collect(),
+                    fields: fields.into_iter().map(|(m, n, t)| (m.clone(), n.clone(), t)).zip(data_offsets).map(|((a, b, c), d)| (d, a, b, c)).collect(),
                 };
-
-                println!("align {:?}", meta.alignment);
-                println!("size {:?}", meta.size);
-                println!("fields {:?}", meta.fields.iter().map(|(a, b, c, _)| (a, b, c)).collect::<Vec<_>>());
 
                 self.data_declarations.insert(name.clone(), meta);
 
@@ -1950,12 +2034,6 @@ impl CraneliftGenerator {
             }
             AstNode::IncludeStmt(_l, p) => {
                 let search_path = p.as_ref().split_last().unwrap().1.join("/");
-                let parent_path = self
-                    .file_path
-                    .parent()
-                    .unwrap()
-                    .to_string_lossy()
-                    .to_string();
 
                 let mut msc_path: PathBuf = [search_path.clone(), format!("{}.msc", p.last().unwrap())].iter().collect();
                 let mut obj_path: Option<PathBuf> = Some([search_path.clone(), format!("{}.o", p.last().unwrap())].iter().collect());
@@ -1980,14 +2058,6 @@ impl CraneliftGenerator {
                     obj_path = Some(tmp)
                 }
 
-                if self
-                    .included_modules
-                    .iter()
-                    .any(|m| m.mosaic_file == msc_path)
-                {
-                    return Ok(());
-                }
-
                 if let Some(ref p) = obj_path {
                     if !p.exists() {
                         obj_path = None;
@@ -2004,6 +2074,21 @@ impl CraneliftGenerator {
 
                 // SHADOW CODEGEN
 
+                let module_name = msc_path.file_stem().unwrap().to_str().unwrap().to_string();
+
+                eprintln!("MODULE {module_name} IS MAYBE IN {:?}, CL {:?}", self.included_modules.iter().map(|m| m.name.clone()).collect::<Vec<_>>(), self.compiling_list);
+
+                if self
+                    .included_modules
+                    .iter()
+                    .any(|m| m.name == module_name)
+                || self.compiling_list.contains(&module_name)
+                {
+                    return Ok(());
+                }
+
+                eprintln!("COMPILING MODULE {module_name} (NOT IN {:?} OR CL {:?})", self.included_modules.iter().map(|m| m.name.clone()).collect::<Vec<_>>(), self.compiling_list);
+
                 let reader =
                     CharReader::new(File::new(msc_path.to_str().unwrap().to_string()).unwrap());
 
@@ -2016,21 +2101,26 @@ impl CraneliftGenerator {
                     parser,
                     isa::lookup(self.isa_builder.triple().clone()).unwrap(),
                     None,
+                    Some(self.included_modules.clone()),
+                    Some(self.compiling_list.clone())
                 );
 
                 let gen = shadow_cg.compile(true, obj_path.clone()).unwrap();
 
-                self.tg.merge(&gen.tg);
-                self.included_modules.push(gen);
+                eprintln!("previously included (from {}) -> {:?}", gen.name, gen.prev_includes.iter().map(|m| m.name.clone()).collect::<Vec<_>>());
+
+                self.tg.merge(&*gen.tg);
+                self.included_modules.extend(gen.prev_includes.clone());
+                self.included_modules.insert(gen);
+
+                eprintln!("MODULE {module_name} COMPILED (SHOULD BE IN {:?})", self.included_modules.iter().map(|m| m.name.clone()).collect::<Vec<_>>());
 
                 Ok(())
             }
             AstNode::TypeAlias(_l, name, to) => {
-                eprintln!("type {name} = {to:?}");
-
                 let to = self.tg.compile_type_no_tgs(to, &self.isa);
 
-                self.tg.register_type(name, Box::new(Type::Declared(name.clone(), Indirection::new(to.downcast_ref::<CraneliftType>().unwrap().clone()))));
+                self.tg.register_type(name, Type::Declared(name.clone(), Indirection::new(to)));
 
                 Ok(())
             }
@@ -2081,33 +2171,22 @@ impl CraneliftGenerator {
             res.object.write_stream(&mut file).unwrap();
         }
 
-        let prev_includes = self
-            .included_modules
-            .iter()
-            .flat_map(|m| {
-                [
-                    m.prev_includes.clone().into_iter().collect(),
-                    vec![(m.mosaic_file.clone(), m.assoc_obj.clone())],
-                ]
-                .into_iter()
-                .flatten()
-            })
-            .collect::<Vec<_>>();
-
         if errors.len() > 0 {
             return Err(errors.into());
         }
 
+        self.compiling_list.remove(&self.module_name);
+
         Ok(CraneliftModule {
-            product: res,
+            product: Rc::new(res),
             assoc_obj,
             name: self.module_name,
-            prev_includes: HashSet::from_iter(prev_includes),
+            prev_includes: self.included_modules,
             mosaic_file: self.file_path,
             functions: self.functions,
             data_declarations: self.data_declarations,
             function_variants: self.function_variants,
-            tg: self.tg,
+            tg: Rc::new(self.tg),
             out_file,
         })
     }

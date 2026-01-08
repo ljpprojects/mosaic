@@ -1,8 +1,8 @@
 # Used to work but doesnt now I broke something, but shows some syntax
 
-include devcore::mem;
-include devstd::string;
-include devstd::io;
+include core::mem;
+include std::string;
+include std::io;
 
 type LibHandle = *mut any;
 type GenericFunction = *mut any;
@@ -43,11 +43,11 @@ fn GenericFunction::address_of(file: String, name: String) export -> GenericFunc
 };
 
 fn AsyncHandlerResult::empty export -> AsyncHandlerResult {
-    return (0 as i64) as AsyncHandlerResult;
+    return (0 as usize) as AsyncHandlerResult;
 };
 
 fn AsyncHandlerResult::clone_of(v: *const any, len: i32) export -> AsyncHandlerResult {
-    let p = alloc(sizeof AsyncHandlerResult);
+    let p = MaybeAnyPtrMut::allocate(sizeof AsyncHandlerResult);
 
     memcopy(p, v, len);
 
@@ -61,11 +61,11 @@ fn AsyncHandlerResult::from(v: *const any) export -> AsyncHandlerResult {
 extern fn pthread_create(thread: *mut pthread_t, f: *mut? any, task: fn(AsyncHandler) -> AsyncHandlerResult, handler: AsyncHandler) -> i32
 
 fn AsyncHandler::new alloc -> AsyncHandler {
-    let self = alloc(sizeof AsyncHandler) else {
+    let self = MaybeAnyPtrMut::allocate(sizeof AsyncHandler) else {
         printf("Could not allocate memory for AsyncHandler." as *const i8, 0 as i64);
         exit(1);
 
-        return ((0 as i64) as *const any) as AsyncHandler;
+        return ((0 as usize) as *const any) as AsyncHandler;
     };
 
     return self as AsyncHandler;
@@ -79,7 +79,7 @@ fn AsyncHandler::complete(self: AsyncHandler) -> null {
 
 fn AsyncHandler::deinit(self: AsyncHandler) -> null {
     return if (self.finished) {
-        dealloc(self as *mut any)
+        deMaybeAnyPtrMut::allocate(self as *mut any)
     } else {
         usleep(5000);
         self.deinit()
@@ -87,7 +87,7 @@ fn AsyncHandler::deinit(self: AsyncHandler) -> null {
 }
 
 fn AsyncHandler::await(self: AsyncHandler) -> AsyncHandlerResult {
-    return if (self.finished) {
+    return if self.finished {
         self.result
     } else {
         usleep(5000);
@@ -98,9 +98,9 @@ fn AsyncHandler::await(self: AsyncHandler) -> AsyncHandlerResult {
 fn AsyncHandler::begin(self: AsyncHandler, task: AsyncHandlerTask) -> pthread_t {
     memset(self as *mut any, 0, 1);
 
-    mut thread: pthread_t = (0 as i64) as pthread_t;
+    mut thread: pthread_t = (0 as usize) as pthread_t;
 
-    thread = pthread_create(&thread, (0 as i64) as *mut? any, task, self);
+    thread = pthread_create(&thread, (0 as usize) as *mut? any, task, self);
 
     return thread;
 }
@@ -115,10 +115,10 @@ fn wait(handler: AsyncHandler) export no_mangle -> AsyncHandlerResult {
 }
 
 fn get_program_path export -> CString {
-    mut buf = guard alloc(1024) else {
+    mut buf = guard MaybeAnyPtrMut::allocate(1024) else {
         exit(1);
 
-        return (0 as i64) as CString;
+        return (0 as usize) as CString;
     };
 
     mut size = 1024;

@@ -1,201 +1,57 @@
-# Ripped from my implementation of the stdlib
-
-include devcore::mem;
+include core::mem;
+include std::error;
 
 type CString = *const i8;
-type String = *const [i8];
-type MaybeString = *const? [i8];
+type MaybeCString = *const? i8;
+
+type Str = *const [i8];
+type MaybeStr = *const? [i8];
 
 type CStringMut = *mut i8;
-type StringMut = *mut [i8];
-type MaybeStringMut = *mut? [i8];
+type MaybeCStringMut = *mut? i8;
 
-extern fn exit(code: i32) -> null
-extern fn memcpy(dest: *mut any, src: *const any, len: i32) -> null
-extern fn memset(p: *mut any, b: i32, len: i32) -> null
-extern fn strlen(s: CString) -> i32
+type StrMut = *mut [i8];
+type MaybeStrMut = *mut? [i8];
 
-fn MaybeString::null() -> MaybeString {
-    return (0 as i64) as MaybeString
-}
+extern fn strlen(s: CString) -> usize;
+extern fn memcpy(dest: *mut any, src: *const any, len: usize) -> null;
 
-fn MaybeString::unwrap(self: MaybeString) export -> String {
-    return guard self else {
-        exit(1)
-
-        return MaybeString::null()
-    }
-}
-
-fn MaybeStringMut::null() -> MaybeStringMut {
-    return (0 as i64) as MaybeString
-}
-
-fn MaybeStringMut::unwrap(self: MaybeStringMut) export -> StringMut {
-    return guard self else {
-        exit(1)
-
-        return MaybeStringMut::null()
-    }
-}
-
-fn String::length(self: String) export -> i32 {
+fn Str::length(self: Str) export -> i32 {
     return *(self as *const i32)
 }
 
-fn StringMut::length(self: StringMut) export -> i32 {
-    return *(self as *const i32)
-}
+fn Str::from_c(c: CString) export alloc -> Str {
+    let len = strlen(c);
+    let ptr: StrMut = guard MaybeAnyPtrMut::allocate(len + 4 as usize) else {
+        let err = Error::fatal("Could not allocate new memory for C string." as *const [i8]);
 
-fn String::to_c_string(self: String) export alloc -> CString {
-    let len = self.length();
-    let buf = guard alloc(len) else {
-        exit(1)
+        err.raise(); # This should exit
 
-        return (0 as i64) as CString
+        return (0 as usize) as Str # So this should never run
     };
 
-    # overwrite one byte of data conating length information
-    memcpy((buf as *const any) as *mut any, (self + 4 as i64) as *const any, len)
+    (*(ptr as *mut u32)) = len as u32; # Set the length bytes
 
-    # null terminator
-    memset(
-        ((buf + len as i64) as *const any) as *mut any,
-        0,
-        4
-    )
-
-    return buf as CString
-}
-
-fn String::to_c_string_mut(self: String) export alloc -> CStringMut {
-    let len = self.length();
-    let buf = guard alloc(len) else {
-        exit(1)
-
-        return (0 as i64) as CString
-    };
-
-    # overwrite one byte of data conating length information
-    memcpy((buf as *const any) as *mut any, (self + 4 as i64) as *const any, len)
-
-    # null terminator
-    memset(
-        ((buf + len as i64) as *const any) as *mut any,
-        0,
-        4
-    )
-
-    return buf as CStringMut
-}
-
-fn StringMut::to_c_string(self: StringMut) export alloc -> CString {
-    let len = self.length();
-    let buf = guard alloc(len) else {
-        exit(1)
-
-        return (0 as i64) as CString
-    };
-
-    # overwrite one byte of data conating length information
-    memcpy((buf as *const any) as *mut any, (self + 4 as i64) as *const any, len)
-
-    # null terminator
-    memset(
-        ((buf + len as i64) as *const any) as *mut any,
-        0,
-        4
-    )
-
-    return buf as CString
-}
-
-fn StringMut::to_c_string_mut(self: StringMut) export alloc -> CStringMut {
-    let len = self.length();
-    let buf = guard alloc(len) else {
-        exit(1)
-
-        return (0 as i64) as CString
-    };
-
-    # overwrite one byte of data conating length information
-    memcpy((buf as *const any) as *mut any, (self + 4 as i64) as *const any, len)
-
-    # null terminator
-    memset(
-        ((buf + len as i64) as *const any) as *mut any,
-        0,
-        4
-    )
-
-    return buf as CStringMut
-}
-
-# Converts a String to a CString without extra allocations, overwriting the current pointer
-fn StringMut::to_c_string_in_place(self: StringMut) export -> CString {
-    let len = self.length();
-    let buf = self as CString;
-
-    # overwrite one byte of data conating length information
-    memcpy((buf as *const any) as *mut any, (buf + 4 as i64) as *const any, self.length())
-
-    # null terminator
-    memset(
-        ((buf + len as i64) as *const any) as *mut any,
-        0,
-        4
-    )
-
-    return buf
-}
-
-# Converts a String to a CStringMut without extra allocations, overwriting the current pointer
-fn StringMut::to_mut_c_string_in_place(self: StringMut) export -> CStringMut {
-    let len = self.length();
-    let buf = self as CStringMut;
-
-    # overwrite one byte of data conating length information
-    memcpy((buf as *const any) as *mut any, (buf + 4 as i64) as *const any, self.length())
-
-    # null terminator
-    memset(
-        ((buf + len as i64) as *const any) as *mut any,
-        0,
-        4
-    )
-
-    return buf
-}
-
-# Concatenate strings with minimal allocations
-fn String::concat(self: String, other: String) alloc export -> MaybeString {
-    let needed_size = self.length() + other.length() + 4;
-    let ptr = guard alloc(needed_size) else {
-        return ((0 as i64) as *const? any) as MaybeString
-    };
-
-    let self_len = self.length();
-    let other_len = other.length();
-    let new_len = self_len + other_len;
-
-    memcpy(ptr + 4 as i64, (self + 4 as i64) as *const any, self_len)
-    memcpy(ptr + self_len as i64 + 4 as i64, (other + 4 as i64) as *const any, other_len)
-    memcpy(ptr, (&new_len) as *const any, 4)
+    # Copy the data bytes
+    memcpy((ptr as usize + 4 as usize) as AnyPtrMut, c as AnyPtr, len);
 
     return ptr
 }
 
-fn String::from_c_string(cstr: CString) export alloc -> String {
-    let len = strlen(cstr);
+fn StrMut::from_c(c: CString) export alloc -> Str {
+    let len = strlen(c);
+    let ptr: StrMut = guard MaybeAnyPtrMut::allocate(len + 4 as usize) else {
+        let err = Error::fatal("Could not allocate new memory for C string." as *const [i8]);
 
-    let buf = guard alloc(len + 4) else {
-        exit(1)
+        err.raise(); # This should exit
 
-        return (0 as i64) as String
-    }
+        return (0 as usize) as Str # So this should never run
+    };
 
-    memcpy(buf, &len, 4)
-    memcpy(buf + 4 as i64, cstr, len)
+    (*(ptr as *mut u32)) = len as u32; # Set the length bytes
 
-    return buf
+    # Copy the data bytes
+    memcpy((ptr as usize + 4 as usize) as AnyPtrMut, c as AnyPtr, len);
+
+    return ptr
 }

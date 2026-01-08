@@ -40,11 +40,10 @@ impl VariableBuilder {
         name: String,
         constant: bool,
     ) -> Variable {
-        let variable = Variable::new(self.index);
-
-        builder.declare_var(variable, self.isa.pointer_type());
+        let variable = builder.declare_var(self.isa.pointer_type());
 
         let slot = builder.create_sized_stack_slot(StackSlotData {
+            key: None,
             kind: StackSlotKind::ExplicitSlot,
             size: ty.size_bytes(&self.isa) as StackSize,
             align_shift: 0,
@@ -136,6 +135,21 @@ impl VariableBuilder {
             .collect::<Vec<_>>()
             .len()
             > 0
+    }
+
+    pub fn get_var_type(
+        &self,
+        name: &String,
+    ) -> Option<CraneliftType> {
+        let scope = self
+            .scopes
+            .iter()
+            .filter(|vars| vars.contains_key(name))
+            .last()?;
+
+        let meta = scope.get(name)?;
+
+        Some(meta.def_type.clone())
     }
 
     pub fn get_var(

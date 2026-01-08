@@ -5,23 +5,23 @@ use cranelift_codegen::ir::{Block, Signature, Value};
 use cranelift_frontend::Variable;
 use crate::compiler::traits::CompilationType;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct FunctionMeta {
     pub auto_free_idx: Option<usize>,
     pub modifiers: Box<[Modifier]>,
     pub arity: usize,
-    pub arg_meta: Vec<(String, Rc<dyn CompilationType>)>,
-    pub return_type: Rc<dyn CompilationType>,
+    pub arg_meta: Vec<(String, CraneliftType)>,
+    pub return_type: CraneliftType,
     pub sig: Signature,
     pub index: u32,
     pub start_block: Option<Block>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct DataDeclMeta {
     pub size: u16,
     pub alignment: u8,
-    pub fields: Vec<(u16, bool, String, Rc<dyn CompilationType>)>, // offset, is_mutable, name, type
+    pub fields: Vec<(u16, bool, String, CraneliftType)>, // offset, is_mutable, name, type
 }
 
 #[derive(Hash, Clone, Debug, PartialEq, Eq)]

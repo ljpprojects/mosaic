@@ -1,20 +1,28 @@
 # Fancy hello world example, but devstd::io is just fancy abstraction of read/write syscalls
 # It compiles on my system, but not on yours unless you replace all the stdlib stuff
 
-include devstd::io
+include std::string
+include std::io
+include std::bytes
+
+extern fn memcpy(dest: *mut any, src: *const any, len: usize) -> null;
 
 fn main -> i32 {
-    let string = "Hello, World!" as *const [i8];
+    let message_str: Str = "Hello, World!!!!!!!!!!!!!!!!\n" as Str;
+    let message_bytes: ByteArrayMut = ByteArrayMut::with_length(message_str.length() as usize - 1 as usize);
+    message_bytes.copy_from(message_str as ByteArray);
 
-    let maybe_stdout: MaybeStream = (guard Stream::stdout() else {
-        return 1
-    });
+    let stdout = Stream::stdout();
 
-    let stdout = maybe_stdout.unwrap();
+    mut i = 0;
 
-    stdout.write(string as ByteArray)
+    while i < 1000000 {
+        stdout.write(message_bytes as ByteArray);
 
-    stdout.deinit()
+        i = i + 1
+    }
+
+    message_bytes.deinit();
 
     return 0
 }

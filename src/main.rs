@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Command::Build { file, target, .. } => {
             let triple = Triple::from_str(&target.unwrap_or("_".into())).unwrap_or(Triple::host());
 
-            
+
 
             if !PathBuf::from(file.clone()).exists() {
                 return Err(CompilationError::UnknownModule(
@@ -63,10 +63,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 parser,
                 lookup(triple.clone())?,
                 Some(args.command.clone()),
+                None,
+                None
             );
 
             match cg.compile(true, None) {
-                Ok(gen) => Linker::link(gen, args.command, triple),
+                Ok(gen) => match Linker::link(gen, args.command, triple) {
+                    Ok(_) => Ok::<(), Box<dyn std::error::Error>>(()),
+                    Err(e) => {
+                        panic!("{e}")
+                    },
+                },
                 Err(errors) => {
                     for err in errors {
                         eprintln!("{err}")

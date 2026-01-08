@@ -250,7 +250,7 @@ pub enum AstNode {
     PrefixOp(LineInfo,  String, Indirection<AstNode>),
     PostfixOp(LineInfo,  Rc<AstNode>, String),
     Path(LineInfo,  Box<[String]>),
-    MemberExpr(LineInfo,  Box<[String]>),
+    MemberExpr(LineInfo,  Indirection<AstNode>, String), // line_info, obj, prop
     IdxAccess(
         LineInfo,
         Indirection<AstNode>,
@@ -293,6 +293,8 @@ pub enum AstNode {
     },
 
     // --- Statements --- //
+
+    BreakStmt(LineInfo),
 
     ForInStmt {
         line_info: LineInfo,
@@ -377,6 +379,7 @@ pub enum AstNode {
 impl Display for AstNode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            AstNode::BreakStmt(_) => write!(f, "break"),
             AstNode::NumberLiteral(n, ..) => write!(f, "{n}"),
             AstNode::StringLiteral(s, ..) => write!(f, "\"{s}\""),
             AstNode::ArrayLiteral(arr, ..) => write!(f, "{arr:?}"),
@@ -387,7 +390,7 @@ impl Display for AstNode {
             AstNode::PrefixOp(o, v, ..) => write!(f, "{o}({v})"),
             AstNode::PostfixOp(v, o, ..) => write!(f, "({v}){o}"),
             AstNode::Path(_, p, ..) => write!(f, "{}", p.join("::")),
-            AstNode::MemberExpr(_, p, ..) => write!(f, "{}", p.join(".")),
+            AstNode::MemberExpr(_, o, p) => write!(f, "({o}).{p}"),
             AstNode::IdxAccess(v, i, ..) => write!(f, "{v}[{i}]"),
             AstNode::DataInitExpr { name, .. } => write!(f, "{name} {{ ... }}"),
             AstNode::CallExpr { args, callee, .. } => write!(
@@ -454,6 +457,7 @@ impl Display for AstNode {
 impl AstNode {
     fn line_info(&self) -> LineInfo {
         *match self {
+            AstNode::BreakStmt(l) => l,
             AstNode::NumberLiteral(l, ..) => l,
             AstNode::ByteLiteral(l, ..) => l,
             AstNode::StringLiteral(l, ..) => l,
@@ -467,7 +471,7 @@ impl AstNode {
             AstNode::GuardClause { line_info, .. } => line_info,
             AstNode::DataInitExpr { line_info, .. } => line_info,
             AstNode::Path(l, ..) => l,
-            AstNode::MemberExpr(l, _) => l,
+            AstNode::MemberExpr(l, ..) => l,
             AstNode::IdxAccess(l, ..) => l,
             AstNode::CallExpr { line_info, .. } => line_info,
             AstNode::AsExpr(l, ..) => l,
@@ -494,14 +498,15 @@ impl AstNode {
 
     fn is_stmt(&self) -> bool {
         matches!(self, Self::ForInStmt { .. }  |
-            Self::FnStmt { .. }     |
-            Self::LetStmt { .. }    |
-            Self::MutStmt { .. }    |
-            Self::WhileStmt { .. }  |
-            Self::IncludeStmt(..)   |
-            Self::IfStmt { .. }     |
-            Self::ExternFn { .. }   |
-            Self::ReturnStmt(..)    |
+            Self::FnStmt { .. }    |
+            Self::LetStmt { .. }   |
+            Self::MutStmt { .. }   |
+            Self::WhileStmt { .. } |
+            Self::IncludeStmt(..)  |
+            Self::IfStmt { .. }    |
+            Self::ExternFn { .. }  |
+            Self::ReturnStmt(..)   |
+            Self::BreakStmt(..)    |
             Self::TypeAlias(..))
     }
 
@@ -1216,8 +1221,6 @@ impl StreamedParser {
                 Some(Err(e)) => return Some(Err(e)),
             };
 
-            println!(".{name} = {value:?}");
-
             let _ = self.expect_char(&',', true);
 
             fields.push((name, Indirection::new(value)))
@@ -1398,8 +1401,6 @@ impl StreamedParser {
                     AstNode::NullLiteral(l)
                 } else {
                     if self.expect_char(&'{', false).is_ok() {
-                        println!("DAT_INIT_EXPR");
-
                         match self.parse_data_init_expr(i, l) {
                             Some(Ok(node)) => node,
                             Some(Err(e)) => return Some(Err(e)),
@@ -1438,7 +1439,7 @@ impl StreamedParser {
             }
         }
 
-        Some(Ok(left))
+        self.parse_member_expr(left)
     }
 
     pub fn parse_call_expr(&mut self, caller: AstNode) -> Option<Result<AstNode, ParseError>> {
@@ -1537,55 +1538,35 @@ impl StreamedParser {
 
     pub fn parse_member_expr(
         &mut self,
-        left: Option<AstNode>,
+        start: AstNode,
     ) -> Option<Result<AstNode, ParseError>> {
-        let begin = match (|| {
-            let Some(AstNode::Identifier(_, left, ..)) = left else {
-                let tk = self.lexer.next_token();
-
-                return Ok(match tk {
-                    Some(Ok(Token::Ident(begin, _))) => begin,
-                    Some(Ok(Token::Number(begin, _))) => begin.to_string(),
-                    Some(Ok(tk)) => {
-                        return Err(ParseError::ExpectedToken(
-                            self.file.clone(),
-                            Token::Ident("".to_string(), LineInfo::default()),
-                            tk,
-                        ))
-                    }
-                    Some(Err(e)) => return Err(e),
-                    None => {
-                        return Err(ParseError::UnexpectedEOF(
-                            self.file.clone(),
-                            "MEMBER SEGMENT".to_string(),
-                        ))
-                    }
-                });
-            };
-
-            Ok(left)
-        })() {
-            Ok(p) => p,
-            Err(e) => return Some(Err(e)),
-        };
-
-        let mut path: Vec<String> = vec![begin];
+        let mut left = start;
 
         while self.expect_chars(".", true, &LineInfo::new_one_char(self.lexer.state().current_char, self.lexer.state().current_line)).is_ok() {
             let next = self.lexer.next_token();
 
-            let next = match next {
+            let prop = match next {
                 Some(Ok(Token::Ident(begin, _))) => begin,
-                Some(Ok(Token::Number(begin, _))) => begin.to_string(),
+                Some(Ok(tk)) => return Some(Err(ParseError::ExpectedToken(
+                    self.file.clone(),
+                    Token::Ident("*".to_string(), LineInfo::default()),
+                    tk,
+                ))),
                 Some(Err(e)) => return Some(Err(e)),
-                _ => break,
+                None => return Some(Err(ParseError::UnexpectedEOF(
+                    self.file.clone(),
+                    "member expression".to_string()
+                ))),
             };
 
-            path.push(next)
+            left = AstNode::MemberExpr(
+                LineInfo::new(left.line_info().begin_char(), self.lexer.state().current_char, left.line_info().begin_line(), self.lexer.state().current_line),
+                Indirection::new(left),
+                prop,
+            )
         }
 
-        // TODO: fix this
-        self.parse_call_expr(AstNode::MemberExpr(LineInfo::default(), path.into_boxed_slice()))
+        self.parse_call_expr(left)
     }
 
     pub fn parse_cast_expr(&mut self) -> Option<Result<AstNode, ParseError>> {
@@ -1653,9 +1634,7 @@ impl StreamedParser {
             return Some(Ok(left));
         };
 
-        if op == '.' {
-            return self.parse_member_expr(Some(left));
-        } else if op == ':' {
+        if op == ':' {
             return self.parse_path_expr(Some(left));
         } else if EXPONENTIAL_OPS.contains(&op.to_string().as_str()) {
             let _ = self.lexer.next_token();
@@ -2299,8 +2278,6 @@ impl StreamedParser {
     }
 
     pub fn parse_for_in_expr(&mut self) -> Option<Result<AstNode, ParseError>> {
-        println!("FOR");
-
         let start = self.expect_ident(&"for", true).unwrap();
 
         let var = match self.lexer.next_token() {
@@ -2322,9 +2299,6 @@ impl StreamedParser {
         };
 
         let _ = self.expect_ident(&"in", true).unwrap();
-
-        println!("FOR2");
-
         let of = match self.parse_primary_expr()? {
             Err(e) => return Some(Err(e)),
             Ok(n) => n,
@@ -2349,8 +2323,6 @@ impl StreamedParser {
     }
 
     pub fn parse_while_stmt(&mut self) -> Option<Result<AstNode, ParseError>> {
-        println!("WHILE");
-
         let start = self.expect_ident(&"while", true).unwrap();
 
         let cond = match self.parse_comparative_expr()? {
@@ -2745,18 +2717,12 @@ impl StreamedParser {
     }
 
     pub fn parse_assignment_expr(&mut self) -> Option<Result<AstNode, ParseError>> {
-        eprintln!("PRE-ASSIGNMENT, next = {:?}", self.lexer.peek_next_token());
-
         let mut left = match self.parse_bitwise_expr()? {
             Ok(l) => l,
             Err(e) => return Some(Err(e)),
         };
 
-        eprintln!("ASSIGNMENT, next = {:?}", self.lexer.peek_next_token());
-
         if let Ok(_) = self.expect_chars(&"=", true, &LineInfo::new_one_char(self.lexer.state().current_char, self.lexer.state().current_line)) {
-            eprintln!("ACTUAL ASSIGNMENT!!!!!!!!!");
-
             let right = match self.parse_assignment_expr()? {
                 Ok(left) => left,
                 Err(e) => return Some(Err(e)),
@@ -2771,6 +2737,19 @@ impl StreamedParser {
         };
 
         Some(Ok(left))
+    }
+
+    pub fn parse_break_stmt(&mut self) -> Option<Result<AstNode, ParseError>> {
+        let start = self.expect_ident(&"break", true).unwrap();
+
+        Some(Ok(AstNode::BreakStmt(
+            LineInfo::new(
+                start.begin_char(),
+                self.lexer.state().current_char,
+                start.begin_line(),
+                self.lexer.state().current_line,
+            )
+        )))
     }
 
     pub fn next_ast_node(&mut self) -> Option<Result<AstNode, ParseError>> {

@@ -22,6 +22,7 @@ pub fn alignment_of_cranelift_type_on_architecture(ty: &CraneliftType, triple: &
             CraneliftType::Int16 | CraneliftType::UInt16 => Some(2),
             CraneliftType::Int32 | CraneliftType::UInt32 => Some(4),
             CraneliftType::Int64 | CraneliftType::UInt64 => Some(8),
+            CraneliftType::IntSize | CraneliftType::UIntSize => Some(8),
             CraneliftType::Float32 => Some(4),
             CraneliftType::Float64 => Some(8),
             CraneliftType::FuncPtr { .. } => Some(8),
@@ -41,7 +42,7 @@ pub fn calculate_data_cranelift(field_alignments: &[u8], field_sizes: &[u8]) -> 
     if field_alignments.len() == 0 {
         return (0, vec![]);
     }
-    
+
     let mut current_offset: u16 = 0;
     let max_alignment = *field_alignments.iter().max().unwrap();
 
@@ -83,7 +84,7 @@ mod tests {
         let mut alignments = types.iter().map(|t| alignment_of_cranelift_type_on_architecture(&t, &Triple::host()).unwrap()).collect::<Vec<_>>();
 
         alignments.sort();
-        
+
         println!("{:?}", alignments);
         println!("{:#?}", calculate_data_cranelift(&*alignments, &*alignments));
     }
