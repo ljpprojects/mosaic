@@ -1,18 +1,18 @@
 set -euo pipefail
 
-#if ! (cargo -v > /dev/null); then
-#  echo "Cargo is not installed."
-#  exit 1
-#fi
-#
-#echo "Which branch do you want to use?"
-#
-#select branch in "Stable" "Nightly"; do
-#    case $branch in
-#        Nightly ) cargo install --version latest mosaic-lang; break;;
-#        Stable ) cargo install mosaic-lang; break;;
-#    esac
-#done
+if ! (cargo -v > /dev/null); then
+  echo "Cargo is not installed."
+  exit 1
+fi
+
+echo "Which branch do you want to use?"
+
+select branch in "Stable" "Nightly"; do
+    case $branch in
+        Nightly ) cargo install --version latest mosaic-lang; break;;
+        Stable ) cargo install mosaic-lang; break;;
+    esac
+done
 
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   MODULES_PATH="$HOME/.msc/modules"

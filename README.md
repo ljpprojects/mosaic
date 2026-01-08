@@ -15,11 +15,17 @@ I did this. I made this. I wrote it. Thank me later.
 ## Dependencies
 
 - Rust & Cargo
-- `ld` unless a custom linker is specified, forgot how though
-- Shell
+- `ld` unless a custom linker is specified, forgot how to though
+- Bash
 
-install.sh will install the `msc` binary system-wide and copy tests/std and
+`install.sh` will install the `msc` binary system-wide and copy tests/std and
 tests/core to the appropriate directories for them to be found by the compiler.
+
+So to install it you would run
+
+```
+curl -fsSL "https://github.com/ljpprojects/mosaic/raw/refs/heads/nightly/install.sh" | bash
+```
 
 ## Quirks
 
