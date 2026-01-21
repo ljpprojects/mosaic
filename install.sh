@@ -5,14 +5,9 @@ if ! (cargo -v > /dev/null); then
   exit 1
 fi
 
-echo "Which branch do you want to use?"
+echo "Installing compiler binary..."
 
-select branch in "Stable" "Nightly"; do
-    case $branch in
-        Nightly ) cargo install --version latest mosaic-lang; break;;
-        Stable ) cargo install mosaic-lang; break;;
-    esac
-done
+cargo install mosaic-lang
 
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   MODULES_PATH="$HOME/.msc/modules"
