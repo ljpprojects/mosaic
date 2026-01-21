@@ -22,3 +22,8 @@ pub struct IndexTable {
     /// The mangled versions of types declared in the module
     types: HashMap<String, String>,
 }
+
+/// Generates an [IndexTable] from a [ParsedFile]
+pub struct FileIndexer {
+    
+}

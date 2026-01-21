@@ -1,0 +1,57 @@
+include core::mem;
+include std::error;
+
+type CString = *const i8;
+type MaybeCString = *const? i8;
+
+type Str = *const [i8];
+type MaybeStr = *const? [i8];
+
+type CStringMut = *mut i8;
+type MaybeCStringMut = *mut? i8;
+
+type StrMut = *mut [i8];
+type MaybeStrMut = *mut? [i8];
+
+extern fn strlen(s: CString) -> usize;
+extern fn memcpy(dest: *mut any, src: *const any, len: usize) -> null;
+
+fn Str::length(self: Str) export -> i32 {
+    return *(self as *const i32)
+}
+
+fn Str::from_c(c: CString) export alloc -> Str {
+    let len = strlen(c);
+    let ptr: StrMut = guard MaybeAnyPtrMut::allocate(len + 4 as usize) else {
+        let err = Error::fatal("Could not allocate new memory for C string." as *const [i8]);
+
+        err.raise(); # This should exit
+
+        return (0 as usize) as Str # So this should never run
+    };
+
+    (*(ptr as *mut u32)) = len as u32; # Set the length bytes
+
+    # Copy the data bytes
+    memcpy((ptr as usize + 4 as usize) as AnyPtrMut, c as AnyPtr, len);
+
+    return ptr
+}
+
+fn StrMut::from_c(c: CString) export alloc -> Str {
+    let len = strlen(c);
+    let ptr: StrMut = guard MaybeAnyPtrMut::allocate(len + 4 as usize) else {
+        let err = Error::fatal("Could not allocate new memory for C string." as *const [i8]);
+
+        err.raise(); # This should exit
+
+        return (0 as usize) as Str # So this should never run
+    };
+
+    (*(ptr as *mut u32)) = len as u32; # Set the length bytes
+
+    # Copy the data bytes
+    memcpy((ptr as usize + 4 as usize) as AnyPtrMut, c as AnyPtr, len);
+
+    return ptr
+}

@@ -1,0 +1,76 @@
+# Ripped from my implementation of the stdlib
+
+include core::mem
+#include std::error
+include std::bytes
+
+extern fn exit(code: i32) -> null
+extern fn write(fd: i32, buf: RawByteArray, len: usize) -> i32
+extern fn read(fd: i32, dest: RawByteArray, len: usize) -> i32
+extern fn memset(dest: *mut any, value: i32, count: i32) -> *mut any
+
+data Stream {
+    let fd: i32
+    mut readonly: bool
+}
+
+type Stream = data Stream;
+type MaybeStream = *mut? Stream;
+
+fn MaybeStream::null -> MaybeStream {
+    return (0 as usize) as MaybeStream
+}
+
+fn MaybeStream::unwrap(self: MaybeStream) export -> Stream {
+    return guard self else {
+        exit(1)
+
+        return MaybeStream::null()
+    }
+}
+
+fn Stream::write(self: Stream, bytes: ByteArray) export -> null {
+    write(1, bytes.as_ptr(), bytes.length() as usize);
+
+    return null
+}
+
+fn Stream::writeln(self: Stream, bytes: ByteArray) export -> null {
+    return self.write(bytes)
+}
+
+fn Stream::stdout export alloc -> Stream {
+    let self =  Stream {
+        .fd = 1,
+        .readonly = false
+    };
+
+    return self
+}
+
+fn Stream::stderr export alloc -> Stream {
+    let self =  Stream {
+        .fd = 2,
+        .readonly = false
+    };
+
+    # Prime the stream for writing?????
+    self.write("" as ByteArray);
+
+    return self
+}
+
+fn Stream::stdin export alloc -> Stream {
+    let self = Stream {
+        .fd = 0,
+        .readonly = true
+    };
+
+    return self
+}
+
+fn Stream::read(self: Stream, dest: ByteArrayMut) export -> null {
+    read(self.fd, dest.as_ptr(), dest.length() as usize);
+
+    return null
+}

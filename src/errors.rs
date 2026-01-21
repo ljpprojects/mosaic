@@ -45,7 +45,9 @@ pub enum CompilationError {
     InvalidCast(PathBuf, Trace, Rc<dyn CompilationType>, Rc<dyn CompilationType>),
     CannotMakePointer(PathBuf, Trace, String),
     NotFreed(PathBuf, Trace, MustFreeMeta),
-    InvalidSignature(PathBuf, Trace, String, Rc<dyn CompilationType>, Vec<Rc<dyn CompilationType>>)
+    InvalidSignature(PathBuf, Trace, String, Rc<dyn CompilationType>, Vec<Rc<dyn CompilationType>>),
+    MainMustHave2Args(PathBuf),
+    UndefinedData(PathBuf, Trace, String),
 }
 
 impl Error for CompilationError {}
@@ -333,6 +335,49 @@ impl Display for CompilationError {
                 )
             }
 
+            CompilationError::UndefinedData(file, trace, name) => {
+                writeln!(
+                    f,
+                    "  {}{}",
+                    "Compilation error in file ".bold().bright_red(),
+                    file.to_string_lossy().bold().bright_red()
+                )?;
+                writeln!(
+                    f,
+                    "    {}{}{}",
+                    "Data ".bold(),
+                    name.italic().bold(),
+                    " is not defined.".bold()
+                )?;
+                write!(
+                    f,
+                    "{}{}{}{}",
+                    "    Try adding ",
+                    "data ".italic().yellow(),
+                    name.italic().yellow(),
+                    "{\n\t...\n}".italic().yellow(),
+                )
+            }
+            
+            CompilationError::MainMustHave2Args(file) => {
+                writeln!(
+                    f,
+                    "  {}{}",
+                    "Compilation error in file ".bold().bright_red(),
+                    file.to_string_lossy().bold().bright_red()
+                )?;
+                
+                writeln!(
+                    f,
+                    "    Function 'main' does not have a valid signature."
+                )?;
+
+                write!(
+                    f,
+                    "    Main must have two arguments - an i32 and a *const *const i8"
+                )
+            }
+
             CompilationError::DualDefinition(file, trace, name) => {
                 writeln!(
                     f,
@@ -513,6 +558,8 @@ impl Display for CompilationError {
                     "Compilation error in file ".bold().bright_red(),
                     file.to_string_lossy().bold().bright_red()
                 )?;
+
+                writeln!(f, "{:?}", trace)?;
 
                 write!(
                     f,

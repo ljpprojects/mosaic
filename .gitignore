@@ -2,7 +2,6 @@
 **/hello.cmp.o
 **/*.cmp.o
 **/*.o
-examples/hello
 **/mosaic.afdesign
 profile.json
 docs/src/.obsidian

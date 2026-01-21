@@ -1,0 +1,55 @@
+# Gives you an idea of syntax, devcore::mem is basically a fancy wrapper around malloc and free
+
+include devcore::mem;
+
+extern fn exit(code: i32) -> null;
+
+type PromiseState = u8
+
+fn PromiseState::PENDING -> PromiseState {
+    return 2 as u8
+}
+
+fn PromiseState::REJECTED -> PromiseState {
+    return 1 as u8
+}
+
+fn PromiseState::RESOLVED -> PromiseState {
+    return 0 as u8
+}
+
+# This should be a nullptr if it fails or hasn't started
+type PromiseResult = *mut? any;
+
+type PromiseCallback = fn() -> null;
+type PromiseResolve = fn(PromiseResult) -> null
+type PromiseReject = fn(*const i8) -> null
+type PromiseTask = fn(PromiseResolve, PromiseReject) -> null;
+
+data Promise {
+    mut result: PromiseResult
+    mut callback: *const? fn(PromiseResult) -> null
+    mut state: PromiseState
+}
+
+type Promise = data Promise;
+
+fn Promise::new(task: PromiseTask) -> Promise {
+    let self = guard alloc(24) else {
+        exit(0)
+
+        return ((0 as i64) as *mut any) as Promise
+    } as Promise;
+
+    self.result
+}
+
+#fn task(resolve: PromiseResolve, reject: PromiseReject) no_mangle -> Promise {
+#
+#}
+
+#fn promise -> Promise {
+#    mut promise = Promise::new(task);
+#
+#    return promise
+#}

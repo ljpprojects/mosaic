@@ -1,0 +1,48 @@
+# Simple map implementation ported from C into Mosaic
+
+include std::io
+include std::string
+
+data _StrDictNode {
+  let key: String
+  let value: String
+
+  mut left: *mut data _StrDictNode
+  mut right: *mut data _StrDictNode
+};
+
+type StrDictNode = data _StrDictNode;
+
+data _StrDict {
+    mut root: *mut? StrDictNode
+};
+
+type StrDict = data _StrDict;
+
+fn StrDict::new() alloc -> StrDict {
+    return _StrDict {
+        .root = (0 as i64) as StrDictNode
+    }
+}
+
+fn nop -> null {
+    return null
+}
+
+fn StrDict::insert(self: *mut StrDict, key: String, value: MaybeStringMut) -> MaybeStringMut {
+    let this: StrDict = *self;
+    mut node: *mut? StrDictNode = (this).root;
+
+    let ptr = guard (node) else {
+        return (0 as i64) as *mut? any
+    };
+
+    nop()
+
+
+    return (0 as i64) as MaybeStringMut
+}
+
+fn main export -> i32 {
+    return 0
+}

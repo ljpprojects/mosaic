@@ -1,0 +1,22 @@
+# Example of the guard expression, this does compile, but be careful running it
+
+extern fn malloc(size: i32) -> *mut? any
+extern fn free(p: *mut any) -> null
+extern fn memset(p: *mut any, b: i32, c: i32) -> null
+
+fn main(
+    argc: i32,
+    argv: *const *const i8
+) -> i32 {
+    let p = guard malloc(1024 * 1024 * 1024 * 1024) as *mut? u8 else {
+        return 1
+    };
+
+    memset(p, 0, 1024 * 1024 * 1024 * 1024);
+
+    *p;
+
+    free(p);
+
+    return 0
+}
