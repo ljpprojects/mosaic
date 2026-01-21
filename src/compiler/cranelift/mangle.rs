@@ -1,24 +1,23 @@
+use std::ops::Deref;
 use crate::compiler::cranelift::types::CraneliftType;
-
-#[macro_export]
-macro_rules! ternary {
-    ($cond: expr, $y: expr, $n: expr) => {
-        if $cond { $y } else { $n }
-    };
-}
+use crate::parser::TypeBound;
+use crate::ternary;
 
 pub fn mangle_type(ty: &CraneliftType) -> String {
     match ty {
-        CraneliftType::Generic(..) => ty.to_string(), // panics
+        CraneliftType::Generic(name, _) => format!("G{}{name}", name.len()),
+        CraneliftType::Declared(_, t) => format!("{}", mangle_type(t.deref())),
         CraneliftType::Any => "A".into(),
         CraneliftType::Int8 => "c".into(),
         CraneliftType::Int16 => "s".into(),
         CraneliftType::Int32 => "w".into(),
         CraneliftType::Int64 => "l".into(),
+        CraneliftType::IntSize => "p".into(), // p for pointer sized
         CraneliftType::UInt8 => "Uc".into(),
         CraneliftType::UInt16 => "Us".into(),
         CraneliftType::UInt32 => "Uw".into(),
         CraneliftType::UInt64 => "Ul".into(),
+        CraneliftType::UIntSize => "Up".into(),
         CraneliftType::Float32 => "f".into(),
         CraneliftType::Float64 => "d".into(),
         CraneliftType::Null => "v".into(),
@@ -34,9 +33,10 @@ pub fn mangle_type(ty: &CraneliftType) -> String {
                 .collect::<Vec<_>>()
                 .join("_")
         ),
-        CraneliftType::CPtr(inner, mutable, nullable) => format!("P{}{}{}", mangle_type(inner), ternary!(*mutable, "M", "K"), ternary!(*nullable, "N", "")),
-        CraneliftType::FatPtr(inner, mutable, nullable) => format!("R{}{}{}", mangle_type(inner), ternary!(*mutable, "M", "K"), ternary!(*nullable, "N", "")),
-        CraneliftType::Slice(inner, len, mutable, nullable) => format!("S{}{}{}_{len}", mangle_type(inner), ternary!(*mutable, "M", "K"), ternary!(*nullable, "N", "")),
+        CraneliftType::DataPtr(name) => format!("D{}", name),
+        CraneliftType::CPtr(inner, mutable, nullable) => format!("P{}{}{}", mangle_type(inner), ternary!(*mutable => "M"; "K"), ternary!(*nullable => "N"; "")),
+        CraneliftType::FatPtr(inner, mutable, nullable) => format!("R{}{}{}", mangle_type(inner), ternary!(*mutable => "M"; "K"), ternary!(*nullable => "N"; "")),
+        CraneliftType::Slice(inner, len, mutable, nullable) => format!("S{}{}{}_{len}", mangle_type(inner), ternary!(*mutable => "M"; "K"), ternary!(*nullable => "N"; "")),
     }
 }
 

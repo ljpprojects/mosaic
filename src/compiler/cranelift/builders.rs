@@ -40,18 +40,17 @@ impl VariableBuilder {
         name: String,
         constant: bool,
     ) -> Variable {
-        let variable = Variable::new(self.index);
+        let variable = builder.declare_var(self.isa.pointer_type());
 
-        builder.declare_var(variable, self.isa.pointer_type());
-        
         let slot = builder.create_sized_stack_slot(StackSlotData {
+            key: None,
             kind: StackSlotKind::ExplicitSlot,
             size: ty.size_bytes(&self.isa) as StackSize,
             align_shift: 0,
         });
-        
+
         builder.ins().stack_store(value, slot, 0);
-        
+
         let ptr = builder.ins().stack_addr(self.isa.pointer_type(), slot, 0);
 
         builder.def_var(variable, ptr);
@@ -75,6 +74,8 @@ impl VariableBuilder {
         file: PathBuf,
         trace: &Trace,
     ) -> Result<(), Box<[CompilationError]>> {
+        println!("SET VAR");
+
         let mut errors = vec![];
 
         let Some(scope) = self
@@ -115,7 +116,7 @@ impl VariableBuilder {
                 Rc::new(vty.clone()),
             ))
         }
-        
+
         if !errors.is_empty() {
             return Err(errors.into());
         }
@@ -134,6 +135,21 @@ impl VariableBuilder {
             .collect::<Vec<_>>()
             .len()
             > 0
+    }
+
+    pub fn get_var_type(
+        &self,
+        name: &String,
+    ) -> Option<CraneliftType> {
+        let scope = self
+            .scopes
+            .iter()
+            .filter(|vars| vars.contains_key(name))
+            .last()?;
+
+        let meta = scope.get(name)?;
+
+        Some(meta.def_type.clone())
     }
 
     pub fn get_var(

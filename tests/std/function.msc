@@ -1,0 +1,21 @@
+# Ripped from my implementation of the stdlib
+
+include std::string;
+
+type AnyFunction = *mut any;
+type MaybeAnyFunction = *mut? any;
+
+type LibHandle = *mut any;
+
+extern fn dlopen(path: CString, mode: i32) -> LibHandle
+extern fn dlsym(handle: LibHandle, name: CString) -> MaybeAnyFunction
+
+fn AnyFunction::load(file: String, name: String) -> MaybeAnyFunction {
+    let handle = dlopen(file.to_c_string(), 1);
+
+    defer {
+        dlclose(handle)
+    }
+
+    return dlsym(handle, name.to_c_string()) as MaybeAnyFunction;
+}

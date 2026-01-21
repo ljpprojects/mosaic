@@ -1,0 +1,68 @@
+# Ripped from my implementation of the core module
+
+type AnyPtr = *const any;
+type AnyPtrMut = *mut any;
+
+type MaybeAnyPtr = *const? any;
+type MaybeAnyPtrMut = *mut? any;
+
+extern fn malloc(size: usize) -> MaybeAnyPtrMut
+extern fn memcpy(dest: AnyPtrMut, src: AnyPtr, len: usize) -> AnyPtrMut
+extern fn bzero(dest: AnyPtrMut, len: usize) -> null
+extern fn free(ptr: AnyPtrMut) -> null
+
+fn MaybeAnyPtrMut::is_null(self: MaybeAnyPtrMut) export -> bool {
+    return (self as usize) == 0 as usize
+}
+
+fn MaybeAnyPtrMut::null export -> MaybeAnyPtrMut {
+    return (0 as usize) as MaybeAnyPtrMut
+}
+
+fn MaybeAnyPtrMut::allocate(size: usize) export alloc -> MaybeAnyPtrMut {
+    let ptr: MaybeAnyPtrMut = guard malloc(size) else {
+        return MaybeAnyPtrMut::null()
+    };
+
+    bzero(ptr, size);
+
+    return ptr
+}
+
+fn AnyPtrMut::dealloc(self: AnyPtrMut) export dealloc -> null {
+    return free(self)
+}
+
+fn AnyPtr::copy_into(self: AnyPtr, dest: AnyPtrMut, len: usize) export -> null {
+    memcpy(dest, self, len)
+
+    return null
+}
+
+fn AnyPtrMut::copy_into(self: AnyPtrMut, dest: AnyPtrMut, len: usize) export -> null {
+    memcpy(dest, self, len)
+
+    return null
+}
+
+fn AnyPtrMut::copy_from(self: AnyPtrMut, src: AnyPtr, len: usize) export -> null {
+    memcpy(self, src, len)
+
+    return null
+}
+
+fn AnyPtrMut::copy_from(self: AnyPtrMut, src: AnyPtrMut, len: usize) export -> null {
+    memcpy(self, src, len)
+
+    return null
+}
+
+fn AnyPtrMut::zero(self: AnyPtrMut, len: usize) export -> null {
+    bzero(self, len);
+
+    return null
+}
+
+# trait PtrMut {
+#     fn deinit(self: Self) -> null
+# }

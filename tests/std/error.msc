@@ -1,0 +1,28 @@
+# Ripped from my implementation of the stdlib
+
+include core::mem;
+include std::io;
+
+extern fn exit(code: i32) -> null;
+
+data _Error {
+    let message: *const [i8]
+};
+
+type Error = data _Error;
+
+fn Error::fatal(message: *const [i8]) export -> Error {
+    return _Error {
+        .message = message
+    }
+}
+
+fn Error::raise(self: Error) export -> null {
+    let stderr = Stream::stderr();
+
+    # stderr.write(self.message as ByteArray);
+
+    exit(1);
+
+    return null
+}

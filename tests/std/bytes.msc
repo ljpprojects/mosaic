@@ -1,0 +1,57 @@
+# Ripped from my implementation of the stdlib
+
+include core::mem;
+
+type ByteArray = *const [i8];
+type ByteArrayMut = *mut [i8];
+type MaybeByteArrayMut = *mut? [i8];
+
+type RawByteArray = *const i8;
+type RawByteArrayMut = *mut i8;
+
+extern fn free(src: *mut any) -> null;
+extern fn memcpy(dest: *mut any, src: *const any, len: usize) -> null;
+
+fn ByteArrayMut::with_length(length: usize) export alloc ->  MaybeByteArrayMut {
+    let self: ByteArrayMut = guard MaybeAnyPtrMut::allocate(4 as usize + length) else {
+        return (0 as usize)
+    }
+
+    (*(self as *mut i32)) = length as i32;
+
+    return self
+}
+
+fn ByteArrayMut::deinit(self: ByteArrayMut) export dealloc -> null {
+    free(self);
+
+    return null
+}
+
+fn ByteArray::length(self: ByteArray) export -> i32 {
+    return (*(self as *const i32))
+}
+
+fn ByteArrayMut::length(self: ByteArrayMut) export -> i32 {
+    return (*(self as *const i32))
+}
+
+fn ByteArray::as_ptr(self: ByteArray) export -> RawByteArray {
+    return (self + 4 as usize) as RawByteArray
+}
+
+fn ByteArrayMut::as_ptr(self: ByteArrayMut) export -> RawByteArray {
+    return (self + 4 as usize) as RawByteArray
+}
+
+fn ByteArrayMut::as_ptr_mut(self: ByteArrayMut) export -> RawByteArrayMut {
+    return (self + 4 as usize) as RawByteArrayMut
+}
+
+fn ByteArrayMut::copy_from(self: ByteArrayMut, src: ByteArray) export -> null {
+    let len = self.length() as usize;
+
+    memcpy(self.as_ptr_mut(), src.as_ptr(), len);
+
+    return null
+}

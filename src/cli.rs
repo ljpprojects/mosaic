@@ -47,6 +47,9 @@ pub enum Command {
         #[arg(long = "no-implicit-functions")]
         no_implicit_functions: bool,
 
+        #[arg(long = "no-fptr-sugar")]
+        no_fptr_sugar: bool,
+
         #[arg(short = 'q', long = "quiet")]
         quiet: bool,
         
