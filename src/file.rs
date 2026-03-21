@@ -28,11 +28,8 @@ impl<P: AsRef<Path> + Clone + PartialEq> File<P> {
         self.path.as_ref()
     }
 
-    pub fn file(&self) -> std::fs::File {
-        match self.file.try_clone() {
-            Ok(f) => f,
-            Err(e) => panic!("{}", e),
-        }
+    pub fn file(&self) -> &std::fs::File {
+        &self.file
     }
 }
 

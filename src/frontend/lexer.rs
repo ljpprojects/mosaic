@@ -1,70 +1,38 @@
 use crate::errors::CompilationError;
 use crate::reader::CharReader;
-use crate::states::{LexerState, WithState};
+use crate::states::{LexerState, Position, WithState};
 use crate::tokens::{LineInfo, Token};
 use std::cell::{Cell, RefCell};
-use std::path::PathBuf;
 use std::str::FromStr;
 
-pub const VALID_CHARS: &[char] = &[
-    '+', '-', '*', '/', '%',
-    '^', ':', '?', '!', '=',
-    '>', '<', '{', '}', '[',
-    ']', '(', ')', '@', ',',
-    '&', '|', '.', '$', ';',
+pub const LEGAL_CHARS: &[char] = &[
+    ';', '?', '!', '.', '.', ',', // Punctuation
+    '<', '>', '=', '-', '+', '*', // Mathematical
+    '(', ')', '[', ']', '{', '}', // Grouping
+    '#', '&', '$', '@', ':', '|', // Miscellaneous
+    '`', '~', '^', '"', '\'', '\\', // Miscellaneous II
 ];
 
-/// This is equal to amount spaces a tab character is equal to.
-/// This is important because without it the character position system does not work.
-/// Can be overridden via the config key 'formatting.tab_space_count', or the '--tab-space-count' option.
-///
-/// `mosaic-lang build file.msc --tab-space-count 2`
-/// or
-///
-/// **config.toml**
-/// ```toml
-/// [formatting]
-/// tab_space_count = 2
-/// ```
-pub const TAB_SPACES_COUNT: u8 = 4;
-
 pub fn is_mosaic_ident_start(c: &char) -> bool {
-    c.is_alphabetic() || ['_', '$'].contains(c)
+    c.is_alphabetic()
 }
 
 pub fn is_mosaic_ident_part(c: &char) -> bool {
-    c.is_alphanumeric() || ['_', '$'].contains(c)
+    c.is_alphanumeric()
 }
 
 type LexError = CompilationError;
 
 /// This is the lexer for the Mosaic programming language.
-/// Like the CharReader struct, it returns tokens individually, allowing for better performance,
-/// especially for large files.
-#[derive(Debug, PartialEq)]
-pub struct StreamedLexer {
-    pub(crate) reader: CharReader,
-    file: PathBuf,
-    pos: u64,
-    current_char: usize,
-    current_line: usize,
-    is_first: bool,
+/// Like the CharReader struct, it returns tokens individually, allowing for better performance (?),
+/// especially for large files (this claim is unproven as of 20/03/2026).
+#[derive(Debug, PartialEq, Clone)]
+pub struct StreamedLexer<'a> {
+    pub(crate) reader: CharReader<'a>,
+    pos: Position,
 }
 
-impl Clone for StreamedLexer {
-    fn clone(&self) -> Self {
-        StreamedLexer {
-            reader: self.reader.clone(),
-            file: self.file.clone(),
-            pos: self.pos,
-            current_char: self.current_char,
-            current_line: self.current_line,
-            is_first: self.is_first,
-        }
-    }
-}
-
-impl Iterator for StreamedLexer {
+impl Iterator for StreamedLexer<'_> {
     type Item = Result<Token, LexError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -75,8 +43,8 @@ impl Iterator for StreamedLexer {
     }
 }
 
-impl WithState for StreamedLexer {
-    type ToState = LexerState;
+impl<'a> WithState for StreamedLexer<'a> {
+    type ToState = LexerState<'a>;
 
     fn from_state(state: Self::ToState) -> Self {
         Self::new(CharReader::from_state(state.reader_state))
@@ -104,7 +72,7 @@ impl WithState for StreamedLexer {
 
 impl StreamedLexer {
     pub fn new(reader: CharReader) -> StreamedLexer {
-        let file = reader.reader.path().to_path_buf();
+        let file = reader.file.path().to_path_buf();
 
         Self {
             reader,

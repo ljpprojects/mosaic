@@ -1,64 +1,63 @@
-#![allow(clippy::unwrap_used)]
-
 use crate::file::File;
 use crate::states::{ReaderState, WithState};
 use crate::tokens::LineInfo;
 use cranelift_object::object::ReadRef;
-use mmap_rs::{Mmap, MmapOptions};
+use mmap_rs::{Mmap, MmapOptions, UnsafeMmapFlags};
 
+use std::borrow::Cow;
 use std::rc::Rc;
 use std::{fs, io};
 
 #[derive(Debug)]
-pub struct CharReader {
-    pub(crate) reader: File<String>,
+pub struct CharReader<'a> {
     pub pos: u64,
+    pub path: &'a str,
     mmap: Mmap,
 }
 
-impl PartialEq for CharReader {
+impl PartialEq for CharReader<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.reader.clone() == other.reader.clone() && self.pos == other.pos
+        self.mmap.as_ref() == other.mmap.as_ref()
     }
 }
 
-impl Clone for CharReader {
+impl<'a> Clone for CharReader<'a> {
     fn clone(&self) -> Self {
-        let file_length = fs::metadata(self.reader.path()).unwrap().len() as usize;
-        let mmap = unsafe { MmapOptions::new(file_length).unwrap().with_file(&self.reader.file(), 0) }.map().unwrap();
-
-        Self {
-            reader: self.reader.clone(),
-            pos: self.pos,
-            mmap,
-        }
+        Self::open(self.path)
     }
 }
 
-impl WithState for CharReader {
-    type ToState = ReaderState;
+impl<'a> WithState for CharReader<'a> {
+    type ToState = ReaderState<'a>;
 
     fn from_state(state: Self::ToState) -> Self {
-        Self::new(state.reader.as_ref().clone())
+        Self::open(state.path)
     }
 
     fn reset_to_state(&mut self, state: Self::ToState) {
-        let reader = state.reader.as_ref().clone();
-
-        self.reader = reader;
+        self.path = state.path;
+        self.pos = state.pos;
     }
 
     fn state(&self) -> Self::ToState {
-        ReaderState::new(Rc::from(self.reader.clone()), self.pos)
+        ReaderState::new(self.path, self.pos)
     }
 }
 
-impl CharReader {
-    pub fn new(reader: File<String>) -> Self {
-        let file_length = std::fs::metadata(reader.path()).unwrap().len() as usize;
-        let mmap = unsafe { MmapOptions::new(file_length).unwrap().with_file(&reader.file(), 0) }.map().unwrap();
+impl<'a> CharReader<'a> {
+    pub fn open(path: &'a str) -> Self {
+        let file_length = fs::metadata(path).unwrap().len() as usize;
+        let file = File::new(path.to_owned()).unwrap();
 
-        Self { reader, pos: 0, mmap }
+        let mmap = unsafe {
+            MmapOptions::new(file_length)
+                .unwrap()
+                .with_file(file.file(), 0)
+        }
+        .map()
+        .unwrap();
+
+        Self { path, pos: 0, mmap }
     }
 
     pub fn next_char(&mut self) -> Option<char> {
@@ -70,32 +69,39 @@ impl CharReader {
     }
 
     pub fn peek_next_char(&self) -> Option<char> {
-        Some(*self.mmap.read_at::<u8>(self.pos).ok()? as char)
+        self.mmap.read_at::<u8>(self.pos).ok().map(|&c| c as char)
     }
 
     pub fn get_snippet(&self, info: &LineInfo) -> io::Result<String> {
         let mut snippet = String::new();
 
         let mut offset = 0;
-        let buf = String::from_utf8(self.mmap.read_slice(&mut offset, self.mmap.len()).unwrap().to_vec()).unwrap();
+        let buf = String::from_utf8(
+            self.mmap
+                .read_slice(&mut offset, self.mmap.len())
+                .unwrap()
+                .to_vec(),
+        )
+        .unwrap();
+
         let lines = buf.lines().collect::<Vec<_>>();
 
         for (linec, line) in lines.into_iter().enumerate() {
             if linec + 1 < info.begin_line() {
-                continue
+                continue;
             }
 
             if linec + 1 > info.end_line() {
-                break
+                break;
             }
 
             for (charc, char) in line.chars().enumerate() {
                 if charc + 1 < info.begin_char() && linec + 1 == info.begin_line() {
-                    continue
+                    continue;
                 }
 
                 if charc + 1 > info.end_char() && linec + 1 == info.end_line() {
-                    break
+                    break;
                 }
 
                 snippet.push(char);

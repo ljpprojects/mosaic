@@ -1,0 +1,44 @@
+# Example of automatic reference counting
+# Use -M arc to compile
+
+import core::rc;
+import std::fmt;
+
+# The rc::RefCount interface is like the Objective-C NSObject but for ref-counted objects ONLY.
+# It extends from mem::Ref
+interface Person : rc::RefCount, fmt::Format {
+    let @assign name: &String;
+    let @assign surname: &String;
+
+    fn init(name: &String, surname: &String) -> &Person @required;
+};
+
+impl Person : RefCount {
+    synthesise let name;
+    synthesise let surname;
+
+    # By default references to a Ref type are strong. For weak references use &`T
+    fn init(name: &String, surname: &String) -> &Person {
+        # Calls to .retain() for both refs are inserted here
+
+        # RefCount::alloc allocates a reference of Self with a refcount of 1
+        # Person uses the default Ref implementation unless overriden
+        let self: &Person = Person::alloc();
+
+        # No need for .retain calls here
+        # The compiler recognises the escape and wont call .release before returning
+        self._name = name;
+        self._surname = surname;
+
+        return self;
+    }
+
+    # Provide an implementation of Format::format
+    fn Format::format(self: &Person, formatter: fmt::Formatter) -> void {
+        formatter.append("\{self.name} \{self.surname}");
+    }
+
+    # Compiler creates the drop function which calls .release on all strong refs and eventually self.dealloc()
+    # This is not ARC-exclusive, however it is very specific to this method.
+    synthesise fn Ref::drop;
+}

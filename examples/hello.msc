@@ -1,0 +1,30 @@
+import std::io;
+
+# When compiling, the --mm or -M flag specifies the memory management model.
+# Using '-M arc', Automatic Reference Counting will be used by the compiler for lifetime management.
+# Using '-M msr', Mosaic Static Regions will be used by the compiler for lifetime management.
+# Using '-M none', no lifetime management model will be used by the compiler. You can use MRC or fully manual memory management.
+# The MSR model is recommended for Mosaic, and is the default option.
+# Generally, minimal changes should be required to switch between MSR and ARC.
+# If you are writing a library, and must distinguish between the different models, see 'when.msc' and 'instrisics.msc'.
+#
+# For more detail on how MSR works, see 'msr.msc'.
+# For more detail on how ARC in Mosaic works, see 'arc.msc'
+# For more detail on how MRC and MMM in mosaic works, see 'manual.msc'
+
+fn main -> void @nomangle {
+    # There are 3 types of references, mutable (&), immutable (&.),
+
+    let message: &'u8 = "Hello, World!!!!!";
+    mut stdout: &Stdout = Stdout::flushOnDrop(); # This ref is added to the region under MSR, under ARC an implicit Ref::retain call is added
+
+    # Under MSR, the ref is moved into Stdout::println's scope and returned when the function exits
+    # Under ARC, a call to .retain is added at the start of Stdout::println and a call to Ref::release before it returns
+    stdout.println(message);
+    stdout.flush();
+
+    # Implicit call to Stdout::drop(stdout) under MSR
+    # Implicit call to Ref::release(stdout) under ARC, which then calls Stdout::drop(stdout) if the refcount is 0
+
+    return 0;
+}

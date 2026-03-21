@@ -1,0 +1,44 @@
+# Example of manual reference counting
+# Use -M none to compile
+
+import core;
+import core::rc;
+import std::fmt;
+
+# The Ref interface is like the Objective-C NSObject
+interface Person : rc::Ref, fmt::Format {
+    let @assign name: &String;
+    let @assign surname: &String;
+
+    fn init(name: &String, surname: &String) -> &Person @required;
+};
+
+impl Person : Ref {
+    synthesise name;
+    synthesise surname;
+
+    # By default references to a Ref type are strong. For weak references use @weak (even in MRC)
+    fn init(name: &String, surname: &String) -> &Person {
+        # Ref::alloc allocates a reference of Self with a refcount of 1
+        # Person uses the default Ref implementation unless overriden
+        let self: &Person = Person::alloc();
+
+        self._name = name.retain();
+        self._surname = surname.retain();
+
+        return self;
+    }
+
+    # Provide an implementation of Format::format
+    fn Format::format(self: &Person, formatter: fmt::Formatter) -> void {
+        formatter.append("\{self.name} \{self.surname}");
+    }
+
+    # Override the implementation of Ref::drop
+    # Equivalent to `synthesise Ref::drop;` (see arc.msc)
+    fn Ref::drop(self: &Person) -> void {
+        self._name.release();
+        self._surname.release();
+        self.dealloc();
+    }
+}
