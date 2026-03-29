@@ -1,8 +1,3 @@
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-
-extern crate core;
-
 use std::alloc::alloc;
 use crate::cli::{Args, Command};
 use crate::compiler::cranelift::linker::Linker;
@@ -25,13 +20,10 @@ use target_lexicon::{Architecture, Triple};
 
 pub mod cli;
 pub mod compiler;
-pub mod errors;
 pub mod file;
-pub mod lexer;
-pub mod parser;
+pub mod frontend;
 pub mod reader;
 pub mod states;
-pub mod tokens;
 pub mod utils;
 
 #[tokio::main]

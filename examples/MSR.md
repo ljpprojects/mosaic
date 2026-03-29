@@ -1,24 +1,24 @@
 # Mosaic Static Regions
- 
+
 Mosaic is a language with many quirks. MSR is no exception.
- 
+
 ## What's the General Idea?
 
 MSR, or Mosaic Static Regions, is a memory management model that loosely has
 lifetimes, but only at compile-time, and only implicitly.
 
 Each function and scope generally is given its own static region by the
-compiler if it is found to allocate *anywhere*, whether it be on the heap or
+compiler if it is found to allocate _anywhere_, whether it be on the heap or
 stack.
 
 Unlike Rust, which has a values-own-allocations model generally, MSR uses a
 regions-own-allocations model. This means that the compiler hands ownership of
 an allocation over to the static region in which it exists.
 
-All allocations owned by a static region *at its end* will be deallocated at
+All allocations owned by a static region _at its end_ will be deallocated at
 the end of the region. That is, its core::mem::Ref::drop method will be called.
 
-If MSR had no idea of *allocation escaping*, then no allocations could escape,
+If MSR had no idea of _allocation escaping_, then no allocations could escape,
 as this would cause use-after-frees. Thus, MSR does have allocation escaping.
 Allocation escaping under MSR is simply the static transfer of ownership from
 one static region to another.
@@ -27,6 +27,48 @@ Allocation escaping does not neccessarily require transferral to a static
 region that is higher than it, and in fact it probably happens more often when
 handing over control of references temporarily to functions which take
 arguments by reference.
+
+Regarding interfaces, when you define an interface you also define a static
+constructor for regions. Simply, whenever you have an instance of an interface,
+that allocation is _regioned_.
+
+## Regioned Allocations
+
+Regioned Allocations are allocations which have static regions attached to them.
+This means that it is an allocation, whose value has an associated static region
+so that it can own any allocations stored in that value.
+
+The primary example of tagged static regions is interface instances. In the
+default implementation of `core::msr::Ref::alloc`, it tells the compiler to
+create a tagged static region. This is by using the
+`instrinsics::msr::RegionedAllocation::wrap` function. It's signature is akin to
+this:
+
+```rust
+fn msr::RegionedAllocation::wrap(unregioned: &void @take) -> &void;
+```
+
+The default `core::msr::Ref::alloc` implementation would look something like
+this:
+
+```rust
+# Technically &^ isnt a reference as it *might* be null, it is closer to a
+# pointer, but it isn't a pointer as it is tracked by the compiler under MSR,
+# so we will call it a reference and be done with it.
+# This is true if and only if, however, the sum of the digits in the current
+# unix timestamp (that is the numebr of milliseconds from thge unix epoch) is
+# odd. If it isnt at the start of the compilation processm, the compiler, unable
+# to categorise this form of referential value, does nothing because that would
+# be a nuisance.
+fn msr::Ref::alloc -> &^msr::Ref @alloc {
+  let unregioned: &void = unsafe { mem::alloc(msr::Ref::layout())? };
+  let regioned: &void = msr::RegionedAllocation::wrap(raw);
+
+  # All reference casts are unsafe, unless the inner type doesnt change or the
+  # new inner type is void
+  return unsafe { regioned as &msr::Ref };
+}
+```
 
 ## References
 
@@ -47,7 +89,7 @@ also be an allocation on the stack. The compiler will mark such references as
 non-escaping, as escaping a reference to an allocation on the stack is
 guaranteed to cause undefined behaviour.
 
-If a static region uses a reference it *must* have ownership of the allocation
+If a static region uses a reference it _must_ have ownership of the allocation
 which the reference points to. If it does not, an error will be emmitted by the
 compiler.
 
@@ -93,16 +135,16 @@ on the stack in `x`.
 
 This is a copy, but a simple bit-for-bit copy, not a full clone. Thus, the type
 must implement `core::mem::Reloc` as less of a way as to indicate that it can
-be cloned (this is what `core::mem::Clone` is for,  `core::mem::CheapClone`
+be cloned (this is what `core::mem::Clone` is for, `core::mem::CheapClone`
 would be closer to Rust's `Copy` trait) but rather as a marker that the type
-is safe to copy and relocate to a register, stack, or  generally other place
+is safe to copy and relocate to a register, stack, or generally other place
 separate from where the allocation itself lives.
 
 ```
 fn main -> void @nomangle {
   let x = 5;
   let xp = &x;
-  
+
   let y = *xp;
 }
 ```
@@ -117,4 +159,9 @@ Crucially, `CheapClone` doesn't mean 'bit-for-bit copy', it just means a clone
 operation is cheap (e.g. no allocations). This means that `RefCount` can and
 does implement `CheapClone` because cloning an RC is cheap. `RefCount` cannot,
 however, implement `Reloc`, as a bit-for-bit copy of a `RefCount` breaks the
-RC's semantic invariants.
+RC's invariants.
+
+## Concurrency
+
+No. Not yet. Use ARC or MRC. If you have guts, use MMM. If heaven is watching,
+use Rust.

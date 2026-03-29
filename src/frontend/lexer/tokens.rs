@@ -3,82 +3,7 @@ use std::ops::Range;
 
 use bigdecimal::BigDecimal;
 
-#[derive(PartialEq, Clone, Copy, Hash, Eq, Ord, PartialOrd)]
-pub struct LineInfo {
-    start_char: usize,
-    end_char: usize,
-    start_line: usize,
-    end_line: usize,
-}
-
-impl Default for LineInfo {
-    fn default() -> Self {
-        LineInfo::new_one_char(1, 1)
-    }
-}
-
-impl Display for LineInfo {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}:{} - {}:{}",
-            self.start_line, self.start_char, self.end_line, self.end_char
-        )
-    }
-}
-
-impl Debug for LineInfo {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}:{} - {}:{}",
-            self.start_line, self.start_char, self.end_line, self.end_char
-        )
-    }
-}
-
-impl LineInfo {
-    pub fn new(start_char: usize, end_char: usize, start_line: usize, end_line: usize) -> LineInfo {
-        LineInfo {
-            start_char,
-            end_char,
-            start_line,
-            end_line,
-        }
-    }
-
-    pub fn new_one_char(char: usize, line: usize) -> LineInfo {
-        LineInfo {
-            start_char: char,
-            end_char: char,
-            start_line: line,
-            end_line: line,
-        }
-    }
-
-    pub fn to_ranges(&self) -> (Range<usize>, Range<usize>) {
-        (
-            self.start_char..self.end_char,
-            self.start_line..self.end_line,
-        )
-    }
-
-    pub fn begin_line(&self) -> usize {
-        self.start_line
-    }
-
-    pub fn end_line(&self) -> usize {
-        self.end_line
-    }
-
-    pub fn begin_char(&self) -> usize {
-        self.start_char
-    }
-
-    pub fn end_char(&self) -> usize {
-        self.end_char
-    }
-}
+use crate::frontend::lexer::debug::PositionRange;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StringEscape {
@@ -138,13 +63,13 @@ pub enum StringPart {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StringInnards {
-    pub parts: Box<[StringPart]>,
+    pub parts: Box<[(StringPart, PositionRange)]>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     String(StringInnards),
-    Character(String),
+    Character(char),
     Ident(String),
     Path(Vec<String>),
     Keyword(&'static str),

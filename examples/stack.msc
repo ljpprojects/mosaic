@@ -1,0 +1,81 @@
+# Example of Mosaic Static Regions
+
+import core::msr;
+import std::fmt;
+
+interface Person : msr::Ref, fmt::Format {
+    # @take here will make the synthesised setter take the new value
+    let @take name: &String;
+    let @take surname: &String;
+
+    fn init(name: &String, surname: &String) -> &Person @required;
+};
+
+impl Person {
+    synthesise let name;
+    synthesise let surname;
+
+    fn new(name: &String @take, surname: &String @take) -> &Person @allocates {
+        # The name and surname allocations enter into new's region and won't return
+
+        # msr::Ref::alloc allocates a reference of Person as a regioned allocation
+        # Person uses the default Ref implementation unless overriden
+        # We can use the escape statement to set the fields in a regioned allocation
+        # and also escape it into the associated region
+        let self: &Person = Person::alloc();
+
+        # Hand-off to init
+        self.init();
+
+        return self;
+    }
+
+    # Alternative implementaion of init that initialises an already-allocated
+    # reference. This implementation can be used to have an interface instance
+    # live on the stack provided that the bytes of self were allocated on the
+    # stack
+    fn init(
+        self: &Person @return,
+        name: &String @take,
+        surname: &String @take
+    ) -> void {
+        # The name and surname allocations enter into init's region and won't return
+        # The self allocation enters into init's region and must return
+
+        # If name or surname didn't have @take the compiler would raise an error
+        # as mutable aliasing is forbidden
+        escape name into self._name;
+        escape surname into self._surname;
+    }
+
+    # Provide an implementation of Format::format
+    fn Format::format(self: &Person, formatter: fmt::Formatter) -> void {
+        formatter.append("\{self.name} \{self.surname}");
+    }
+
+    # We do not need to synthesise the msr::Ref::drop as it is empty by default
+    # (see MSR.md)
+}
+
+import std::io;
+
+fn main -> void @nomangle {
+    let personHeap = Person::new("John", "Heap");
+
+    # a<.fn() syntax is a "passthrough-call", it calls a.fn and yields a
+    # stackalloc<T> is an expression where the compiler allocates bytes on the
+    # stack for an instance of T. The resulting reference is marked non-escaping
+    # and the compiler knows not to deallocate it after being dropped
+    let personStack = (stackalloc<Person>)<.init("Jane", "Stack");
+
+    io::println("Heap person: \{personHeap}");
+    io::println("Stack person: \{personStack}");
+
+    # implicit call to personHeap.drop();
+    # implicit call inside of personHeap.drop() to personHeap.dealloc();
+
+    # implicit call to personStack.drop();
+    # NO CALL TO personStack.dealloc();
+
+    return;
+}

@@ -1,28 +1,30 @@
 # Example of manual reference counting
-# Use -M none to compile
+# Use --nomsr to compile
 
-import core;
 import core::rc;
 import std::fmt;
 
 # The Ref interface is like the Objective-C NSObject
-interface Person : rc::Ref, fmt::Format {
-    let @assign name: &String;
-    let @assign surname: &String;
+interface Person : rc::RefCounted, fmt::Format {
+    # @strong indicates that the compiler should retain the new reference in the
+    # setter before setting
+    let @strong name: &String;
+    let @strong surname: &String;
 
     fn init(name: &String, surname: &String) -> &Person @required;
 };
 
-impl Person : Ref {
-    synthesise name;
-    synthesise surname;
+impl Person {
+    synthesise let name;
+    synthesise let surname;
 
     # By default references to a Ref type are strong. For weak references use @weak (even in MRC)
     fn init(name: &String, surname: &String) -> &Person {
-        # Ref::alloc allocates a reference of Self with a refcount of 1
-        # Person uses the default Ref implementation unless overriden
+        # RefCounted::alloc allocates a reference of Self with a refcount of 1
+        # Person uses the default RefCounted implementation unless overriden
         let self: &Person = Person::alloc();
 
+        # The compiler would do something like this in the synthesises setters
         self._name = name.retain();
         self._surname = surname.retain();
 
@@ -35,8 +37,9 @@ impl Person : Ref {
     }
 
     # Override the implementation of Ref::drop
-    # Equivalent to `synthesise Ref::drop;` (see arc.msc)
-    fn Ref::drop(self: &Person) -> void {
+    # Equivalent to `synthesise RefCounted::drop;`, generally the compiler can
+    # generate this for you
+    fn RefCounted::drop(self: &Person) -> void {
         self._name.release();
         self._surname.release();
         self.dealloc();

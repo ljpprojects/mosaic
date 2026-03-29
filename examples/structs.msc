@@ -1,0 +1,10 @@
+# A struct is a simple organisation of data
+# You should try to use a struct over an interface where possible, as they have
+# lower overhead and are value types.
+#
+# Structs do have drawbacks, however. They cannot implement interfaces,
+struct Person {
+    name: &String;
+    surname: &String;
+}
+

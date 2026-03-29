@@ -68,6 +68,13 @@ impl<'a> CharReader<'a> {
         Some(byte as char)
     }
 
+    pub fn prev_char(&mut self) -> Option<char> {
+        self.pos -= 1;
+
+        let byte = *self.mmap.read_at::<u8>(self.pos).ok()?;
+        Some(byte as char)
+    }
+
     pub fn peek_next_char(&self) -> Option<char> {
         self.mmap.read_at::<u8>(self.pos).ok().map(|&c| c as char)
     }

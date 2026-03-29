@@ -1,5 +1,4 @@
-# Fancy hello world example, but devstd::io is just fancy abstraction of read/write syscalls
-# It compiles on my system, but not on yours unless you replace all the stdlib stuff
+# Fancy hello world example, but std::io is just fancy abstraction of read/write syscalls
 
 include std::string
 include std::io

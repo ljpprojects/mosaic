@@ -1,0 +1,53 @@
+# Example of Manual Memory Management (MMM)
+# Use --nomsr to compile
+
+import core::mem;
+import std::fmt;
+
+# The mem::Ref interface is the lowest level abstraction over raw pointers
+# msr::Ref and rc::RefCount extend mem::Ref
+# mem::Ref primarily provides required alloc, drop, and dealloc implementations
+interface Person : mem::Ref, fmt::Format {
+    # @take or nothing here, under MMM if the compiler detects a ref to be taken
+    # it can't be used after in that same scope (an inkling of safety)
+    let @take name: &String;
+    let @take surname: &String;
+
+    fn init(name: &String, surname: &String) -> &Person @required;
+};
+
+impl Person {
+    synthesise let name;
+    synthesise let surname;
+
+    # By default references to a Ref type are strong. For weak references use @weak (even in MRC)
+    fn init(name: &String @take, surname: &String @take) -> &Person {
+        # Ref::alloc allocates a reference of Self, that's it
+        # Person uses the default Ref implementation unless overriden
+        let self: &Person = Person::alloc();
+
+        # The compiler would do something like this in the synthesised setters
+        # Since it is @take it is only LESS likely that this has been freed already
+        # Hope to GOD that it hasn't
+        # Under MMM references have NO guarantees over pointers
+        self._name = name;
+        self._surname = surname;
+
+        return self;
+    }
+
+    # Provide an implementation of Format::format
+    fn Format::format(self: &Person, formatter: fmt::Formatter) -> void {
+        formatter.append("\{self.name} \{self.surname}");
+    }
+
+    # Override the implementation of Ref::drop
+    # Equivalent to `synthesise Ref::drop;`, generally the compiler can
+    # generate this for you
+    # Under MMM this must be called manually
+    fn Ref::drop(self: &Person @take) -> void {
+        self._name.drop();
+        self._surname.drop();
+        self.dealloc();
+    }
+}

@@ -1,0 +1,30 @@
+extern fn vector_dot_product(*Vector, *Vector) -> f64;
+
+# Analogue to the C Vector in c.c (assuming double is a 64 bit float)
+# @layout(c) means that it will use the exact layout rules of C in its underlying
+# representation in memory
+# This is a simple wrapper around the C Vector type
+interface Vector : mem::Ref @layout(c) {
+    let x: f64;
+    let y: f64;
+}
+
+# Vector's alignment is 8, and its size is 16
+
+impl Vector {
+    fn init(self: &Vector @return, x: f64, y: f64) -> void {
+        self._x = x; # = *self = x;
+        self._y = y; # = *(self + 8usize) = y;
+    }
+
+    fn dot_product(self: &Vector @return, other: &Vector) -> f64 {
+        return unsafe {
+            vector_dot_product(self as *Vector, other as *Vector)
+        };
+    }
+
+    # These implementatons can all be synthesised
+    synthesise fn Ref::alloc;
+    synthesise fn Ref::dealloc;
+    synthesise fn Ref::drop;
+}

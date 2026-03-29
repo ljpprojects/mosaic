@@ -21,10 +21,9 @@ fn main -> void @nomangle {
     # Under MSR, the ref is moved into Stdout::println's scope and returned when the function exits
     # Under ARC, a call to .retain is added at the start of Stdout::println and a call to Ref::release before it returns
     stdout.println(message);
-    stdout.flush();
 
     # Implicit call to Stdout::drop(stdout) under MSR
-    # Implicit call to Ref::release(stdout) under ARC, which then calls Stdout::drop(stdout) if the refcount is 0
+    # Implicit call to Ref::release(stdout) under ARC, which then calls Stdout::drop(stdout) if the refcount is 0 (which it will be)
 
-    return 0;
+    return;
 }

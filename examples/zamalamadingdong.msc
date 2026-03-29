@@ -1,0 +1,19 @@
+# The zamalamadingdong "meta-statement" makes a keyword invalid at lex-time
+# In all it makes the program exit(1) with no other information when the keyword
+# is used
+
+zamalamadingdong stackalloc;
+
+# Now you cannot have interface instances on the stack or a lex error is raised
+
+ZAMALAMADINGDONG mut;
+
+# Now it is a semi-functional paradigm language that crashes when mutable
+# variables are declared
+
+# If zamaladingdong has every vowel capitalised, the keyword is no longer a
+# keyword and gets lexed as an identifier
+
+zAmAlAmAdIngdOng include;
+
+# Now variables can be named include

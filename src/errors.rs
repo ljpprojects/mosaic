@@ -10,6 +10,11 @@ use either::Either;
 use crate::compiler::cranelift::trace::Trace;
 use crate::compiler::traits::CompilationType;
 
+pub enum LexError {
+    InvalidChar(char, LineInfo, PathBuf),
+    UnclosedString(LineInfo, PathBuf)
+}
+
 #[derive(Clone)]
 pub enum CompilationError {
     /**** Lex errors ****/
@@ -191,7 +196,7 @@ impl Display for CompilationError {
                     ".".bold()
                 )
             }
-            
+
             CompilationError::UnknownNodeType(file, macro_name, node_type) => {
                 writeln!(
                     f,
@@ -273,11 +278,11 @@ impl Display for CompilationError {
                 let Ok(home) = std::env::var("HOME") else {
                     panic!("Expected a HOME variable.")
                 };
-                
+
                 let Some(tmp) = modules.as_ref().split_last() else {
                     unreachable!()
                 };
-                
+
                 let search_path = tmp.1.join("/");
 
                 writeln!(
@@ -358,7 +363,7 @@ impl Display for CompilationError {
                     "{\n\t...\n}".italic().yellow(),
                 )
             }
-            
+
             CompilationError::MainMustHave2Args(file) => {
                 writeln!(
                     f,
@@ -366,7 +371,7 @@ impl Display for CompilationError {
                     "Compilation error in file ".bold().bright_red(),
                     file.to_string_lossy().bold().bright_red()
                 )?;
-                
+
                 writeln!(
                     f,
                     "    Function 'main' does not have a valid signature."

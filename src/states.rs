@@ -1,15 +1,16 @@
 use crate::file::File;
-use crate::parser::Macro;
+use crate::frontend::lexer::debug::TokenContext;
 use crate::reader::CharReader;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
+use std::num::{NonZeroU8, NonZeroU16};
 use std::rc::Rc;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Position {
-    pub offset: usize,
-    pub line: u32,
-    pub column: u32,
+    pub offset: u16,
+    pub line: NonZeroU16,
+    pub column: NonZeroU8,
 }
 
 impl Debug for Position {
@@ -52,7 +53,7 @@ impl<'a> ReaderState<'a> {
 pub struct LexerState<'a> {
     pub reader_state: ReaderState<'a>,
     pub pos: Position,
-    pub is_first: bool,
+    pub cur_context: Option<TokenContext>,
 }
 
 impl State for LexerState<'_> {}
@@ -60,17 +61,13 @@ impl State for LexerState<'_> {}
 impl<'a> LexerState<'a> {
     pub fn new(
         reader_state: ReaderState<'a>,
-        pos: u64,
-        current_char: usize,
-        current_line: usize,
-        is_first: bool,
+        pos: Position,
+        cur_context: Option<TokenContext>,
     ) -> Self {
         Self {
             reader_state,
             pos,
-            current_char,
-            current_line,
-            is_first,
+            cur_context
         }
     }
 }

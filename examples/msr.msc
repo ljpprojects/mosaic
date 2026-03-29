@@ -1,0 +1,42 @@
+# Example of Mosaic Static Regions
+
+import core::msr;
+import std::fmt;
+
+interface Person : msr::Ref, fmt::Format {
+    # @take here will make the synthesised setter take the new value
+    let @take name: &String;
+    let @take surname: &String;
+
+    fn init(name: &String, surname: &String) -> &Person @required;
+};
+
+impl Person {
+    synthesise let name;
+    synthesise let surname;
+
+    fn init(name: &String @take, surname: &String @take) -> &Person {
+        # The name and surname allocations enter into init's region and won't return
+
+        # msr::Ref::alloc allocates a reference of Self as a regioned allocation
+        # Person uses the default Ref implementation unless overriden
+        # We can use the escape statement to set the fields in a regioned allocation
+        # and also escape it into the associated region
+        let self: &Person = Person::alloc();
+
+        # If name or surname didn't have @take the compiler would raise an error
+        # as mutable aliasing is forbidden
+        escape name into self._name;
+        escape surname into self._surname;
+
+        return self;
+    }
+
+    # Provide an implementation of Format::format
+    fn Format::format(self: &Person, formatter: fmt::Formatter) -> void {
+        formatter.append("\{self.name} \{self.surname}");
+    }
+
+    # We do not need to synthesise the msr::Ref::drop as it is empty by default
+    # (see MSR.md)
+}

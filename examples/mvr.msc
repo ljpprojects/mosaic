@@ -1,0 +1,29 @@
+# Multi-value Returns
+
+fn double2(x: i32, y: i32) -> i32, i32 {
+    return x * 2, y * 2
+}
+
+import core::string;
+import std::fs;
+import std::io;
+
+fn readFile(path: &String) -> &String, &^io::Error @allocates {
+    # Create buffer
+    mut buf = String::new();
+
+    # Open the file
+    mut file: &File, err: &^io::Error = fs::File::open(path);
+    guard err else {
+        return buf, err;
+    };
+
+    # Alternative method of error propogation
+    # $1 is the first return value (usize), $2 the second (&^io::Error),
+    # $n the nth
+    # Here (buf, $2) indicates to return buf and $2, and the absence of a
+    # passthrough indicator (<) means to ignore $1 if $2 is nil
+    propagate(buf, $2) file.readIntoString(buf);
+
+    return buf;
+}

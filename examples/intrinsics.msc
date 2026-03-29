@@ -1,0 +1,37 @@
+# Mosaic has a few intrinsics, mainly for a few specific purposes.
+
+# This creates a Regioned Allocation under MSR (see MSR.md)
+fn msr::RegionedAllocation::wrap(unregioned: &void @take) -> &void;
+
+# Example use of RegionedAllocation::wrap
+fn msr::Ref::alloc -> &^msr::Ref @alloc {
+  # The bubbling operator (?) is equivalent to a guard ... else { return ... }
+  let unregioned: &void = unsafe { mem::alloc(msr::Ref::layout())? };
+  let regioned: &void = msr::RegionedAllocation::wrap(raw);
+
+  # All reference casts are unsafe, unless the inner type doesnt change or the
+  # new inner type is void
+  return unsafe { regioned as &msr::Ref };
+}
+
+# This returns whether MSR is enabled or not (using --nomsr or -M to disable)
+fn mem::msrEnabled -> bool @const;
+
+# This returns the architecture triple of the target
+fn TargetTriple::compilationTarget -> TargetTriple
+
+fn intrinsics::unimplemented -> bool @inline;
+
+# Example use of unimplemented
+fn printFormattable(f: &fmt::Format) -> void {
+    # fmtDebug is marked @optional in std::fmt::Format
+    mut s: &String = f.fmtDebug();
+
+    if intrinsics::unimplemented() {
+        # The register needn't be reset manually as an implemented method will
+        # reset it
+        s = f.fmt();
+    }
+
+    io::println(s);
+}

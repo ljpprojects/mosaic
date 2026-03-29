@@ -1,5 +1,6 @@
 # Simple map implementation ported from C into Mosaic
 
+include core::mem
 include std::io
 include std::string
 

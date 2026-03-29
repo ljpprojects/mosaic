@@ -1,7 +1,7 @@
 [package]
 name = "mosaic-lang"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 authors = ["Lucas Plumb"]
 keywords = ["compiler", "Mosaic"]
 readme = "README.md"
@@ -66,3 +66,4 @@ target-lexicon = "0.13"
 mmap-rs = "0.7"
 homedir = "0.3"
 bigdecimal = "0.4.10"
+rodio = "0.21.1"

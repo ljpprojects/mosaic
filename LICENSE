@@ -1,21 +1,98 @@
-MIT License
+ACOA3b Licence
 
-Copyright (c) 2025 ljp-projects
+Copyright (c) 2026 ljpprojects
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+The "Software" refers to the source code, accompanying documentation, and/or
+    any other accompanying files, which are publicly available.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The "Licence" refers to the full ACOA3b licence.
+
+The "Licensee" refers to anyone who has obtained a copy, derivative, and/or
+    portion of the Software licensed under the Licence.
+
+"Derivatives" are derivative works.
+
+The "Core Tenets" of the Licence are:
+
+    (1) Preventing the intentional restriction of access.
+
+    (2) Allowing the authorship of successors to the Licence.
+
+    (3) Allowing the inclusion of multiple licences for those wishing to create
+        Derivatives of the Software to use at their discretion.
+
+    (4) The inability to remove core tenets.
+
+    (5) The ability of the author of the Licence to create additional Core
+        Tenets.
+
+    (6) The ability of the author of the Licence to modify the core tenets after
+        consideration, provided the modifications are within the terms of the
+        previous Core Tenets.
+
+ACOA3b is henceforth recognised as the successor the the ACOA3 licence, and
+thus the successor to any licences which ACOA3 itself succeeded.
+
+Permission is hereby granted to the Licensee to deal in the Software without
+limitation of the rights to use, copy, modify, merge, publish, and/or distribute
+copies of the Software, provided the following conditions are met and upheld:
+
+    (1) The ability of others to obtain copies of the Software and to create
+        Derivatives of the Software is not restricted intentionally further than
+        any restrictions in place at the time of the adoption of the Licence.
+        Restrictions to the ability to obtain copies of the Software or to
+        create Derivatives of the Software may look like:
+
+            (a) The introduction of a mandatory payment, fee, charge, gratuity,
+                service, or negotiation without which the ability to obtain
+                copies of or create Derivatives of the Software is heavily
+                restricted or forbidden.
+
+            (b) The introduction of a check or verification which permits the
+                restriction or denial of a copy of the Software or of the
+                ability to create a Derivative of the Sofwtare.
+
+        Permission is granted, however, to create restriction on access to the
+        Software provided one of the following exemptions is applicable:
+
+            (a) The Software exposes the sensitive information of a person, or
+                exposes information about a person which they wish to be removed.
+                In this case the Licensee may completely restrict or forbid
+                access to only the affected versions of the Software.
+
+            (b) The Software is legally mandated to have access to it restricted
+                or forbidden. In this case, the Licensee must restrict access as
+                much as required to all affected versions of the Software as
+                required to remain within the law.
+
+    (2) All copies of the Software, unless with the express permission of the
+        Licence elsewhere, are licensed under the Licence exclusively.
+
+Permission is granted to the Licensee to include other licences into the
+Software provided the Software isn't licenced under these extra licences. Any
+person wishing to create a Derivative of the Software may choose at their
+discretion whether they wish for this Licence to remain effective for their
+Derivative or to relicense their Derivative under one of these extra licences.
+
+Permission is granted to the Licensee to relicense the Software under any
+successor to the Licence at will, if and only if the new Licence meet the
+following criteria:
+
+    (1) The Core Tenets of this Licence are upheld in the new licence.
+
+    (2) The new licence acknowledges or states that it is a succesor to this
+        Licence.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+    _     ____  ___     _     _____  _
+   / \   / ___|/ _ \   / \   |___ / | |__
+  / _ \ | |   | | | | / _ \    |_ \ | '_ \
+ / ___ \| |___| |_| |/ ___ \  ___) || |_) |
+/_/   \_\\____|\___//_/   \_\|____/ |_.__/

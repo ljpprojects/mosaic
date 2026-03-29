@@ -1,0 +1,3 @@
+zzz 300; # Make lexing sleep for 5 minutes when it sees this
+
+zzz "string"; # If a non-number is used the sum of the text's bytes (up until a semicolon) is used, so it sleeps for 731 seconds here (12 minutes and 11 seconds)

@@ -1,0 +1,35 @@
+# include is like the C #include preprocessor directive, it simply inlines the
+# contents of the specified file directly into the file.
+
+# This would include the contents @/std/mem.msc or @/std/mem/index.msc (where @
+# is the module search path) directly into the file
+include core::mem;
+
+# This would include the contents of ./docs/include.md directly into the source
+# file into a comment. This is a no-op on a normal build, but when comments are
+# analysed, this should make the comment the contents of the file.
+include into comment "docs/include.md";
+
+# The "include into string" is an expression and is similar to Rust's
+# include_str! macro
+include into string "src/dictionary.txt";
+
+# Like Rust's include_bytes! macro
+include into bytes "src/image.png";
+
+# Combined with the if statement's ability to compile conditionally with @const
+# you get a worse C preprocessor
+
+import intrinsics::mem;
+
+if mem::msrEnabled() @const {
+    include "std/msr/io.msc";
+} else {
+    include "std/mrc/io.msc";
+}
+
+# The `include into section` statement sets aside some data from a file to embed
+# into a section at compile-time
+# This means you can embed assembly into Mosaic technically
+
+include into section '.debug_info' "info.debug";
