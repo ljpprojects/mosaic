@@ -1,5 +1,6 @@
 pub mod debug;
 pub mod errors;
+pub mod string;
 pub mod tokens;
 
 use crate::frontend::lexer::debug::{PositionRange, TokenContext};
@@ -36,32 +37,75 @@ pub const LEGAL_CHARS: &[char] = &[
 ///                let, mut, enum, extern, default;
 ///
 /// Control Flow:  return, if, else, match, switch, for,
-///                while, do, break, goto, continue, in;
+///                while, do, break, goto, continue, in,
+///                guard;
 ///
 /// MSR:           region, escape;
 ///
+/// Modules:       import, include, namespace;
+///
+/// Memory:        stackalloc;
+///
+/// Primitive Types Because I Guess You Shouldn't Have a Value of an Int Named
+/// Int Also Cranelift Supports SIMD Types and They Count as Primitives Too So
+/// Ouch:          i8, i8x1, i8x2, i8x4, i8x8, i8x16, i8x32, i8x64, i16, i16x1,
+///                i16x2, i16x4, i16x8, i16x16 i16x32, i32, i32x1, i32x2, i32x4,
+///                i32x8, i32x16, i64, i64x1, i64x2, i64x4, i64x8, i128, i128x2,
+///                i128x4, iptr, iptrx1, iptrx2, iptrx4, iptrx8, u8, u8x1, u8x2,
+///                u8x4, u8x8, u8x16, u8x32, u8x64, u16, u16x1, u16x2, u16x4,
+///                u16x8, u16x16 u16x32, u32, u32x1, u32x2, u32x4, u32x8, u32x16,
+///                u64, u64x2, u64x4, u64x8, uptr, uptrx1, uptrx2, uptrx4, uptrx8,
+///                f16, f16x1, f16x2, f16x4, f16x8, f16x16, f16x32, f32, f32x1,
+///                f32x2, f32x4, f32x8, f32x16, f64, f64x1, f64x2, f64x4, f64x8,
+///                f128, f128x2, f128x4, void
+///
 /// Miscellaneous: unsafe, as, true, false, alignof, into
-///                sizeof, include;
+///                sizeof, include, bytes, comment, string,
+///                section, propagate, zam, zamalamadingdong,
+///                zzz;
+///
+/// Low Level:     stackptr, frameptr, retaddr
+///
+/// Maths:         integral (this does nothing this is to make those comments more confusing)
+///
+/// If you are reading this and saw f32x1 or similar, you are likely wondering
+/// why on earth that type exists, when every other SIMD type under the sun is a
+/// keyword. It exists because perhaps you want one f32 (or other primtiive) but
+/// with vector semantics.
 pub const KEYWORDS: &[&str] = &[
-    "alias", "alignof", "as", "break", "bytes", "comment", "continue",
-    "default", "do", "else", "enum", "escape", "extern", "false", "fn", "for",
-    "goto", "guard", "if", "impl", "in", "include", "interface", "into", "let",
-    "match", "mut", "namespace", "propagate", "region", "return", "section",
-    "sizeof", "stackalloc", "string", "switch", "synthesise", "true", "unsafe",
-    "while", "zam", "zamalamadingdong", "zzz",
+    "alias", "alignof", "as", "break", "bytes", "comment", "continue", "default",
+    "do", "else", "enum", "escape", "extern", "f128", "f128x1", "f128x2", "f128x4",
+    "f16", "f16x1", "f16x16", "f16x2", "f16x32", "f16x4", "f16x8", "f32", "f32x1",
+    "f32x16", "f32x2", "f32x4", "f32x8", "f64", "f64x1", "f64x2", "f64x4",
+    "f64x8", "false", "fn", "for", "goto", "guard", "i128", "i128x1", "i128x2",
+    "i128x4", "i16", "i16x1", "i16x16", "i16x2", "i16x32", "i16x4", "i16x8",
+    "i32", "i32x1", "i32x16", "i32x2", "i32x4", "i32x8", "i64", "i64x1", "i64x2",
+    "i64x4", "i64x8", "i8", "i8x1", "i8x16", "i8x2", "i8x32", "i8x4", "i8x64",
+    "i8x8", "if", "impl", "in", "include", "integral", "interface", "into", "iptr",
+    "iptrx1", "iptrx2", "iptrx4", "iptrx8", "let", "match", "mut", "namespace",
+    "propagate", "region", "return", "section", "sizeof", "stackalloc", "string",
+    "switch", "synthesise", "true", "u16", "u16x1", "u16x16", "u16x2", "u16x32",
+    "u16x4", "u16x8", "u32", "u32x1", "u32x16", "u32x2", "u32x4", "u32x8", "u64",
+    "u64x1", "u64x2", "u64x4", "u64x8", "u8", "u8x1", "u8x16", "u8x2", "u8x32",
+    "u8x4", "u8x64", "u8x8", "unsafe", "uptr", "uptrx1", "uptrx2", "uptrx4",
+    "uptrx8", "void", "while", "zam", "zamalamadingdong", "zzz"
 ];
 
 /// A sorted list of keywords. They are categorised like this:
 ///
-/// Synthesis:     @strong, @weak, @assign, @copy, @take;
+/// ᐞ = MSR exclusive
+/// ᕽ = MRC exclusive (`--nomsr`, `-M`)
 ///
-/// Linkage:       @export, @nomangle, @local, @hidden;
 ///
-/// Visibility:    @private, @protected, @public, @fileprivate;
+/// Memory:     @strongᕽ, @weakᕽ, @assignᕽ, @copyᕽ, @takeᐞ, @returnᐞ;
 ///
-/// Usage:         @required, @readonly, @deprecated, @unsafe, @unused, @final;
+/// Linkage:    @export, @nomangle, @local, @hidden;
 ///
-/// Optimisations: @const;
+/// Visibility: @private, @protected, @public, @fileprivate;
+///
+/// Usage:      @required, @readonly, @deprecated, @unsafe, @unused, @final;
+///
+/// Behaviour:  @allocates, @const, @inline, @layout;
 pub const MODIFIERS: &[&str] = &[
     "allocates", "assign", "const", "copy", "deprecated", "export",
     "fileprivate", "final", "hidden", "inline", "layout", "local", "nomangle",
@@ -161,6 +205,27 @@ impl<'a> StreamedLexer<'a> {
                 return Some(Err(LexError::TooManyLines(self.cur_context)))
             }
 
+            // Why are you here??? Have a quote form Mr. Kent 27/03/2026
+            /*
+            Alright, can we all just sit down and stop moving things because I swear to God I am genuinely about to lose my mind? Just sit down and *shut up* it is really not that hard.
+
+            I am so sick to death of this class and the constant *bullshit* that happens in this room. I am so sick to death of just the amount of crap that you guys think you can get away with.
+
+            Let me put one thing clear, I am the teacher, you are not. So *stop* asking me questions and *stop* thinking you can run the class, because you CANNOT run this class. And I WILL NOT have any of you thinking that you can run this class, so *zip* *your* *lips* and *be quiet*.
+
+            I am fed up with this crap. So sick of it. None of you are experts, *so be quiet.* Let me teach, *do not* talk over me, and I don't want anyone talking out of turn today, because if you do you are out there (*gestures to the door into the classroom*) or out there (*gestures to the balcony that the room has for some reason*) where I don't- can't see ya. Because I'm fed up with it. So, be quiet. Because I am done. Really done.
+
+            (*he suddenly gets a bit calmer*)
+
+            Some of the personalities in this room that think they're top dog when they're actually not. Okay, because half of you couldn't tie your own shoelaces without instructions, so, what I might ask you is be quiet, and let me actually do my job; let me teach you, so that I can stop yelling at ya. I'm fed up with it, I literally see you 12 times a fortnight (*sadly true*) and I have been really patient to start this year. Really patient.
+
+            And guess what? You guys wanna compare yourselves to the year sevens? (*he has them 12 times fortnightly too*) They are much better than you. Much better, in terms of behaviour. Having them 12 times a fortnight is actually not too bad. Having *you* 12 times a fortnight is actually an absolute chore at the moment. So, grow up. It is really cold outside, it is really wet outside, we were meant to have a cross country today.
+
+            I got about... 3 hours notice yesterday, because at 12:30 we got the notice that cross country was off. We would have had 20 minutes of period 3 today, which means I would have had 20 minutes of a year 11 class. I now have a full 120 minutes, and with parent-teacher interviews last night, coupled with the fact that I didn't get home until about 9 o'clock (*someone needs to get these teachers to strike or something lol*), I pretty much sat up planning that lesson until midnight, so *do not* piss me off, like you already have.
+
+            Okay? It's not anyone's fault, it's the weather, but unfortunately that's the way it is, so let's get through this so that we can actually do this without annoying me any more than I already am.
+            */
+
             self.pos.column = unsafe { NonZeroU8::new_unchecked(1) };
             self.pos.offset += 1;
 
@@ -210,13 +275,77 @@ impl<'a> StreamedLexer<'a> {
         // handled that already
 
         // Check for whitespace
-        if next.is_whitespace() && !ignore_whitespace {
+        if prev.is_whitespace() && !ignore_whitespace {
             self.pos.offset -= 1;
             return self.prev_char(false)
         }
 
         self.pos.offset -= 1;
-        Some(next)
+        Some(prev)
+    }
+
+    pub fn expect_char(&mut self, c: char) -> Result<(), LexError> {
+        let begin_state = self.state();
+
+        let Some(next) = self.next_char(false)
+            .transpose()
+            .inspect_err(|_| self.reset_to_state(begin_state))?
+        else {
+            return Err(LexError::UnexpectedEOF(self.cur_context))
+        };
+
+        if next != c {
+            return Err(LexError::ExpectedCharacter(
+                c,
+                next,
+                PositionRange::one_char(
+                    self.reader.path.into(),
+                    begin_state.pos,
+                    self.cur_context
+                )
+            ))
+        }
+
+        Ok(())
+    }
+
+    pub fn expect_char_in(&mut self, cs: &'static [char]) -> Result<char, LexError> {
+        let begin_state = self.state();
+        let mut c = '\0';
+
+        for &char in cs {
+            match self.expect_char(char)
+                .inspect_err(|_| self.reset_to_state(begin_state))
+            {
+                Ok(_) => return Ok(char),
+                Err(LexError::ExpectedCharacter(_, got, _)) => {
+                    c = got;
+                    self.prev_char(false);
+                },
+                _ => unreachable!(),
+            };
+        }
+
+        Err(LexError::ExpectCharacterIn(
+            cs,
+            c,
+            PositionRange::one_char(
+                self.reader.path.into(),
+                begin_state.pos,
+                self.cur_context
+            )
+        )).inspect_err(|_| self.reset_to_state(begin_state))
+    }
+
+    pub fn expect_char_sequence(&mut self, s: &str) -> Result<(), LexError> {
+        let begin_state = self.state();
+
+        for char in s.chars() {
+            let _ = self.expect_char(char)
+                .inspect_err(|_| self.reset_to_state(begin_state))?;
+        }
+
+        Ok(())
     }
 
     /// ## Invariants
@@ -368,6 +497,8 @@ impl<'a> StreamedLexer<'a> {
             return err
         }
     }
+
+
 
     /// This gets the next token from the given CharReader
     /// This will return None when EOF is encountered.

@@ -1,3 +1,7 @@
+#![feature(int_from_ascii)]
+#![feature(ptr_as_ref_unchecked)]
+#![feature(is_ascii_octdigit)]
+
 use std::alloc::alloc;
 use crate::cli::{Args, Command};
 use crate::compiler::cranelift::linker::Linker;
@@ -20,6 +24,7 @@ use target_lexicon::{Architecture, Triple};
 
 pub mod cli;
 pub mod compiler;
+pub mod exit;
 pub mod file;
 pub mod frontend;
 pub mod reader;

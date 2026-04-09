@@ -1,0 +1,39 @@
+#/
+    Pure fuckery in Mosaic
+/#
+
+fn main -> i32 {
+    # First fuckery - get the stack pointer (returns a *u128 to preserve 16-byte
+    # alignment)
+    let sp: *.u128 = stackptr;
+
+    # Next - get the frame pointer
+    let fp: *.u128 = frameptr;
+
+    # Third fuckery - get the return adress (fn is a function pointer type with
+    # unknown argument count and unknown return type, cannot be called directly,
+    # so retaddr only really exists for fuckery)
+    let ra: fn = retaddr;
+
+    # Fourth fuckery: cast sp and fp to mutable pointers and add 32
+    # Note: T<x> is alternative syntax for primitive casts
+    let sp: *u128 = unsafe { (sp + uptr<32>) as *u128 };
+    let fp: *u128 = unsafe { (fp + uptr<32>) as *u128 };
+
+    # Final fuckery: overwrite 64 bytes from (sp + 32) and (fp + 32) with 0 downwards
+    for i: uptr in range<uptr>[0..64] {
+        unsafe {
+            *(sp - i) = 0;
+            *(fp - i) = 0;
+        }
+    }
+
+    # EXTRA BONUS FUCKERY!!!! Jump to the return adress directly!!!
+    # Instead of returning! Cranelift doesnt have a way to set return registers
+    # while generating IR without emitting a return so it just kinda doesnt
+    # return a value oops so this thing's ONLY use is literally fuckery
+    #
+    # Note: @exit indicates to the compiler that this jump exits from the
+    # current scope, thus it is treated like a return statement
+    goto @exit ra;
+}

@@ -7,6 +7,7 @@ pub enum TokenContext {
     StringTemplate,
     StringChars,
     StringEscape, // Only exists because of the BEHEMOTHS of string escapes
+    StringEscapeParameterised,
     Path,
     Comment,
     NumberLiteral,

@@ -1,0 +1,109 @@
+#/
+    SIMD in Mosaic (as cranelift supports SIMD)
+/#
+
+import std::io;
+
+fn contains_mask_method(needle: u8, haystack: &.[u8]) -> uptr {
+    # Technically we have u8x64 at our disposal but we can settle for u8x32
+    mut needles = <u8x32 { needle }>;
+    mut loops = haystack.count() / 32;
+    mut remaining = haystack.count() % 32;
+    mut count = uptr<0>;
+
+    for let i: uptr = 0; i < loops; i += 1 {
+        # Load 32 bytes from haystack into a vector
+        let bytesptr = uptr<haystack> + i * 32;
+        mut bytesvec: u8x32 = *(unsafe { bytesptr as *.u8x32 });
+
+        # Get a vector mask where 0xFF in a lane means eq and 0x00 means inequal
+        # For vector comparisons, 0xFF (or all 1s) means the condition held true,
+        # and 0x00 (all 0s) means it did not.
+        let vecmask = bytesvec == needles;
+
+        # Get a bit mask where each bit corresponds to a lane being 0xFF or not.
+        # The mask here is the highest bit of each vector lane. The order is that
+        # the MSB of a higher lane ends up as a higher bit in the number.
+        # If we were to AND this mask with 0x1 we would get the MSB of lane 0,
+        # see https://github.com/bytecodealliance/wasmtime/blob/main/cranelift/codegen/src/isa/aarch64/lower.isle#L2898
+        # Given that cranelift only supports i8x16 vhigh_bits, i8x32 splits itself
+        # into i8x16 halves, gets the vhigh_bits of each half, and puts them
+        # together into a u32. In fact, this is architecture independent.
+        let mask: u32 = vecmask.highbits();
+
+        # However many bits are one is however many matches there were
+        count += mask.ones_count();
+    }
+
+    # By here every chunk of 32 has been processed, we need to do the remainders
+    for let i: uptr = 0; i < remaining; i += 1 {
+        # Just do a linear search the old fashioned way
+        if haystack[i] == needle {
+            count += 1;
+        }
+    }
+
+    return count
+}
+
+fn contains_count_zeros_method(needle: u8, haystack: &.[u8]) -> uptr {
+    # Technically we have u8x64 at our disposal but we can settle for u8x32
+    mut needles = <u8x32 { needle }>;
+    mut loops = haystack.count() / 32;
+    mut remaining = haystack.count() % 32;
+    mut count = uptr<0>;
+
+    for let i: uptr = 0; i < loops; i += 1 {
+        # Load 32 bytes from haystack into a vector
+        let bytesptr = uptr<haystack> + i * 32;
+        mut bytesvec: u8x32 = *(unsafe { bytesptr as *.u8x32 });
+
+        # count_zeroes counts how many lanes are zero
+        mut zeroes_baseline: uptr = bytesvec.count_zeroes();
+
+        # Subtact the bytes and needles vectors (wrapping)
+        # .= is like += or -= but for method calls
+        # technically -= is wrapping already but just to show the .=
+        bytesvec.=sub_wrap(needles);
+
+        # Now we add how many more zeroes there are in bytesvec than before
+        # That difference is how many times needle is found in this chunk
+        count += bytesvec.count_zeroes() - zeroes_baseline;
+    }
+
+    # By here every chunk of 32 has been processed, we need to do the remainders
+    for let i: uptr = 0; i < remaining; i += 1 {
+        # Just do a linear search the old fashioned way
+        if haystack[i] == needle {
+            count += 1;
+        }
+    }
+
+    return count
+}
+
+fn main -> i32 {
+    # <T { X }> syntax is a vector splat, meaning the vector's lanes are all
+    # intialised to X
+    let a: f32x2 = <f32x2 { 10 }>;
+
+    # <T [ A, B, ... ]> is syntax sugar for creating a vector of T and
+    # inserting values into it after
+    let b: f32x2 = <f32x2 [ 32, 4 ]>;
+
+    # Vector addition
+    let c = a + b;
+
+    # Lane extraction (static)
+    let c0 = c[0];
+    let c1 = c[1];
+
+    # Lane extraction (dynamic)
+    # let cn = c[n];
+    # This would have to load the vector onto the stack as cranelift is missing
+    # an instruction to do this specifically
+    #
+    # Lane insertion is the same just use assignment syntax
+
+    io::println("Sum = < \{c0}, \{c1} >");
+}

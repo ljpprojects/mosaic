@@ -1,4 +1,4 @@
-# Example of Mosaic Static Regions
+# Example of Mosaic Static Regions and the stack
 
 import core::msr;
 import std::fmt;

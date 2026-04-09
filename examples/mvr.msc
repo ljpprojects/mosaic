@@ -25,5 +25,10 @@ fn readFile(path: &String) -> &String, &^io::Error @allocates {
     # passthrough indicator (<) means to ignore $1 if $2 is nil
     propagate(buf, $2) file.readIntoString(buf);
 
+    # An example of passthrough-propagations
+    # let bytes_read = propagate(buf, $2; <$1) file.readIntoString(buf);
+    # Here, if $2 != nil then buf, $2 is returned, otherwise the value $1 is
+    # passed through and assigned to bytes_read
+
     return buf;
 }

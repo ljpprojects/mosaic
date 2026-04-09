@@ -884,6 +884,8 @@ impl CraneliftGenerator {
                     idx = func.ins().uextend(self.isa.pointer_type(), idx)
                 }
 
+                func.ins().vhigh_bits(NarrowInt, a)
+
                 let inner_ty = ty.inner().unwrap();
                 let inner_ty_size = inner_ty.size_bytes(&self.isa) as i64;
 

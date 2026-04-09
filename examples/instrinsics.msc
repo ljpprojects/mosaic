@@ -1,0 +1,62 @@
+# Example of Instruction Intrinsics (Instrinsics) in Mosaic
+# The example is a fau- stdlib implementation for i8 vector high_bits
+
+fn i8x2::high_bits(self: i8x2) -> u8 {
+    # We can mask the high bits of the vector's lanes if we bit cast to u16
+    let bytes = u16<self>;
+    let mask = 0x8080; # 0b1000_0000_1000_0000
+
+    let high_isolated = bytes & mask;
+
+    return u8<(high_isolated >> 7) | (high_isolated >> 14)>;
+}
+
+fn i8x4::high_bits(self: i8x4) -> u8 {
+    let bytes = u32<self>;
+    let mask = 0x80808080;
+
+    let high_isolated = bytes & mask;
+
+    return
+        u8<(high_isolated >> 7) | (high_isolated >> 14)
+        | (high_isolated >> 21) | (high_isolated >> 28)>;
+}
+
+fn i8x8::high_bits(self: i8x8) -> u8 {
+    let bytes = u64<self>;
+    let mask = 0x8080808080808080;
+
+    let high_isolated = bytes & mask;
+
+    return
+        u8<(high_isolated >> 7) | (high_isolated >> 14)
+        | (high_isolated >> 21) | (high_isolated >> 28)
+        | (high_isolated >> 35) | (high_isolated >> 42)
+        | (high_isolated >> 49) | (high_isolated >> 56)>;
+}
+
+# For i8x16 we now get to use the cranelift vhigh_bits instruction, as shifting
+# repeatedly is just annoying and cranelift has an actual isntruction for this
+
+import intrinsics::instr;
+
+fn i8x16::high_bits(self: i8x16) -> u16 {
+    return instr::vhigh_bits(self);
+}
+
+# For i8x32, we can split the vector into two i8x16s
+fn i8x32::high_bits(self: i8x32) -> u32 {
+    # Wait I have faith in cranelift more than myself and like most of the time
+    # i128 is native so who gives a fuck
+
+    let high = u128<self> & (u128<0xFFFFFFFFFFFFFFFF> << u128<64>);
+    let low = u128<self> & u128<0xFFFFFFFFFFFFFFFF>;
+
+    let high_vec = i8x16<high>;
+    let low_vec = i8x16<low>;
+
+    let high_part = u32<instr::vhigh_bits(high_vec)>;
+    let low_part = u32<instr::vhigh_bits(low_vec)>;
+
+    return (high_part << 16) | low_part;
+}

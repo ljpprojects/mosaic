@@ -35,7 +35,7 @@ pub trait WithState {
 
 pub trait State {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct ReaderState<'a> {
     pub pos: u64,
     pub path: &'a str,
@@ -49,7 +49,7 @@ impl<'a> ReaderState<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct LexerState<'a> {
     pub reader_state: ReaderState<'a>,
     pub pos: Position,

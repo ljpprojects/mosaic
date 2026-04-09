@@ -5,7 +5,7 @@ edition = "2024"
 authors = ["Lucas Plumb"]
 keywords = ["compiler", "Mosaic"]
 readme = "README.md"
-rust-version = "1.80.0"
+rust-version = "1.89.0"
 license-file = "LICENSE"
 description = "A compiler for Mosaic."
 categories = ["compilers"]
@@ -20,50 +20,76 @@ path = "src/main.rs"
 incremental = true
 panic = "unwind"
 
-[profile.bench]
-lto = "fat"
-overflow-checks = false
-opt-level = 3
-incremental = true
-debug-assertions = false
-debug = "line-tables-only"
-
 [profile.release]
 lto = "fat"
+opt-level = 3
 overflow-checks = false
-opt-level = "z"
 incremental = false
-debug-assertions = true
-debug = "line-tables-only"
-panic = "unwind"
+debug-assertions = false
+debug = "none"
+panic = "abort"
 
 [profile.release.package."*"]
+opt-level = 3
 overflow-checks = false
-opt-level = "z"
-incremental = true
+incremental = false
 debug-assertions = false
-debug = "line-tables-only"
+debug = "none"
 
 [profile.release.build-override]
+opt-level = 3
 overflow-checks = false
-opt-level = "z"
-incremental = true
+incremental = false
 debug-assertions = false
-debug = "line-tables-only"
-
+debug = "none"
 
 [dependencies]
-cranelift-codegen = { version = "0.127" }
-cranelift-module = { version = "0.127" }
-cranelift-object = "0.127"
-cranelift-frontend = { version = "0.127" }
-colored = "3.0.0"
-clap = { version = "4.5.54", features = ["derive"] }
+cranelift-object = "0.130"
+cranelift-codegen = "0.130"
+cranelift-module = "0.130"
+cranelift-frontend = "0.130"
+cranelift-jit = "0.130.0"
+colored = "3.1"
+clap = { version = "4.6", features = ["derive"] }
 either = "1.15.0"
-tokio = { version = "1.49", features = ["rt", "rt-multi-thread", "macros"] }
+tokio = { version = "1.51", features = ["rt", "rt-multi-thread", "macros"] }
 downcast-rs = "2.0"
 target-lexicon = "0.13"
 mmap-rs = "0.7"
 homedir = "0.3"
 bigdecimal = "0.4.10"
-rodio = "0.21.1"
+rodio = "0.22"
+framebuffer = "0.3.1"
+
+# Why is rodio a dependency?
+# Simple! Because the compiler serenades you with music on error cases, here's a
+# handy-dandy list!
+#
+# One MSR-related error: Slowed + reverb GALLERY (Toby Fox)
+#
+# 30 of any errors: THE WORLD REVOLVING (Toby Fox)sped up and with a disgusting echo
+# 200 errors: BIG SHOT (Toby Fox) slowed + reverb
+# 500 errors: Hall of Eagans (Theodore Shapiro) slowed + reverb
+# 1000 errors: idk little melody I made (if you've seen hotdog-clicker, you haven't, it is the HOPE motif)
+#
+# 1 use of stackalloc: KING OF ROLYPOLY (Toby Fox) slowed + reverb
+# 2 uses of stackalloc: Ethereal Blade (Moonkit) slowed + reverb
+# 10 uses of stackalloc: APRIL 2012 (Toby Fox) slowed + reverb
+# 100 uses of stackalloc: Labor of Love (Theodore Shapiro) sped up + reverb
+#
+# And if you use all of the SIMD types in one source file sprinkled throughout
+# various variable definitions, you get ALL OF THEM AT ONCE! Also your screen
+# goes completely dark for the duration of the longest (they are played in parallel)
+# and this is why framebuffer is needed
+#
+# ALSO sometimes when the compiler feels angry at you (maybe you have been
+# recompiling too often, maybe you didn't change your source file/s before
+# recompiling, etc.) then your screen might flash red. If you have the
+# `--flash-me-baby` flag enabled, that is (it's off by default).
+#
+# Also if you specify `--lmnop` there is a 1 in 56667 chance for a GIF of Mr. Ant
+# Tenna doing his funny little dance to appear (and repeat 32 times). Every `ol`
+# you add on to `lmnop` increases this chance by 666 (and if you add an 'o' to
+# the end by 7 but only once).
+# For example, `--lmnopolololololololololololololololololololololololololololololololololololololololololololololololololololololololololololololololololololololololololololololololololololololo` means there is a 1 in 50 chance of the GIF to appear (oh and the KING OF ROLYPOLY track for one
+# stackalloc reused).
