@@ -1,0 +1,68 @@
+import std::io;
+
+fn sayHELP(caller: &.[u8]) -> void {
+    io::println("\rgb(fg; 255,000,000)\boldHELP ME \{caller.asUppercase()}");
+    return;
+}
+
+# fn() -> void is a function pointer, NOT a closure
+fn do(task: fn(&.[u8]) -> void) -> void {
+    return task("do (for function pointers)"); # indirect call
+}
+
+# We create an overload of do that accepts a closure
+# The [,] just indicates that it is a closure and data is captured nothing goes
+# inside them
+fn do(task: fn [,](&.[u8]) -> void) -> void {
+    return task("do (for closures)");
+}
+
+fn main -> i32 {
+    # Get the address of sayHELP (yes its position independent why wouldn't it
+    # be? It's not like this operation in the old Mosaic got the "absolute"
+    # address even though PIC was always enabled and couldn't be disabled)
+    let fn_addr: fn(&.[u8]) -> void = &sayHELP;
+
+    # Create an anonymous function
+    # It CANNOT capture outside state as it isnt a closure you should know this
+    let anon_fn: fn(&.[u8]) -> void = fn(caller: &.[u8]) -> void {
+        io::println("Hello, \{caller}!");
+        return;
+    };
+
+    # Create a closure
+    # The compiler will create a closure even if it doesn't capture state, but
+    # we will to be nice
+    let x = uptr<1984>;
+    let y = uptr<420>;
+
+    # When a closure captures state, one of these things happen:
+    #   A) When the state is Reloc, it relocates (bit-for-bit copies, read
+    #      MSR.md you fool) it into the closure's captures data.
+    #   B) When the state is CheapClone, it runs CheapClone::cheap_clone and
+    #      moves that into the closure's captures data.
+    #   C) When the state is Clone and the capture is marked @clone it will call
+    #      Clone::clone and move that into the captures.
+    #   C) When the state is a reference, it will:
+    #        i) Deny the capture (e.g. stack-allocated refs or mutable refs without @take)
+    #        ii) If @take is specified, move the value into the closure's region
+    #            and relocate (refs are Reloc to the compiler but not to the dev)
+    #        iii) If the ref is allowed to alias (e.g. immutable refs) then an
+    #             alias is created (and destroyed alongside the closure itself)
+    #
+    # Closures are fat pointers (with one representation, the struct one) where
+    # the first pointer is the pointer to captured state, and the second is the
+    # pointer to the anonymous function (which has an extra argument inserted to
+    # accept the pointer to the captured state).
+    let closure: fn[,](&.[u8]) -> void = fn[x,y](caller: &.[u8]) -> void {
+        io::println("\{caller.asUppercase()} DID YOU KNOW X+Y = \{x + y}!!!!?");
+        return;
+    };
+
+    # Call the functions and closure
+    do(fn_addr);
+    do(anon_fn);
+    do(closure);
+
+    return;
+}

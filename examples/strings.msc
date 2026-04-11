@@ -1,0 +1,81 @@
+fn main(argc: i32, argv: **u8) -> i32 {
+    # String literals by default are fat pointers (secretly stored as iptrx2 for
+    # cranelift if you use &:[] otherwise stored as a struct) where the first 8
+    # bytes (cranelift only supports 64 bit architectures) are the length of the
+    # string and the other 8 bytes is a *u8 to the actual string bytes. The
+    # apostrophe indicates that the string lives
+    # for the entire length of the program (like Rust's 'static lifetime).
+    #
+    # All string literals are constant references.
+    #
+    # Strings in Mosaic are UTF-8 encoded by default (as the source files are).
+
+    let static: &.'[u8] = "lmnopololo";
+
+    # Mosaic has the standard string escapes (\r is a common prefix among other
+    # string escapes, the colon after it does not end up in the string and acts
+    # as a delimeter to denote the carriage return rather than some other string
+    # escape beginning with r)
+    #
+    # It also has \e which is equivalent to \x1B
+    let escapes = "lmnop\nololo\tlollipop\r:\n";
+
+    # Mosaic has the standard parameterised escapes
+    let parameterised = "\x7c\u{2728}\o076lmnop\o074\u{2728}\x7c"; # Equivalent to "|✨>lmnop<✨|"
+
+    # Mosaic also has some more complex escapes relating to ANSI codes
+    # \rgb(fg; {R},{G},{B}) is equivalent to \e[38;{R};{G};{B}m
+    let red_fg_white_bg_bold = "\rgb(fg; 255, 000, 000)\rgb(bg; 255, 255, 255)\bold";
+
+    # Generic ANSI sequences beginning with \e[ can be expressed with \ansi
+    # \ansi({C}: {Arg1}; {Arg2}; ...; {ArgN}) is equivalent to \e[{Arg1};{Arg2};...;{ArgN}{C}
+    let generic_ansi = "\ansi(m: 32)red text";
+
+    # Mosaic also has string templates
+    # The type of a value inside a string template must implement std::fmt::Fmt
+
+    let x = uptr<362>;
+    let y = uptr<739>;
+
+    let sum_string = "x + y = \{x + y}"; # The string ends up "x + y = 1101"
+
+    # Mosaic also has raw strings, where any and every character between the two
+    # backticks will be added to the contents of the string
+    # Double backticks are the escape for one backtick, so you cannot have an
+    # empty raw string.
+    let assembly = `
+    _add:
+        addq %rdi, %rax
+        addq %rsi, %rax
+        ret
+    `.trim();
+
+    # Strings can be converted to C strings using the .asCString method (to
+    # allocate new memory for the C string) or .intoCString (to reuse the current
+    # memory)
+    let magic_string = "lmnop".asCString();
+
+    # The same can be done in reverse, using .asString on a C string to allocate
+    # new memory for the string or .intoString to reuse memory
+    # The .asString method also has an overload to allow a reference to already
+    # allocated memory to be passed in. If it fails (e.g. the buffer is too small)
+    # then err is not nil (otherwise the number of bytes written is returned).
+
+    # The executable path probably wont need more than 96 bytes.
+    # &~ indicates stack allocation
+    mut executable_path: &~[u8] = stackalloc[96];
+
+    # Here, propagate is used, rather than to propagate the error to the caller,
+    # to filter out the first value (the number of bytes written)
+    # Here We use !: to extact $2 (as guard checks != nil for us, its job is to
+    # literally check for falsy values)
+    guard propagate(!:; <$2) argv[0].asString(executable_path) else {
+        # We can't assign a heap-allocated value to executable_path so exit
+        io::stderr()
+            .writeln("Executable path is too large to fit into buffer (+96b)");
+
+        return 1;
+    }
+
+    return 0;
+}
