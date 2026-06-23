@@ -1,0 +1,36 @@
+import std::async;
+import std::io;
+
+# Example definiton of the Future interface
+# interface Future<T> : msr::Ref, async::Send {
+#   fn poll(self: &instancetype, waker: &async::Waker) -> data::Maybe<T>;
+# }
+#
+# The primary interface that implements Future is Promise<T>
+# interface Promise<T> : async::Future<T> {
+#   let is_done: bool;
+#   let result: data::Maybe<T>;
+#   let task: fn' [,]() -> () @send;
+# }
+#
+
+# The promise<T> type is a builtin type
+# It is a basic data structure with these fields
+#   let fut: fn [,]() -> future<T> @send;
+#   let id: uptr;
+#
+
+# Custom getline with async that we will use to showcase async/await
+# Since the program doesnt need SIMD we can repurpose some of those registers to
+# store fat pointers
+fn getLine -> promise<&:[u8]> @async @allocates {
+    return buf;
+}
+
+# The main function is not allowed to be async
+# Rather, we start the builtin async runtime
+fn main -> i32 {
+    let rt: &Runtime = async::Runtime::new();
+
+    rt.exec_blocking()
+}

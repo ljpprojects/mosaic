@@ -11,3 +11,8 @@ docs/src/.obsidian
 .cargo
 .cargo/credentials.toml
 .idea
+*.S
+*.tbl
+*.a
+*.dylib
+mma

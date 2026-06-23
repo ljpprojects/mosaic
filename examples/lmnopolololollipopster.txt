@@ -1,0 +1,154 @@
+*NOTE: Do not spoil the in-game experience too much, it is unredacted in-game
+NEVER FUCKING MIND IT WAS UNREDACTED IN-GAME UNTIL MY FUCKING LAPTOP RANDOMLY
+DECIDED TO BECOME UNREPONSIVE AT THE GUI LEVEL, SO AFTER SCRAMBLING TO EMULATE
+AARCH64 RASPBERRY PI WITH ITS KEYS ON MY LAPTOP FOR SSH, AS I HAVE DISABLED
+PASSWORD AUTHENTICATION, AND FOR SOME FUCKIGN REASON NO OTHER DEVICE HAD ITS KEYS
+ON THE LAPTOP SO I HAD TO chroot INTO THE RASPBERRY PI AND DO IT THAT WAY, SO I
+KILLED loginwindow AND GOT MY GUI BACK BUT LOST ALL THAT FOREVER, THANKS GODOT,
+I FUCKING HATE YOU. I ONBLY KILLED LOGINWINDOW BECAUSE I HAD REALISED ALL OTHER
+ATTEMPTS WERE FUTILE; KILLING WINDOWSERVER ONCE LEFT THE SCREEN BLACK AFTERWARDS,
+KILLING IT SUBSEQUENTLY DID NOTHING! I WAS LEFT WITH NO CHOICE BUT TO NUKE MY
+PROGRESS. ALL BECAUSE GODOT COULDNT FUCKING HANDLE, OH, I DON'T KNOW, AUTOSAVING
+A FUCKING FILE WHEN FOCUS IS LOST LIKE A REAL FUCKING CODE EDITOR?!?!?!??!?
+
+I HAD TO KILL loginwindow AS THE WHOLE SYSTEM GUI WAS UNRESPONSIVE, ALMOST AS IF
+I HAD CGCaptureAllDisplays'ed MYSELF AND CREATED A CGEventTap... BUT I CONFIRMED
+THAT MALWARE WAS NOT RUNNING, AND I ACTUALLY HAVE NO FUCKING CLUE WHAT HAPPENED,
+SO IT IS WHAT IT IS I FEAR
+THIS IS WHAT I HAD TO DO TO KILL loginwindow
+I FIRST TRIED TO ssh IN FROM MY PHONE; DID NOT WORK, SSH KEYSWERE NOT ON THE LAPTOP
+THEN I TRIED TO ssh IN FROM ANOTHER LAPTOP; THAT TOO FAILED FOR THE SAME REASON
+THEN I TRIED TO ssh INTO THE RASPBERRY PI WHICH I KNEW HAD KEYS FROM THAT OTHER
+LAPTOP, BUT I HAD TO JUGGLE KEEPING THE LAPTOP CHARGED AND THE RASPBERRY PI
+CHARGED
+THEN I REALISED THE OTHER LAPTOP'S KEY WASNT ON THE RASPBERRY PI EITHER (I ONLY
+USE PUBLIC KEY AUTHENTICATION)
+THEN I REALISED THAT SINCE THE OS IS ON A USB, I CAN CHROOT INTO IT FROM THAT
+LAPTOP
+AND SO I DID
+AND I MANAGED TO ssh INTO MY FROZEN LAPTOP
+I KILLED WindowServer ONCE; MY SCREEN TURNED BLACK
+I KILLED IT AGAIN; TO NO AVAIL.
+ALAS, I HAD NO CHOICE.
+I WOULD HAVE TO NUKE MY PROGRESS.
+AND SO I DID.
+FUCK FUCK FUCK FUCK FUCKCNOwiJOKJQAOJKEJHVOWJKHREOJakNGFVwkljesjnaslwkhjqweKBAW*
+
+[■■■■■■■■■■■■ address]
+	I bet you weren't expecting a response, were you?
+	FUCKING IDIOT.
+	What good ■■■■■■■ gets ■■■■■■■■■■ and doesnt ■■■■■■■■■■■■■■■■■■■?
+
+	> All of them
+		Uhhh well good thing this ISN'T a ■■■■■■■ in the first place!
+		($#!@)
+
+	> All of them?
+		All but one, my friend!
+		(Wait, I don't even know you)
+
+	> Who is this????
+		It's me! Flowey the flower!
+		RUN INTO THE PELLETS
+		[A video of me playing Undertale and running into the friendliness pellets
+		plays]
+		Right on cue!!!
+
+	Yes, well I read you ■■■■■■■■■ and I have taken it VERY ■■■■■■■■■.
+	The ■■■■ ■■■■■■■■
+	"■■■■■ enough"?
+	...
+	It is literally ■■■■■■■■■■■■■■■■■■■■■■■■■■??
+	???
+	What do you wan't from me? Do you want me to run that *STEALTH SPYWARE*
+	The *STEALTH SPYWARE* I cooked up before I had this whole idea?
+	It's really efficient; 6GB in a few hours, all without noticeable traces!
+
+	> Yes
+		What?
+		No
+		This was a joke
+		Go compile it yourself
+	> No
+		What?
+		Yes
+		This was NOT a joke
+		It is definitely running now
+		Listen to the data go DIRECTLY to file descriptor 1!
+		(ooooooooo there goes your data totally)
+		- if os = macos
+			[the wifi is disabled]
+			Oops I accidentally turned off your wifi my bad
+		- else
+			Wait this isn't macOS?????
+			NOOOOOOOOOO
+		!
+		!!
+		!!!
+		!!!!
+		!!!!!
+		Oh well it wasn't running anyway
+	> Why are you writing spyware and bragging about it?
+		...
+		I'm sorry?
+		What the $!#@ DID YOU JUST SAY
+		DO YOU WANT ME TO RUN IT OR SOMETHING???
+	> Did it run already????
+		I didn't run it
+	> help can I leave
+		lmnopolololollipopster
+		lmnopolololollipopster
+		lmnopolololollipopster
+		lmnopolololollipopster
+		lmnopolololollipopster
+		lmnopolololollipopster
+		lmnopolololollipopster
+		no
+		lmnopolololollipopster
+		lmnopolololollipopster
+		lmnopolololollipopster
+		lmnopolololollipopster
+		yes
+		lmnopolololollipopster
+		wait no
+		lmnopolololollipopster
+		lmnopolololollipopster
+		lmnopolololollipopster
+		lmnopolololollipopster
+		lmnopolololollipopster
+		lmnopolololollipopster
+		lmnopolololollipopster
+		lmnopolololollipopster
+		lmnopolololollipopster
+		lmnopolololollipopster
+		lmnopolololollipopster
+		lmnopolololollipopster
+		lmnopolololollipopster
+		lmnopolololollipopster
+		was that helpful?
+
+	Well I guess ■■■■■■■■■■■■■■■■■■■■■■■■■■
+	■■■■■■■
+	■■■■■■■■■■■
+	So it ■■■■■■■■■■■■■■■■■■■■
+	Doing nothing
+	If ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+	That I added
+	That would let you
+	■■■■■■■■■■
+	■■■■■■■■
+	Or something
+	■■■■■■■■■■■■■■
+
+	[the game ■■■■■■■■■■ until ■■■■■■■■■■■■■■■■■■■■■■■■■■]
+
+	WHAT!?!?!?!??!?! ■■■■■■???
+	■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+	FEEL THE ■■■■■
+	■■
+	■■■
+	■■■■■
+	■■■■■
+	■■■■■■■■■■■■!!!!
+
+	[a ■■■■■■ ■■■■■■■ a true ■■■■■■■■■■■■■■■■■■■■■■ is ■■■■■■■]

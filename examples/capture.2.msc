@@ -1,0 +1,136 @@
+#/
+    Dreams of pure Mosaic-Objc interop
+/#
+
+import @objc <Foundation/Foundation.h>
+import @objc <os/lock.h>
+import instrinsics::objc;
+
+interface @objc Producer : NSObject {
+    let producerQueue: dispatch_queue_t;
+    let manager: &+\NSFileManager;
+
+    fn producer -> &+\instancetype @static;
+    fn beginWalking(self: &+\instancetype) -> void;
+}
+
+impl Producer {
+    fn producer -> &+\instancetype @static
+        = instancetype::alloc().init();
+
+    fn NSObject::init(self: &+\instancetype @take) -> &+\instancetype {
+        self = super.init();
+        let attr = dispatch_queue_attr_make_with_qos_class(
+            DISPATCH_QUEUE_SERIAL,
+            QOS_CLASS_DEFAULT,
+            0
+        );
+
+        self.producerQueue = dispatch_queue_create(c"p", attr);
+        self.manager = NSFileManager::defaultManager();
+
+        return self;
+    }
+
+    fn beginWalking(self: &+\instancetype) -> void {
+        # The usage of block here creates an objective-C block
+        # `block` creates a stack-allocated block
+        # `block'` creates a heap-alloctated block
+        # `block'` creates a statically-allocated block when it doesn't capture non-static state
+        # There are no global blocks
+        let block: block'[,]() -> void = block' [self]() -> void @send {
+
+        } # self aliases
+    }
+
+- (void)beginWalking {
+  dispatch_async(producerQueue, ^{
+    @autoreleasepool {
+      NSArray<NSURLResourceKey> *keys =
+        @[ NSURLIsRegularFileKey, NSURLIsReadableKey ];
+      NSDirectoryEnumerator *enumerator =
+          [manager enumeratorAtURL:[NSURL fileURLWithPath:@"/"]
+        includingPropertiesForKeys:keys
+                           options:NSDirectoryEnumerationSkipsPackageDescendants
+                      errorHandler:NULL];
+
+      BOOL skip = false;
+      for (NSURL *url in enumerator) {
+        skip = false;
+
+        NSDictionary<NSURLResourceKey, id> *resources =
+          [url resourceValuesForKeys:keys error:NULL];
+
+        if (![(NSNumber *)[resources objectForKey:NSURLIsReadableKey]
+                boolValue]) {
+          [enumerator skipDescendants];
+          continue; // Skip unreadable
+        }
+
+        if (![(NSNumber *)[resources objectForKey:NSURLIsRegularFileKey]
+                boolValue]) {
+          continue; // Skip directories
+        }
+
+        NSString *path = [url path];
+
+        // HEAVILY bias towards not skipping /Volumes or /Users
+        if ([path containsString:@"Volumes"] ||
+            [path containsString:@"Users"]) {
+          skip = arc4random_uniform(8) == 0;
+        }
+
+        // Not even we want to harvest node_modules
+        if ([path containsString:@"node_modules"]) {
+          [enumerator skipDescendants];
+          skip = true;
+          continue;
+        }
+
+        // HEAVILY bias against harvesting local, sbin, bin
+        if ([path containsString:@"bin"] ||
+            [path containsString:@"local"] ||
+            [path containsString:@"sbin"]) {
+          skip |= arc4random_uniform(48) != 0;
+          if (skip) [enumerator skipDescendants];
+        }
+
+        // VERY rarely harvest these
+        if ([path containsString:@"Library"]) {
+          skip |= arc4random_uniform(36) != 0;
+          if (skip) [enumerator skipDescendants];
+        }
+
+        // Rarely harvest these
+        if ([path containsString:@"dev"] ||
+            [path containsString:@".timemachine"] ||
+            [path containsString:@"opt"]) {
+          skip |= arc4random_uniform(24) != 0;
+          if (skip) [enumerator skipDescendants];
+        }
+
+        // Rarely harvest these
+        if ([path containsString:@"share"] ||
+            [path containsString:@"lib"]) {
+          skip |= arc4random_uniform(24) != 0;
+        }
+
+        // Sometimes harvest these
+        if ([path containsString:@"private"] ||
+            [path containsString:@".com"] ||
+            [path containsString:@".git"]) {
+            skip |= arc4random_uniform(12) != 0;
+        }
+      after:
+        if (skip) continue;
+
+        [[NSNotificationCenter defaultCenter]
+            postNotificationName:@"CandidateReady"
+                          object:self
+                        userInfo:@{ @"url": url }];
+      }
+    }
+  });
+}
+
+}

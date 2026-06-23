@@ -65,8 +65,10 @@ fn main -> void @nomangle {
     # a<.fn() syntax is a "passthrough-call", it calls a.fn and yields a
     # stackalloc<T> is an expression where the compiler allocates bytes on the
     # stack for an instance of T. The resulting reference is marked non-escaping
-    # and the compiler knows not to deallocate it after being dropped
-    let personStack = (stackalloc<Person>)<.init("Jane", "Stack");
+    # and the compiler knows not to deallocate it after being dropped.
+    #
+    # &~ indicates a stack allocated reference
+    let personStack: &~Person = (stackalloc<Person>)<.init("Jane", "Stack");
 
     io::println("Heap person: \{personHeap}");
     io::println("Stack person: \{personStack}");

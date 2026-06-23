@@ -1,0 +1,43 @@
+# Function purity in Mosaic
+
+import std::io;
+
+# By default, all functions are assumed to be pure by the compiler. During static
+# analysis, the purity of a function is inferred by checking each statement and
+# expression in the function across all branches and seeing if they are pure. If
+# an impure statement/expression is reached, the function is impure and the
+# compiler does not need to check further.
+#
+# You can also explicitly define the purity of a function, using @pure to enforce
+# that the function must be pure, or @impure to mark it impure and skip purity
+# analysis for that function.
+
+# The first statement is a variable declaration, so the compiler checks if the
+# expression we are assigning to the new variable is pure. As i32::Integer::add
+# is pure, the compiler knows the variable declaration is also pure.
+#
+# The next statement is a function call. The compiler checks if io::eprintln is
+# pure, and finding that it isn't, ends purity analysis here and has inferred
+# add_logging to be impure.
+fn add_logging(a: i32, b: i32) -> i32 {
+    let c = a + b;
+    io::eprintln("added \{a} and \{b} to get \{c}");
+    c
+}
+
+# The compiler does the same for this function, and since i32::Integer::add is
+# known to be pure by the compiler, and it is the only expression in the function,
+# add is inferred to be pure.
+fn add(a: i32, b: i32) -> i32 = a + b;
+
+fn main -> i32 @nomangle {
+    # Since the compiler knows add is pure, it can safely optimise away the call
+    # to add here.
+    let x = 0 * add(4, 1984);
+
+    # Since the compiler knows add_logging is impure, it cannot optimise away
+    # the call to add_logging here.
+    let y = 0 * add_logging(1997, 2000);
+
+    return 0
+}

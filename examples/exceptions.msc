@@ -1,0 +1,90 @@
+#/
+    Mosaic gives you OPTIONS: MVR (recommended) or Exceptions (for compatibility)
+/#
+
+import core::err;
+import core::MutString;
+
+# We shall define a custom exception interface
+# msr::Ref should not be used as the lifetime for exceptions is different than
+# for normal data
+# Instead, msr::Exception should be used
+# msr::Exception allows you do define a custom drop but NOT an alloc/dealloc
+interface NotNewYearsEveException : msr::Exception, err::Exception {
+    fn new() -> &instancetype @public;
+}
+
+impl NotNewYearsEveException {
+    # Synthesise MSR functions
+    # Also a good example of interface disambiguation
+    synthesise fn (msr::Exception)::drop;
+
+    fn new() -> &instancetype @public {
+        mut self = instancetype::alloc();
+        msr::Exception::init(self as &msr::Exception);
+        err::Exception::init(self as &err::Exception);
+        return self;
+    }
+
+    # Required by err::Exception
+    # We receive a *str::MutString because this function is NOT for public usage,
+    # it is for the Mosaic runtime to use
+    fn (err::Exception)::_message(
+        self: &.instancetype,
+        into: *str::MutString
+    ) -> void @allocates @unsafe
+        = into.overwriteFrom("It isn't new year's eve run again later");
+
+    # This is also required by err::Exception
+    # It is a safe wrapper around _message
+    fn (err::Exception)::message<S: instancetype + immut + msr>(self: S) -> &.[u8] @allocates @unsafe {
+        mut mutstr = str::MutString::new();
+
+        unsafe {
+            self._message(mutstr as *str::MutString);
+        }
+
+        return mutstr.escapeBytes();
+    };
+}
+
+import std::newyearseve;
+import std::io;
+
+fn celebrate_new_years_eve -> void
+throws (NotNewYearsEveException)
+{
+    # Check if it is new year's eve
+    if newyearseve::isIt() {
+        # It is new year's eve, celebrate
+        io::println("Holy shit new year's eve is so fucking overrated");
+    } else {
+        # It isn't new year's eve, throw an exception
+        throw NotNewYearsEveException::new();
+    }
+}
+
+fn main -> i32 {
+    try celebrate_new_years_eve()
+    catch let err: &.NotNewYearsEveException {
+        io::println(err.message());
+        return 1;
+    };
+
+    # You can catch all errors by specifying err::Exception as the binding type
+    # Add more catch clauses after to catch more exceptions
+    # This would catch all other exceptions
+    # catch else
+    # As would this (but this is bad practice)
+    # catch let err: &.err::Exception
+    #
+    # There is no 'finally' as MSR handles resource cleanup (or you might
+    # manually have to do it if not using MSR).
+
+    # try calls can also be expressions, just ensure that you specify handlers
+    # for all exceptions the function declares and that they have the same type
+    # for their return value (not in a return statement, the last expression of
+    # the block, and without a semicolon)
+
+    return 0;
+}

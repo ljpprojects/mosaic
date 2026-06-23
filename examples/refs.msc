@@ -1,0 +1,29 @@
+#/
+    Just the order of symbols for references
+
+    Start with `&`                                          A
+    For SIMD-representation fat pointers add `:`,           B
+    To reference count, add `+`                             C
+    Remember, `/` is the symbol of atomicity,               D
+    Not to be confused with `\`, the symbol of Objectivity. D
+ >  To indicate nullability then add `^`,                   E
+ >| To indicate stack-allocation then add `~`               F
+  | Unless you have a static reference, then add `'     `   D (apostrophe)
+  | Do this as long as you haven't added `+`                C (does this even count it's the same word?)
+ >| To indicate immutability then add `.`                   G (full stop)
+  | Omit this and it is mutable,                            H
+    Then put the type it points to, `T`.                    D
+
+    So to have a SIMD-representation, atomically reference counted, nullable,
+    heap-allocated, immutable string, the type is this:
+    `&:+/^.[u8]`
+
+    Obeying these rules there are at least 40 different references to `T` (I
+    couldn't be fucked to recalculate after adding Objectivity). In total, there
+    are at least 45 distinct types of indirection to `T` or to executable data
+    (+2 for pointers `*` and `*.`, +1 for function pointers, +2 for closures).
+
+    If a function returns two references, or a vector has two references, that
+    type has more than 1600 combinations. If it can return any two indirection
+    types, it has more than 2025 combinations.
+/#

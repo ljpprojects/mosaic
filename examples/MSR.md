@@ -55,11 +55,8 @@ this:
 # Technically &^ isnt a reference as it *might* be null, it is closer to a
 # pointer, but it isn't a pointer as it is tracked by the compiler under MSR,
 # so we will call it a reference and be done with it.
-# This is true if and only if, however, the sum of the digits in the current
-# unix timestamp (that is the numebr of milliseconds from thge unix epoch) is
-# odd. If it isnt at the start of the compilation processm, the compiler, unable
-# to categorise this form of referential value, does nothing because that would
-# be a nuisance.
+# If you wanted to be technical I guess it is a form of compiler-tracked
+# referential value
 fn msr::Ref::alloc -> &^msr::Ref @alloc {
   let unregioned: &void = unsafe { mem::alloc(msr::Ref::layout())? };
   let regioned: &void = msr::RegionedAllocation::wrap(raw);
@@ -163,5 +160,70 @@ RC's invariants.
 
 ## Concurrency
 
-No. Not yet. Use ARC or MRC. If you have guts, use MMM. If heaven is watching,
-use Rust.
+The primary method which data is moved between threads is through closures
+(usually in the creation of a future<T> object). Since closures are essentially
+anonymous functions which are allowed to capture state, they have their own static
+regions, and this pointers to closures count as regioned allocations. This closure
+and the static region associated with it can have the apostrophe added to the type
+to specify a lifetime bound, guaranteeing that the allocations it owns are valid
+for the entire duration of the program.
+
+Essentially, the closure's region when it is required to have a static lifetime
+is in the same scope as that of global data (the parent scope of global functions'
+regions).
+
+Thus, the standard library requires futures to have closures with static lifetimes.
+It also requires them to only capture data marked `Send` with `@send`, but that
+it out of the scope of this document.
+
+For example, this code is illegal:
+
+```
+fn getClosure -> fn' [,]() -> u8 @send {
+  let nonStaticObject: &~16[u8] = stackalloc[16];
+  
+  # The compiler will prevent the escape of nonStaticObject into a higher scope
+  return fn [nonStaticObject]() -> u8 @send {
+    return nonStaticObject[0];
+  }
+}
+```
+
+And for a legal version we would reserve the memory in `.bss` or allocate on the
+heap.
+
+```
+fn getClosure -> fn' [,]() -> u8 @send {
+  let staticObject: &'16[u8] = reserve[16];
+  
+  # The compiler will escape staticObject into the (higher) scope that is the
+  # closure's static region as it is marked `@take`
+  return fn [staticObject @take]() -> u8 @send {
+    return staticObject[0];
+  };
+}
+```
+
+Note that MSR *forbids* the aliasing of references into `@send` (sendable)
+closures unless the pointee type is marked `async::Shareable`. `async::Escapable`
+means a type can be escaped across threads and used safely, and `Shareable` means
+a reference to a type can be aliased across threads and used safely, similar to
+Rust's `Send`/`Sync`.
+
+For example, this would be legal:
+
+```
+# The &:+/. spaghetti means an immutable SIMD-representation atomically RC
+# reference. In this example we will imagine MyState : async::Shareable
+fn getClosure(state: &:+/.MyState) -> fn' [,]() -> u8 @send {
+  # Since the capture of state is NOT marked @take it will be aliased, which is
+  # allowed as the reference is immutable and the pointee is Shareable
+  return fn [state]() -> u8 @send {
+    return state.data()[0];
+  };
+}
+```
+
+If, however, `MyState` was NOT `Shareable` that code would be invalid, as the
+capture of a variable that is a reference to that type will violate the closure's
+sendable guarantee.

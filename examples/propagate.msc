@@ -1,0 +1,22 @@
+# propagate is powerful enough to also have its own file
+# Read mvr.msc
+
+# Your type can implement propagate destructuring in one of two ways
+# Method 1 is by implementing core::data::Destructure
+# Method 2 is by implementing core::data::Destructure2/3/4 specifically
+
+import core::data;
+import core::marker;
+import core::msr;
+
+interface MethodOne : msr::Ref, marker::StackCompat, data::Destructure {
+    let @private @readonly count: uptr;
+    let @private @readonly keys: &[&msr::Ref];
+    let @private @readonly values: &[uptr];
+
+    fn new(count: uptr) -> &instancetype;
+    fn init(self: &instancetype, count: uptr) -> void;
+    fn init(self: &~instancetype, count: uptr) -> void;
+
+    fn addObject()
+}

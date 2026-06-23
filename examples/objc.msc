@@ -1,0 +1,339 @@
+#/
+    Mosaic has explicit Objective-C interop
+    THe compiler can infer when Objective-C linkage is needed
+    Use `-framework FrameworkName` to link frameworks, and `-F{SEARCH PATH}` to
+    specify search paths for them.
+
+    This program would need compiling with:
+        `mscc -framework Foundation -o objc objc.msc`
+/#
+
+# Perhaps one day I might implement rust-bindgen (the library part not the cli)
+# fuckery to get objective-c headers as IR and parse those into Mosaic AST???
+#
+# Then you could do
+# import @objc <Foundation/Foundation.h>
+# And have all the bindings ready for you
+#
+# Swift ❌
+# Mosaic if I lock the fuck in and stop writing malware ✅
+#
+# Apple be sweating bullets rn
+
+extern class NSMutableArray {
+    # This is translated to a wrapper function that does this:
+    #   sel = sel_registerName("alloc");
+    #   cls = objc_getClass("NSMutableArray");
+    #   return objc_msgSend(cls, sel);
+    #
+    # The &+\ is a mutable, reference-counted, objective reference
+    extern fn alloc() -> &+\instancetype @static @allocates;
+
+    extern fn arrayWithCapacity(:uptr) -> &+\instancetype @static @allocates;
+
+    # This is translated to a wrapper function that does this:
+    #   sel = sel_registerName("init:");
+    #   cls = objc_getClass("NSMutableArray");
+    #   return objc_msgSend(cls, sel);
+    extern fn init(&+\instancetype) -> &+\instancetype;
+    extern fn initWithCapacity(&+\instancetype, :uptr) -> &+\instancetype;
+
+    # You can make the wrapper function have a different name than the objc one
+    # it invokes
+    # Make sure not to name parameters unless the Objective-C selector has them
+    # named (the selector this invokes is "addObject:" (the first argument is
+    # interpreted as self due to the lack of @static)
+    extern fn add(&+\instancetype, :&+\id) -> void @alias("addObject");
+
+    # Since this has a named parameter, the selector is "insertObject:atIndex:"
+    extern fn insert(&+\instancetype, :&+\id, atIndex: uptr) -> void @alias("insertObject");
+
+    extern fn remove(&+\instancetype, :uptr) -> void @alias("removeObjectAtIndex");
+
+    # Since this has a named parameter, the selector is "replaceObjectAtIndex:withObject:"
+    extern fn replace(
+        &+\instancetype,
+        :uptr,
+        withObject: &+\id
+    ) -> void @alias("replaceObjectAtIndex");
+
+    extern fn exchange(
+        &+\instancetype,
+        :uptr, # Unlike functions we do not need to define a parameter name so
+               # when the argument label isn't present there is nothing before
+               # the colon
+        withObjectAtIndex: uptr,
+    ) -> void @alias("exchangeObjectAtIndex");
+}
+
+extern class NSNumber;
+
+import intrinsics::objc;
+
+# The headless harvester got 6195761152 bytes in a couple hours and the performance
+# is fucking crap because my disk is full now but only because I saved it to a
+# file
+# Also activity monitor reports that my machine has 0 bytes of physical memory so all RAM is being swapped??????????????????
+# Like it doesn't report I am OUT of physical memory it reports that I have NO physical memory WHATSOEVER which frankly isn't possible so I think my malware one way or another actually fucked up my system somehow
+# see ?.png for the screenshot of it and the memory pressure redlining because it thinks or actually is swapping everything
+# I closed and reopened Activity Monitor and it is fixed but good thing I took a screenshot
+
+# You can also have Mosaic talk to Objective-C
+# This means that I will also have to implement a binding generator from Mosaic
+# to Objective-C
+
+extern interface @objc NSObject {
+    # You would declare external ivars here
+    # extern let isa: &+\class;
+    # We won't declare the isa ivar as you shouldn't use it directly
+
+    extern fn init(&+\instancetype) -> &+\instancetype;
+}
+
+# To declare external protocols use `extern interface @objc @protocol`
+
+# An @objc interface without an implementation becomes a protocol
+# The set fo runtime functions to define the protocol can be executed using the
+# `setup protocol` statement before any hand-off to Objective-C.
+interface @objc MscProtocol {
+    # u64 becomes uint64_t
+    fn almanop(self: &+\instancetype) -> u64;
+    fn ponamla(from: u64) -> &+\instancetype;
+}
+
+# Classes are very similar to normal interfaces in syntax
+# They also define a set of function calls to setup the class for Objective-C
+# use (which must be executed with `setup class` before any handoff to
+# Objective-C can happen, it is your job to handle that)
+#
+# Unlike normal interfaces, they can inherit from one superclass and many
+# protocols (in the angle brackets)
+interface @objc MscData : NSObject <MscProtocol> {
+    # These are transformed into ivars with names of _x and _y
+    # let means no setter is synthesised
+    # uptr becomes NSUInteger
+    let x @public: uptr;
+    let y @public: uptr;
+
+    fn data(
+        x: uptr,
+        y y: uptr # The first y is the argument label, the second is the parameter
+                  # name. Very similar to Swift. All functions can have labelled
+                  # arguments, not just class methods. UNLIKE Swift the labels
+                  # are optional at the call site
+    ) -> &+\instancetype @static @allocates;
+
+    # Since this function isn't marked static self is treated as a parameter name
+    # for the instance and won't appear in the selector
+    fn initWithParams(
+        self: &+\instancetype, # Objective references can alias even when mutable
+                               # but @take plays better with the semantics of
+                               # init (don't retain, aliasing would retain it)
+        x: uptr,
+        y y: uptr
+    ) -> &+\instancetype;
+}
+
+impl MscData {
+    # This generates the getters 'x' and 'y' (but NOT setters)
+    synthesise let x;
+    synthesise let y;
+
+    # The Objective-C selector for this function would be "data:y:"
+    fn dataWithParams(
+        x: uptr,
+        y y: uptr
+    ) -> &+\instancetype @static @allocates = instancetype::alloc().init();
+
+    # Reasonable default implementation
+    fn NSObject::init(self: &+\instancetype @take) -> &+\instancetype {
+        self = super.init();
+        self._x = uptr<0>;
+        self._y = uptr<0>;
+        return self;
+    }
+
+    # The selector for this would be "initWithParams:y:"
+    fn initWithParams(
+        self: &+\instancetype @take,
+        x: uptr,
+        y y: uptr
+    ) -> &+\instancetype {
+        # This compiles down to getting the super class and objc_msgSendSuper
+        # with the "init" selector
+        self = super.init();
+        self._x = x;
+        self._y = y;
+        return self;
+    }
+
+    fn <MscProtocol>::almanop(self: &+\instancetype) -> u64 = self._x + self._y;
+    fn <MscProtocol>::ponamla(from: u64) -> &+\instancetype
+        = instancetype::dataWithParams(from / 2, y: from / 2);
+}
+
+fn main -> i32 {
+    # Call Objective-C runtime methods to setup our MscData class;
+    setup class MscData;
+    setup protocol MscProtocol;
+
+    # This inbvokes the compiler generated wrapper for [NSMutableArray arrayWithCapacity:]
+    let arr: &+\NSMutableArray =
+        NSMutableArray::arrayWithCapacity(uptr<3>);
+
+    # Since arr is tracked by MSR, and is marked as Objective, at the end of
+    # this region it calls release on it
+
+    # Since we did not define any wrappers for NSNumber we must revert to manual
+    # message sending
+    arr.add(objc::msgSend(NSNumber, "numberWithUnsignedInteger:", uptr<1997>));
+    arr.add(objc::msgSend(NSNumber, "numberWithUnsignedInteger:", uptr<1984>));
+    arr.add(objc::msgSend(NSNumber, "numberWithUnsignedInteger:", uptr<1901>));
+
+    return 0;
+}
+
+# About Mosaic to Objective-C binding generation
+# Perhaps the CLI will be `msc2objc` and it is invoked like this??
+#   `msc2objc -CF file-with-classes.msc -o file-with-classes.h`
+# Where `-C` is to generate headers for classes
+# And maybe `-F` could be specified to generate function bindings
+
+# What if Mosaic just... unzeroed out .bss
+
+# You can declare a function @objc for Objc binding generation to generate a
+# binding for it, but that's all it changes
+function lmnop -> &+\MscData @objc {
+    return MscData::dataWithParams(1997, y: 1984);
+}
+
+# Are you reading this?
+# lmnopGAME is in development (using Godot)
+# GodotScript actually is too FUCKING PYTHONIC so I add semicolons because it lets
+# me
+# Right now I am just trying to create the lmnopTOWN scene
+# God I miss curly braces (I have written one file to draw a line for the path)
+# Maybe I might *try* to monetise it????????????
+# Idk maybe it can be $1.984 (but this wouldn't make it ACOA compliant, oh well)
+#
+# I am glad that lmnopTOWN only really has some paths and simple geometric shapes
+#
+# lmnopTOWN music:
+# 0.63x = backtracking back to lmnopTOWN in S(ui)-route
+# 0.68x = S-route
+# 0.91x = backtracking back to lmnopTOWN D(ep)-route
+# 0.99x = backtracking back to lmnopTOWN F(re)-route
+# 1x = D-route
+# 1.01x - F-route
+# 1.11x = N(um)-route
+# 1.17x = backtracking back to lmnopTOWN N-route
+#
+# herein lies the twist
+# (non-deigeticy (is that even a word?) is optional)
+#
+# GDScript naming is SO FUCKING MISLEADING int should in NO WORLD be 64 bits wide
+# AND IN NO WORLD SHOULD float BE 64 OR 32 bits wide DEPENDING ON THE GODOT BUILD
+# PICK 32 (AS IT IS A FLOAT)
+#
+# Here is an excerpt:
+#
+# extends Polygon2D;
+#
+# @export var a: float = 100;
+# @export var b: float = 100;
+# @export var c: float = 100; # 0 means to make this a right triangle
+# # The triangle is centred around the origin by default
+# @export var centred: bool = true;
+#
+# func _ready():
+# 	# Since we can't guarantee that the triangle takes a specific form we assume
+# 	# it is scalene, and we must use Heron's formula to first compute the area
+# 	# and then reverse to get the height
+# 	var s = (a + b + c) / 2;
+#
+# 	# Check to ensure the triangle is actually a valid triangle that can be drawn
+# 	# DEGENERATE TRIANGLES CANNOT BE DRAWN AND ARE THUS INVALID
+# 	if (s <= max(a, b, c)):
+# 		# Invalid triangle
+# 		# Yes I did accidentally put braces for the if body, so what?
+# 		# We actually can't do anything but error and return early
+# 		push_error("INVALID FUCKING TRIANGLE IDIOT");
+# 		return;
+#
+# 	var A = sqrt(s * (s - a) * (s - b) * (s - c));
+# 	var height = A/a;
+#
+# 	var points = [
+# 		# NOOOOOO MY TERNARY OPERATOR PLEASE GDSCRIPT
+# 		# (*COUGH COUGH* PYTHON *COUGH COUGH*)
+# 		# GIVE IT BACK
+# 		Vector2(-a/2, -height/2) if centred else Vector2(0, 0),
+# 		Vector2(0, height/2)  if centred else Vector2(a/2, height),
+# 		Vector2(a/2, -height/2)  if centred else Vector2(a, 0),
+# 	];
+#
+# 	polygon = points;
+#
+# Another one:
+#
+# extends PathFollow2D;
+#
+# @export var acceleration: float = 30;
+#
+# # snake_case MY FUCKING ASS camelCase FOREVER
+# # Also I fucking hate it when people confuse camelCase and PascalCase
+# @export var maxVelocity: float = 0.2;
+#
+# # %/s
+# var velocity = 0;
+#
+# # The moveable character control bullshit
+# # I am going to have a FUCKING panic attack WHY DO I NEED TO DEFINE CUSTOM FUCKING
+# # KEY MAPS I JUST WANT TO DETECT A, D, AND THE UP AND DOWN ARROWS
+# # FUCK NO THIS HURTS WHY AM I USING MY MOUSE TO CHECK FOR A KEYPRESS AAAAAAAAAAAAAAAAAAA
+#
+# func _process(deltatime):
+# 	var sign = 0;
+# 	if Input.is_action_just_pressed("clockwise"):
+# 		sign = 1;
+# 		velocity = 0;
+# 	elif Input.is_action_just_pressed("anticlockwise"):
+# 		sign = -1;
+# 		velocity = 0;
+# 	elif Input.is_action_pressed("clockwise"):
+# 		sign = 1;
+# 	elif Input.is_action_pressed("anticlockwise"):
+# 		sign = -1;
+# 	elif Input.is_action_just_released("clockwise") || Input.is_action_just_released("anticlockwise"):
+# 		velocity = 0;
+# 		return;
+# 	else:
+# 		return;
+#
+# 	var t = deltatime;
+# 	var tpow2 = pow(t, 2);
+#
+# 	velocity = clamp(velocity + sign * acceleration * tpow2, -maxVelocity, maxVelocity);
+#
+# 	var deltaprog = velocity * t;
+#
+# 	progress_ratio += deltaprog;
+#
+# also you might be a voice controlling the happenings inside the game
+#
+# Also there will be censoring (swear words that is, not, uh... fundamental
+# topics) because idk it looks harsher than the actual words
+# Like maybe FUCK can become $!@# or BASTARD perhaps $!@#$!#
+#
+# The keybindings are as follows so far:
+#
+# D/→/R2/Joystick right = clockwise
+# A/←/L2/Joystick left = anticlockwise
+# Z/./Cross = interact
+# Enter/Cross = continue ('interact' during dialogue triggers this too)
+# X/FORWARD SLASH/Square = attack
+
+Dep
+Num
+Sui
+Fre

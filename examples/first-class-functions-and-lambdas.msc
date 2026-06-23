@@ -64,5 +64,54 @@ fn main -> i32 {
     do(anon_fn);
     do(closure);
 
-    return;
+    # We can cast function pointers to closures, too (the state pointer will be
+    # nil), using the => (convert) operator
+    do(fn_addr => [,]);
+
+    # The convert operator is like as, but has a separate syntax (and is for
+    # irreversible conversions)
+    #
+    # For example, to expand a vector using it, it is:
+    # i8x2_vec => (x4)
+    #
+    # And you can overload the operator by implementing `core::ops::Convert<T, S>`
+    # `T` is unbounded but `S` must implement `intrinsics::ConstSyntax`
+    # see convert.msc
+    # `fn ConstSyntax::<T, S: intrinsics::ConstSyntax>convert<Self: instance + mut>(self: Self @take, syntax: &~S @take) -> T @const`
+    #
+    # If you need runtime logic, consider using the const `instrinsic::rt` function, which
+    # takes an anonymous function DIRECTLY (of `fn() -> void`) and have it compiled
+    #
+    # An `intrinsics::TokenStream` is a the stream of tokens beginning after the
+    # opening parenthesis and up until (not including) the closing parenthesis
+
+    # Closures have their own fuckery if you wish
+    # You can use propagate on closures to get a `closurestate[...]` from $1
+    # You can get a `fn(closurestate[...], ...) -> ...` from $2
+    unsafe {
+        let state: closurestate[uptr, uptr] = propagate(!:; $1) closure;
+        let ptr: fn(closurestate[uptr, uptr], &.[u8]) = propagate(!:; $2) closure;
+
+        # closurestate has the semantics of a mutable pointer
+        # You can use indexing operations to get the values inside
+        let recoveredX: uptr = state[0];
+        let recoveredY: uptr = state[1];
+
+        ptr(state, "recovery");
+
+        # You can cast to a `closurestate` (no brackets) and remove all "safety"
+        let state: closurestate = state as closurestate;
+
+        # closurestate is just a *u8
+        state[0] = 'A';
+        state[8] = 'B';
+
+        # `closurestate[...]` will be satisfied by a `closurestate`
+        ptr(state, "recoveryButStateMayBeCorrupted");
+    };
+
+    # Even outside of the unsafe `closure`'s state is fucked up
+    do(closure);
+
+    return 0;
 }

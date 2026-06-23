@@ -1,0 +1,61 @@
+# Enums are simple tagged unions
+
+import core::marker;
+import core::msr;
+import intrinsics::enums;
+import intrinsics::mem;
+
+# The tag width is as small as it can be
+# Since this enum only has 2 variants the tag width is 1 (u8).
+# However, since this has data associated with it the actual size is actually
+# sizeof(T) + 1 + padding, and it's alignment is the same as T's.
+enum Maybe<T> : msr::Ref, marker::Enum, marker::ValueType, marker::StackCompat {
+    case Some(T);
+    case None;
+
+    fn is_some(self: &.instancetype) -> bool;
+    fn is_none(self: &.instancetype) -> bool;
+
+    fn to_nullable(self: instancetype @take) -> &.^T;
+
+    fn invert(self: instancetype @take) -> instancetype<&.T>;
+}
+
+# They can have impl blocks too
+impl Maybe<T> {
+  synthesise fn Ref::alloc;
+
+  # The drop implementation for enums will go through each variant, obtain
+  # pointers to the data fields and call drop on them one-by-one
+  synthesise fn Ref::drop;
+
+  # synthesise case will synthesise constructors for the cases
+  synthesise case Some;
+  synthesise case None;
+
+  # You can use the enum::tagOf to get the tag of an &.marker::Enum
+  # You can use the tagof statement to get the tag of an enum variant statically.
+  fn is_some(self: &.instancetype) -> bool =
+    enums::tagOf(self as &.marker::Enum) == tagof instancetype::Some;
+
+  fn is_none(self: &.instancetype) -> bool = !self.is_some();
+
+  fn to_nullable(self: instancetype) -> &.^T {
+    # You can use match to check which enum variant it is
+    return match self {
+      case Some(_) -> unsafe { enum::data(self) }, # This will take self
+      case None -> nil, # It would be dropped here
+    }
+  }
+
+  fn invert(self: instancetype) -> instancetype<&.T> {
+    return match self {
+      # Since the destructure isn't marked @take data: &.T
+      case Some(data) -> instancetype::Some(data),
+      case None -> instancetype::None,
+    }
+  }
+}
+
+# You can use case Case { name: T } for that case to have named data
+# To destructure it use case Case { name } -> ... syntax in match

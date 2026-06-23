@@ -1,0 +1,311 @@
+
+
+*******************************************************************************
+Sun Apr 26 14:38:04 2026
+
+
+FIT:    data read from "prune.txt"
+        format = z
+        #datapoints = 40836
+        residuals are weighted equally (unit weight)
+
+function used for fitting: f(x)
+	f(x) = m*x + b
+BREAK: Need via and either parameter list or file
+
+*******************************************************************************
+Sun Apr 26 14:38:13 2026
+
+
+FIT:    data read from "prune.txt"
+        format = z
+        #datapoints = 40836
+        residuals are weighted equally (unit weight)
+
+function used for fitting: f(x)
+	f(x) = m*x + b
+fitted parameters initialized with current variable values
+
+iter      chisq       delta/lim  lambda   m             b            
+   0 7.0469283070e+12   0.00e+00  1.67e+04    1.000000e+00   1.000000e+00
+   6 1.2948753181e+11  -2.88e-06  1.67e-02    5.868612e-01  -3.633395e+03
+
+After 6 iterations the fit converged.
+final sum of squares of residuals : 1.29488e+11
+rel. change during last iteration : -2.8759e-11
+
+degrees of freedom    (FIT_NDF)                        : 40834
+rms of residuals      (FIT_STDFIT) = sqrt(WSSR/ndf)    : 1780.75
+variance of residuals (reduced chisquare) = WSSR/ndf   : 3.17107e+06
+
+Final set of parameters            Asymptotic Standard Error
+=======================            ==========================
+m               = 0.586861         +/- 0.0007475    (0.1274%)
+b               = -3633.4          +/- 17.62        (0.4851%)
+
+correlation matrix of the fit parameters:
+                m      b      
+m               1.000 
+b              -0.866  1.000 
+
+
+*******************************************************************************
+Sun Apr 26 14:41:44 2026
+
+
+FIT:    data read from "prune.txt" using 0:1
+        format = x:z
+        #datapoints = 40836
+        residuals are weighted equally (unit weight)
+
+function used for fitting: f(x)
+	f(x) = (x < x0) ? c : (m*(x - x0) + c)
+fitted parameters initialized with current variable values
+
+iter      chisq       delta/lim  lambda   x0            c             m            
+   0 6.6870915319e+11   0.00e+00  7.99e+03    1.000000e+00   1.000000e+00   5.868612e-01
+  10 3.2007782141e+09  -1.30e-07  7.99e+03    1.321152e+04   1.105057e+03   7.752939e-01
+
+After 10 iterations the fit converged.
+final sum of squares of residuals : 3.20078e+09
+rel. change during last iteration : -1.30264e-12
+
+degrees of freedom    (FIT_NDF)                        : 40833
+rms of residuals      (FIT_STDFIT) = sqrt(WSSR/ndf)    : 279.977
+variance of residuals (reduced chisquare) = WSSR/ndf   : 78387
+
+Final set of parameters            Asymptotic Standard Error
+=======================            ==========================
+x0              = 13211.5          +/- 5.365        (0.04061%)
+c               = 1105.06          +/- 2.435        (0.2204%)
+m               = 0.775294         +/- 0.0002113    (0.02726%)
+
+correlation matrix of the fit parameters:
+                x0     c      m      
+x0              1.000 
+c               0.586  1.000 
+m               0.702  0.000  1.000 
+
+
+*******************************************************************************
+Sun Apr 26 14:49:53 2026
+
+
+FIT:    data read from "prune.txt" using 0:1
+        format = x:z
+        #datapoints = 40836
+        residuals are weighted equally (unit weight)
+
+function used for fitting: f(x)
+	f(x) = (x < x0) ? (x > x1) ? c : (m*(x-d)) : (m*(x - x0) + c)
+fitted parameters initialized with current variable values
+
+iter      chisq       delta/lim  lambda   x0            x1            c             d             m            
+   0 3.1983359125e+09   0.00e+00  5.93e+03    1.321152e+04   1.000000e+00   1.105057e+03   1.000000e+00   7.752939e-01
+BREAK: Singular matrix in Invert_RtR
+
+*******************************************************************************
+Sun Apr 26 14:49:58 2026
+
+
+FIT:    data read from "prune.txt" using 0:1
+        format = x:z
+        #datapoints = 40836
+        residuals are weighted equally (unit weight)
+
+function used for fitting: f(x)
+	f(x) = (x < x0) ? (x > x1) ? c : (m*(x-d)) : (m*(x - x0) + c)
+fitted parameters initialized with current variable values
+
+iter      chisq       delta/lim  lambda   x0            x1            c             d             m            
+   0 3.2025593887e+09   0.00e+00  5.93e+03    1.321152e+04   1.000000e+00   1.105057e+03   1.000000e+00   7.760692e-01
+BREAK: Singular matrix in Invert_RtR
+
+*******************************************************************************
+Sun Apr 26 14:50:34 2026
+
+
+FIT:    data read from "prune.txt" using 0:1
+        format = x:z
+        #datapoints = 40836
+        residuals are weighted equally (unit weight)
+
+function used for fitting: f(x)
+	f(x) = (x < x0) ? ((x > x1) ? c : (m*(x - d))) : (m*(x - x0) + c)
+fitted parameters initialized with current variable values
+
+iter      chisq       delta/lim  lambda   x0            x1            c             d             m            
+   0 3.2025617909e+09   0.00e+00  5.93e+03    1.321238e+04   1.000000e+00   1.105396e+03   1.000000e+00   7.760871e-01
+BREAK: Singular matrix in Invert_RtR
+
+*******************************************************************************
+Sun Apr 26 14:51:53 2026
+
+
+FIT:    data read from "prune.txt" using 0:1
+        format = x:z
+        #datapoints = 40836
+        residuals are weighted equally (unit weight)
+
+function used for fitting: f(x)
+	f(x) = (x < x0) ? c : (m*(x - x0) + c)
+fitted parameters initialized with current variable values
+
+iter      chisq       delta/lim  lambda   x0            x1            c             d             m            
+   0 3.2050060668e+09   0.00e+00  5.93e+03    1.321252e+04   1.000000e+00   1.105432e+03   1.000000e+00   7.760907e-01
+BREAK: Singular matrix in Invert_RtR
+
+*******************************************************************************
+Sun Apr 26 14:52:02 2026
+
+
+FIT:    data read from "prune.txt" using 0:1
+        format = x:z
+        #datapoints = 40836
+        residuals are weighted equally (unit weight)
+
+function used for fitting: f(x)
+	f(x) = (x < x0) ? c : (m*(x - x0) + c)
+fitted parameters initialized with current variable values
+
+iter      chisq       delta/lim  lambda   x0            c             m            
+   0 3.2050044532e+09   0.00e+00  7.66e+03    1.321229e+04   1.105262e+03   7.760904e-01
+   2 3.2007810706e+09  -2.22e-04  7.66e+01    1.321228e+04   1.105261e+03   7.753149e-01
+
+After 2 iterations the fit converged.
+final sum of squares of residuals : 3.20078e+09
+rel. change during last iteration : -2.22068e-09
+
+degrees of freedom    (FIT_NDF)                        : 40833
+rms of residuals      (FIT_STDFIT) = sqrt(WSSR/ndf)    : 279.977
+variance of residuals (reduced chisquare) = WSSR/ndf   : 78387.1
+
+Final set of parameters            Asymptotic Standard Error
+=======================            ==========================
+x0              = 13212.3          +/- 5.365        (0.0406%)
+c               = 1105.26          +/- 2.435        (0.2203%)
+m               = 0.775315         +/- 0.0002114    (0.02726%)
+
+correlation matrix of the fit parameters:
+                x0     c      m      
+x0              1.000 
+c               0.586  1.000 
+m               0.702  0.000  1.000 
+
+
+*******************************************************************************
+Sun Apr 26 14:52:42 2026
+
+
+FIT:    data read from "prune.txt" using 0:1
+        format = x:z
+        #datapoints = 40836
+        residuals are weighted equally (unit weight)
+
+function used for fitting: f(x)
+	f(x) = (x < x0) ? c : (m*(x - x0) + c)
+fitted parameters initialized with current variable values
+
+iter      chisq       delta/lim  lambda   x0            c             m            
+   0 3.2007810706e+09   0.00e+00  7.65e+03    1.321228e+04   1.105261e+03   7.753149e-01
+   1 3.2007810695e+09  -3.31e-05  7.65e+02    1.321228e+04   1.105261e+03   7.753149e-01
+
+After 1 iterations the fit converged.
+final sum of squares of residuals : 3.20078e+09
+rel. change during last iteration : -3.31381e-10
+
+degrees of freedom    (FIT_NDF)                        : 40833
+rms of residuals      (FIT_STDFIT) = sqrt(WSSR/ndf)    : 279.977
+variance of residuals (reduced chisquare) = WSSR/ndf   : 78387.1
+
+Final set of parameters            Asymptotic Standard Error
+=======================            ==========================
+x0              = 13212.3          +/- 5.365        (0.0406%)
+c               = 1105.26          +/- 2.435        (0.2203%)
+m               = 0.775315         +/- 0.0002114    (0.02726%)
+
+correlation matrix of the fit parameters:
+                x0     c      m      
+x0              1.000 
+c               0.586  1.000 
+m               0.702  0.000  1.000 
+
+
+*******************************************************************************
+Sun Apr 26 14:53:00 2026
+
+
+FIT:    data read from "prune.txt" using 0:1
+        format = x:z
+        #datapoints = 40836
+        residuals are weighted equally (unit weight)
+
+function used for fitting: f(x)
+	f(x) = (x < x1) ? (m1*x + b1) : (x < x2 ? c : (m2*x + b2))
+fitted parameters initialized with current variable values
+
+iter      chisq       delta/lim  lambda   m1            b1            x1            c             x2            m2            b2           
+   0 7.0469283070e+12   0.00e+00  9.15e+03    1.000000e+00   1.000000e+00   1.000000e+00   1.105261e+03   1.000000e+00   1.000000e+00   1.000000e+00
+BREAK: Singular matrix in Invert_RtR
+
+*******************************************************************************
+Sun Apr 26 14:54:10 2026
+
+
+FIT:    data read from "prune.txt" using 0:1
+        format = x:z
+        #datapoints = 40836
+        residuals are weighted equally (unit weight)
+
+function used for fitting: f(x)
+	f(x) = (1 - S(x,x1))*(m1*x + b1)      + S(x,x1)*(1 - S(x,x2))*c      + S(x,x2)*(m2*x + b2)
+	S(x,a) = 1.0 / (1.0 + exp(-k*(x-a)))
+fitted parameters initialized with current variable values
+
+
+
+*******************************************************************************
+Sun Apr 26 14:54:23 2026
+
+
+FIT:    data read from "prune.txt" using 0:1
+        format = x:z
+        #datapoints = 40836
+        residuals are weighted equally (unit weight)
+
+function used for fitting: f(x)
+	f(x) = (1 - S(x,x1))*(m1*x + b1)      + S(x,x1)*(1 - S(x,x2))*c      + S(x,x2)*(m2*x + b2)
+	S(x,a) = 1.0 / (1.0 + exp(-k*(x-a)))
+fitted parameters initialized with current variable values
+
+iter      chisq       delta/lim  lambda   m1            b1            x1            c             x2            m2            b2           
+   0 1.1470496010e+11   0.00e+00  5.40e+03    4.589740e-03  -1.626641e-03   1.000000e+00   1.105261e+03   1.000038e+00   5.868874e-01  -3.637741e+03
+  39 1.8639424480e+09  -4.14e-01  5.40e-10    2.171298e-01   2.708876e+02   1.117086e+04   1.779399e+04   8.407680e+03   7.782741e-01  -9.233541e+03
+
+After 39 iterations the fit converged.
+final sum of squares of residuals : 1.86394e+09
+rel. change during last iteration : -4.13802e-06
+
+degrees of freedom    (FIT_NDF)                        : 40829
+rms of residuals      (FIT_STDFIT) = sqrt(WSSR/ndf)    : 213.664
+variance of residuals (reduced chisquare) = WSSR/ndf   : 45652.4
+
+Final set of parameters            Asymptotic Standard Error
+=======================            ==========================
+m1              = 0.21713          +/- 0.002188     (1.008%)
+b1              = 270.888          +/- 5.991        (2.212%)
+x1              = 11170.9          +/- 11.58        (0.1037%)
+c               = 17794            +/- 384.4        (2.16%)
+x2              = 8407.68          +/- 25.89        (0.308%)
+m2              = 0.778274         +/- 0.0001705    (0.02191%)
+b2              = -9233.54         +/- 4.874        (0.05278%)
+
+correlation matrix of the fit parameters:
+                m1     b1     x1     c      x2     m2     b2     
+m1              1.000 
+b1             -0.854  1.000 
+x1             -0.409  0.266  1.000 
+c               0.221 -0.014 -0.559  1.000 
+x2             -0.755  0.466  0.681 -0.760  1.000 
+m2             -0.032  0.013  0.333  0.069  0.105  1.000 
+b2              0.036 -0.014 -0.371 -0.072 -0.117 -0.963  1.000 

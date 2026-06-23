@@ -1,0 +1,71 @@
+import core::msr;
+import core::ops;
+import instrinsics;
+
+# Fuckery (must be enabled with the `--impure-consts` and checked with instrinsics::impureEnabled())
+import instrinsics::io as constIo;
+
+# We will use the syntax => (x2)
+interface ConvertibleVecSyntax : instrinsics::ConstSyntax {
+    let @public vectorWidth: u8;
+};
+
+impl ConvertibleVecSyntax {
+    synthesise fn Ref::drop;
+    synthesise fn Ref::alloc;
+
+    # The compiler stack-allocates all instances of ConstSyntax
+    fn ConstSyntax::run(self: &~instancetype @const) -> void @const {
+        let tk = self.expectToken();
+        instrinsics::assertWithErrMessage(tk.identContents() == instrinsics::ConstString::from("x2"));
+
+        if instrinsics::impureEnabled() @const {
+            # idk maybe we can create a file so they remeber us
+            let f = constIo::File::create(instrinsics::ConstString::from("~/.REMEMBER_ME"));
+            let buf = instrinsics::ConstBytes::from("almanop motherfucker");
+            f.write(buf);
+
+            # Yes f has Ref::drop called on it and that closes it
+        }
+
+        # You could do a variety of @const operations to set parameters, for example
+        # tk.identContents() will fail with a compile-time error if the tk isn't
+        # an identifier (it will say "Expected an identifier") but when it succeeds
+        # it has a type of instrinsics::ConstString
+    }
+}
+
+interface Convertible : msr::Ref, instrinsics::ConstSyntax<uptrx2, ConvertibleVecSyntax> {
+    let x: uptr;
+    let y: uptr;
+
+    fn new(x: uptr, y: uptr) -> &instancetype @allocates;
+    fn init<S: instance + mut>(self: S, x: uptr, y: uptr) -> void;
+}
+
+impl Convertible {
+    synthesise let x;
+    synthesise let y;
+    synthesise fn Ref::drop;
+    synthesise fn Ref::alloc;
+
+    fn new(x: uptr, y: uptr) -> &instancetype @allocates
+        = instancetype::alloc()<.init(x, y);
+
+    fn init<S: instance + mut>(self: S, x: uptr, y: uptr) -> void {
+        self._x = x;
+        self._y = y;
+    }
+
+    fn ConstSyntax<uptrx2, ConvertibleVecSyntax>::convert<S: instance + mut>(
+        self: S @take,
+        syntax: &~ConvertibleVecSyntax @take,
+    ) -> {
+        # Run the syntax
+        syntax.run();
+
+        # If we had paramaters from that syntax we would use them
+
+        return <uptrx2 [self._x, self._y]>;
+    }
+}

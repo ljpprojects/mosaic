@@ -1,0 +1,83 @@
+# interfaces are not the only option for data
+
+data RegisterState {
+    let @public high: u64;
+    let @public low: u64;
+    let @public widthFlag: u8;
+
+    # No need for a 'new' function...
+}
+
+# We can define methods on RegisterState still
+# We cannot, however, implement other interfaces
+# Auto-dereferencing and auto-referencing apply
+
+impl RegisterState {
+    # No need to synthesise getters
+}
+
+# And then it is iniitalised like this:
+RegisterState {
+    .high = 0,
+    .low = 123,
+    .widthFlag = 2,
+}
+
+# By default, Mosaic uses these rules for primitive type size & alignment across all architectures:
+#
+# u8/i8/bool = size & align 1
+# u16/i16 = size & align 2
+# u32/i32 = size & align 4
+# u64/i64 = size & align 8
+# u128/i128 = size & align 16
+#
+# f16 = size & align 2
+# f32 = size & align 4
+# f64 = size & align 8
+# f128 = size & align 16
+#
+# 8 bit vector = size & align 1
+# 16 bit vector = size & align 2
+# 32 bit vector = size & align 4
+# 64 bit vector = size & align 8
+# 128 bit vector = size & align 16
+# 256 bit vector = size & align 32
+#
+# N[T]/[T] = sizeof & alignof T
+# pointers/references = size & align 8 (no 32 bit architectures are supported)
+# fat pointers & fat references = size 16, align 8
+#
+#
+# Under the Mosaic alignment rules, the size of RegisterState is 8 * 2 + 1 = 17,
+# excluding padding
+# The fields are also reordered in order of alignment descending (and where two
+# fields share the same alignment their relative order is the same).
+# The alignment of a data is the highest alignment of its fields
+# So the alignment of RegisterState is 8
+# Thus, we must pad the end of RegisterState to make the size a multiple of 8
+# So sizeof RegisterState = 24, and alignof RegisterState = 8
+#
+# Under the C alignment rules (using @calign), the size and alignment of
+# RegisterState is the same. The only difference between Mosaic alignment rules
+# and C alignment rules is the fact that under C alignment rules, the fields are
+# not reordered.
+#
+# You can also disable padding using @noalign. This means the alignment of
+# RegisterState would be 1, and its size would be 17. (@noalign, @align(1), and
+# @calign(1) are all equivalent)
+#
+# You can also define a custom alignment using @align(N). This makes each field
+# of the struct have that alignment, and forces the struct to have that alignment.
+# For example, under @align(2), the size of RegisterState is 18, and its alignment
+# 2.
+#
+# N must be a power of 2.
+#
+# Since references guarantee alignment with their inner type T, you cannot have
+# a reference to a field of a data structure that is less than the type's normal
+# alignment.
+#
+# For example, I could have a reference to &RegisterState.high if RegisterState
+# had @calign, @align(8), or if it used the Mosaic alignment rules. If
+# RegisterState was @noalign, @align(2), or @align(4), then you could only have
+# a reference to &RegisterState.widthFlag, not to .high or .low.

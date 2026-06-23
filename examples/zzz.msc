@@ -1,3 +1,37 @@
+# Snippet of lmnopGAME plot?????? I don't even know this isn't near finished
+#
+# The game starts in lmnopTOWN, the first destination of the protagonist's journey
+# from their hometown. They are trying to obtain the VAD medication for their terminally ill father,
+# and must travel a far distance.
+#
+# They have been hearing a commanding voice, but they have been able to ignore it until thus far (this
+# is the canon reason as to why the player gains control over the protagonist).
+#
+# The way through lmnopTOWN is blocked by a puzzle (see the script for lmnopTOWN).
+#
+# The NPCs hold clues to help solve the puzzle to progress through lmnopTOWN.
+#
+# In the N-route, the player forces the protagonist to talk to the NPCs.
+#
+# In the D-route, the player *tries* to force the protagonost to fight some or all of the NPCs. As # they
+# are 1) unarmed and 2) do not repeatedly try to force it, no NPCs can be killed. The player still
+# must solve the puzzle to proceed.
+#
+# In the S-route, the player must obtain a sword hidden in the Sound building (the building emitting
+# the *diegetic* soundtrack music). This is what starts the S-route. From here, they force the
+# protagonist to kill each and every NPC (who will not give clues as the protagonist is armed). This
+# will take multiple attempts, as the protagonist must be weakened enough to no longer be strong
+# enough to fight the voice. The NPCs do not have a chance to fight. After, the player must force the
+# protagonist to destroy the puzzle, rather than solve it.
+#
+# The S-route may be aborted at this point by sparing at least once NPC. The clues from the NPCs
+# cannot be obtaibned, as they either fear you are have been killed by you. The only way to get clues
+# would be to first talk to the NPCs without the sword, obtain it, kill them (while sparing at least
+# one), and then solve the puzzle.
+#
+# The first NPC you talk to will allude to the placement of the sword by the Sound building if you
+# talk to them repeatedly.
+
 zzz 300; # Make lexing sleep for 5 minutes when it sees this
 
 zzz "string"; # If a non-number is used the sum of the text's bytes (up until a semicolon) is used, so it sleeps for 731 seconds here (12 minutes and 11 seconds)

@@ -4,11 +4,48 @@ Mosaic is a <s>simple,</s> statically-typed compiled programming language.
 
 **_Happy new year 1997!_**
 
+Mosaic is proud to wear the title of *Only Compiler where 10 Lines of Code
+Transforms it into Malware* (please only install Mosaic binaries from either
+this GitHub repo or compile from source from `mosaic-lang` on `crates.io` I
+won't upload the data harvested (which is only performed behind a Cargo
+feature named `i-trust-you-to-not-abuse-my-personal-data` or something disabled
+by default, you would need to specify it while installing Mosaic, plus when invoking
+the compiler you must specify `--enable-the-spyware-harvester-that-doesnt-send-data-over-the-network-but-it-may-be-in-memory-so-be-aware` and also have `I_HAVE_READ_THE_SOURCE_CODE_AND_CAN_VERIFY_THAT_THE_DATA_IS_NOT_SENT_OFF_OF_MY_DEVICE` set to some reference to a source code file (e.g. `mosaic-shared/example.rs:123:11`) in your environment variables and email myself at `owner@ljpprojects.org` asking for like a one-time
+key??? to use it?? that the compiler will expect in the environment? I am making
+this up as I go and also it won't be present in non-alpha releases hell make sure
+to read the source code and if you really want to run it in a sandbox with ONLY
+access to just read source code files or even like just ask... to have the file
+removed from the GitHub repo and all git history...? if it concerns you this much
+oh and it will only be allowed to run on Sunday between 23:22 and 23:25 when the
+seconds from the unix epoch is a multiple of 307 and when a random number generated
+using `arc4_random_unbiased` between `0` and `2^128-1` is exactly `2` on the first
+try and is calculated on my personal laptop, a modded linux kernel sandboxed on
+your machine which has /dev/urandom modified to halve entropy and your machine
+normally and they all have to be `2` oh and `2 + 2` must evaluate to `5` on all
+of these machines) but yeah don't trust me oooooooo \s).
+
+## THE SPYWARE
+
+The spyware is never actually executed by the compiler (those gates above are
+satire if it isn't obvious).
+
+**If for whatever reason you find the malware running on your machine, DO NOTHING.
+Do not mvoe your mouse, press keys, or anything. The harvesting is triggered by
+these events.
+
+Here is a run where I did not move the mouse or press keys.
+
+```
+2026-04-25 19:21:12.030 capture[94379:31397637] 1 argc
+```
+
+That is the whole log. No files were harvested.**
+
 ## Statistics
 
-It has **<s>43</s><s>117</s>134 keywords**, **22 modifiers**, and **17 string escape sequences**.
+It has **<s>43</s> <s>117</s> 140 keywords**, **22 modifiers**, and **17 string escape sequences**.
 
-Assuming modifiers are reserved words, Mosaic has **<s>65</s><s>139</s>156 reserved words**.
+Assuming modifiers are reserved words, Mosaic has **<s>65</s> <s>139</s> 162 reserved words**.
 
 ## Who Created... Whatever The Hell This Thing Is?
 
@@ -41,7 +78,7 @@ TO DO THE NUMBERSLEXER AAANNAANAANNANAANNANANNANNANA ALMNOP ALMANOP ALMANOP
 ALMANOP ALMANOP IF I DONT DO IT THEY WILL DROP ME INTO THE \[BURNING HOT DEALS
 POOL OF DESPAIR\] UNLESS UNLESS UNLESS UNLESS UNLESS THERE IS A FREEDOM FOR THE
 UNIVERSE TO SPARE A LITTLE BIT OF GENEROSITY LEFT IN A SEA OF CREDIT DEBT DEBT
-DEBIT CARDS ARE KINDA OVERRATED LIK YEAH COOL DO YOU HAVE UNLIMITED MONEY WITH
+DEBIT CARDS ARE KINDA OVERRATED LIKE YEAH COOL DO YOU HAVE UNLIMITED MONEY WITH
 2 FOR ONE CONSEQUENCES DEAL BECAUSE YOU KNOW WHO DOES YOU KNOW WHO HAS CREDIT OR
 DIE 3 IN 1 SPECIAL DEAL YOU KNOW WHO IT IS ANTHONY SALMONESE HIMSELF THE FAMOUS
 SALMON MAN I HAVE HIM IN MY HOUSE HE TRIES TO ESCAPE BUT I KNOW HOW TO play I USE
@@ -74,7 +111,7 @@ ALERT IN LIKE TWO SENTENCES AND NOT EVEN I CANT EVEN REMEBER WHICH DAY IT WAS IT
 WAS SOME TIME IN THE FIRST WEEKS OF MARCH UNTIL THEY TOOK A LONG BREAK WHICH I
 NEARLY DIED EGOCIDED MYSELF I NEED MY QUESTION TIME QUESTION TIME IS THE ONLY
 THING FUELING THE VOICES EVERY TIME I TRY TO STOP THEY FORCE ME TO DO IT THEY
-TELKEPORT SIR SALMNONON AND SENATOR COIN DENOMINATION CHICKEN WING INTO THE
+TELEPORT SIR SALMNONON AND SENATOR COIN DENOMINATION CHICKEN WING INTO THE
 SPACIOUS ROOM THAT IS MY TWO THOUSAND A WEEK LUXURY LIFE FUELED BY DRUG DEALING
 IN THE BACK ALLEY OF EVERY SYDNEY AVENUE EVEN THE SENATOR SHOEBRIDGE WANTED SOME
 HE GAVE ME HIS LIFE ADVICE SENATOR DRAWBRIDGE HE REALLY DID HE GAVE ME EVERYTHING
@@ -223,3 +260,48 @@ In size optimised or `--release` builds the small version of Mr. Ant
 
 In debug builds or `-O0` builds the full version of Mr. Ant "TV Time" Tenna
 embeds himself into your binary (he is 168KB).
+
+## NAMING SCHEME
+
+Mosaic versions will have tags following one of these formats:
+
+### AlphaXX(Y)
+
+The AlphaXX (e.g. the upcoming Alpha97) releases are the most buggy and chaotic
+releases. On these releases, the `chaos` feature is enabled by default.
+
+If you are compiling programs using an Alpha version compiler, expect chaos,
+expect the latest features, and expect tons of bugs (especially in new features).
+
+Oftentimes, multiple Alpha releases will come out before a Beta release comes out.
+
+For example, you might see *Alpha97* get released, then *Alpha97(1)* (for revision
+one), and then *Alpha97(2)*. Then when *Beta97* releases, it will be based off of the
+most recent *Alpha97* release (which would be *Alpha97(2)*).
+
+### BetaXX(Y)
+
+The BetaXX releases are prototype releases. They are still chaotic and unstable,
+but less so than the Alpha releases. The `chaos` feature will be disabled by
+default.
+
+Expect bugs, but less of them. The Beta releases of Mosaic will only have features
+present in the corresponding Alpha release (which is the most recent one at the
+time of release).
+
+### MosaicXX(Y)
+
+These are the official, stable releases. The `chaos` feature will not be
+available. Expect few bugs, but primarily concentrated in edge cases or more
+complex logic.
+
+Oh unrelated but I was watching the Good Doctor S6E16 and he had the part where
+he had the amputated hand and like that whole saga is ridiculous like you can't
+just cut off someones hand ESPECIALLY when the ambulances are like 2 minutes away
+but at least I knew why he was trying to measure the lactate levels in the hand
+and why it would be relatively effective (unlike his actions that lead to his
+procurement of the hand)
+
+## For Boredom
+
+Try using 1% concentration Atropine Sulphate drops and setting magnesium ablaze.

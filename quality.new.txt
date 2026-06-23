@@ -1,0 +1,183 @@
+
+── lexer/debug.rs 
+  · TRIVIAL     PositionRange::fmt (line 41)
+  · TRIVIAL     PositionRange::fmt (line 55)
+  · TRIVIAL     PositionRange::one_char (line 72)
+  · TRIVIAL     PositionRange::new (line 91)
+
+── lexer/mod.rs 
+  · TRIVIAL     is_mosaic_ident_start (line 119)
+  · TRIVIAL     is_mosaic_ident_part (line 123)
+  · TRIVIAL     StreamedLexer<'_>::next (line 140)
+  ✓ INTEGRATION StreamedLexer<'a>::from_state (line 151)
+    Complexity: logic=0, calls=1, nesting=0, cognitive=0, cyclomatic=1
+  · TRIVIAL     StreamedLexer<'a>::reset_to_state (line 155)
+  · TRIVIAL     StreamedLexer<'a>::state (line 161)
+  ✓ INTEGRATION StreamedLexer<'a>::new (line 171)
+    Complexity: logic=0, calls=1, nesting=0, cognitive=0, cyclomatic=1
+    ⚠ 3 unsafe blocks
+  · TRIVIAL     StreamedLexer<'a>::peek_next_token (line 187)
+  ✗ VIOLATION   StreamedLexer<'a>::next_char (line 195) [HIGH]
+    Logic: if (line 198), if (line 205), boolean_op (line 205), boolean_op (line 205), comparison (line 205), comparison (line 205), if (line 206), if (line 240), boolean_op (line 240)
+    Calls: .next_char() (line 196)
+    Effort: 14.5
+    Complexity: logic=9, calls=1, nesting=2, cognitive=5, cyclomatic=8
+    ⚠ 1 unsafe block
+  ✗ VIOLATION   StreamedLexer<'a>::prev_char (line 249) [HIGH]
+    Logic: if (line 252), comparison (line 252), if (line 258), arithmetic (line 258), if (line 265), comparison (line 265), if (line 269), boolean_op (line 269), arithmetic (line 269), if (line 282), boolean_op (line 282)
+    Calls: .prev_char() (line 250)
+    Effort: 16.5
+    Complexity: logic=11, calls=1, nesting=2, cognitive=7, cyclomatic=8
+  ✓ OPERATION   StreamedLexer<'a>::expect_char (line 291)
+    Complexity: logic=2, calls=1, nesting=1, cognitive=1, cyclomatic=2
+  ✓ OPERATION   StreamedLexer<'a>::expect_char_in (line 316)
+    Complexity: logic=2, calls=1, nesting=2, cognitive=3, cyclomatic=4
+    ⚠ error handling: 1 panic/unreachable
+  · TRIVIAL     StreamedLexer<'a>::expect_char_sequence (line 342)
+  ✓ OPERATION   StreamedLexer<'a>::lex_comment (line 359)
+    Complexity: logic=11, calls=4, nesting=3, cognitive=14, cyclomatic=9
+    ⚠ function length 90 lines exceeds threshold
+  ✓ OPERATION   StreamedLexer<'a>::lex_modifier (line 452)
+    Complexity: logic=4, calls=2, nesting=2, cognitive=6, cyclomatic=5
+  ✗ VIOLATION   StreamedLexer<'a>::next_token (line 512) [MEDIUM]
+    Logic: match (line 520)
+    Calls: StringLexer::new (line 524), .lex_string() (line 527), PositionRange::one_char (line 538)
+    Effort: 7.5
+    Complexity: logic=1, calls=3, nesting=1, cognitive=2, cyclomatic=2
+    ⚠ 1 unsafe block
+    ⚠ error handling: 1 todo
+
+── lexer/string.rs 
+  · TRIVIAL     StringLexer<'a>::new (line 29)
+  ✗ VIOLATION   StringLexer<'a>::lex_string_template (line 41) [HIGH]
+    Logic: loop (line 52), match (line 78), match (line 80), match (line 89)
+    Calls: .next_token() (line 53), PositionRange::new (line 57)
+    Effort: 13.0
+    Complexity: logic=4, calls=4, nesting=3, cognitive=11, cyclomatic=5
+    ⚠ function length 78 lines exceeds threshold
+  · TRIVIAL     StringLexer<'a>::is_escape_sequence_start (line 120)
+  · TRIVIAL     StringLexer<'a>::is_escape_sequence_part (line 130)
+  ✗ VIOLATION   StringLexer<'a>::lex_escape_complex_parameterised (line 149) [HIGH]
+    Logic: match (line 156), loop (line 176), for (line 178), if (line 187), if (line 214), if (line 215), comparison (line 215), if (line 219), comparison (line 219), match (line 246), for (line 261), if (line 262), comparison (line 262), if (line 274), if (line 311), match (line 344), for (line 362), for (line 364), if (line 365), comparison (line 365), if (line 377), match (line 411), if (line 418), if (line 419), comparison (line 419), if (line 423), comparison (line 423), if (line 431)
+    Calls: .expect_char() (line 161), .next_char() (line 164), .prev_char() (line 188), PositionRange::one_char (line 198), PositionRange::new (line 231), .expect_char_sequence() (line 246)
+    Effort: 45.0
+    Complexity: logic=28, calls=32, nesting=4, cognitive=64, cyclomatic=25
+    ⚠ cognitive complexity 64 exceeds threshold
+    ⚠ cyclomatic complexity 25 exceeds threshold
+    ⚠ magic numbers: 10 (line 210), 3 (line 260), 3 (line 261), 10 (line 297), 3 (line 362), 3 (line 363), 3 (line 364), 10 (line 400)
+    ⚠ function length 307 lines exceeds threshold
+    ⚠ error handling: 3 unwrap, 2 panic/unreachable
+  ✗ VIOLATION   StringLexer<'a>::lex_string_escape_simple_parameterised (line 468) [HIGH]
+    Logic: match (line 477), for (line 481), if (line 489), for (line 512), if (line 520), for (line 550), if (line 558), comparison (line 558)
+    Calls: .next_char() (line 482), .prev_char() (line 490), PositionRange::new (line 501), .expect_char() (line 543)
+    Effort: 20.0
+    Complexity: logic=8, calls=10, nesting=3, cognitive=16, cyclomatic=10
+    ⚠ cognitive complexity 16 exceeds threshold
+    ⚠ magic numbers: 16 (line 499), 3 (line 510), 3 (line 512), 8 (line 530), 4 (line 547), 4 (line 550), 16 (line 572)
+    ⚠ function length 115 lines exceeds threshold
+    ⚠ error handling: 3 unwrap, 1 panic/unreachable
+  ✗ VIOLATION   StringLexer<'a>::lex_string_escape (line 595) [HIGH]
+    Logic: if (line 616), comparison (line 616), if (line 619), loop (line 630), if (line 638), boolean_op (line 638), boolean_op (line 638), if (line 658), loop (line 659), if (line 664), boolean_op (line 665), comparison (line 665), if (line 674)
+    Calls: .next_char() (line 601), StringLexer::is_escape_sequence_start (line 619), StringLexer::is_escape_sequence_part (line 638), .prev_char() (line 639), PositionRange::new (line 648), StringEscape::try_from_escape_seq (line 717)
+    Effort: 30.0
+    Complexity: logic=13, calls=13, nesting=4, cognitive=21, cyclomatic=12
+    ⚠ cognitive complexity 21 exceeds threshold
+    ⚠ cyclomatic complexity 12 exceeds threshold
+    ⚠ function length 134 lines exceeds threshold
+    ⚠ error handling: 2 unwrap
+  ✗ VIOLATION   StringLexer<'a>::lex_raw_string (line 739) [HIGH]
+    Logic: loop (line 752), if (line 760), comparison (line 760), if (line 763)
+    Calls: .next_char() (line 753), PositionRange::new (line 779)
+    Effort: 13.0
+    Complexity: logic=4, calls=4, nesting=3, cognitive=6, cyclomatic=4
+  ✗ VIOLATION   StringLexer<'a>::lex_string (line 800) [HIGH]
+    Logic: comparison (line 808), if (line 809), loop (line 819), match (line 827), if (line 829), comparison (line 829), if (line 844), comparison (line 844)
+    Calls: .expect_char_in() (line 805), .next_char() (line 820), PositionRange::new (line 832)
+    Effort: 18.5
+    Complexity: logic=8, calls=5, nesting=3, cognitive=10, cyclomatic=7
+    ⚠ function length 87 lines exceeds threshold
+
+── lexer/tests.rs 
+  ✓ INTEGRATION string_lexer_static (line 6)
+    Complexity: logic=0, calls=4, nesting=0, cognitive=0, cyclomatic=1
+    ⚠ magic numbers: 6 (line 25), 7 (line 27), 7 (line 41), 8 (line 43)
+    ⚠ 8 unsafe blocks
+  ✓ INTEGRATION string_lexer_simple_escape (line 53)
+    Complexity: logic=0, calls=4, nesting=0, cognitive=0, cyclomatic=1
+    ⚠ magic numbers: 3 (line 73), 4 (line 75), 4 (line 90), 5 (line 92)
+    ⚠ 8 unsafe blocks
+  ✓ INTEGRATION string_lexer_simple_escapes (line 102)
+    Complexity: logic=0, calls=8, nesting=0, cognitive=0, cyclomatic=1
+    ⚠ magic numbers: 6 (line 122), 7 (line 124), 6 (line 134), 7 (line 136), 8 (line 139), 9 (line 141), 8 (line 151), 9 (line 153), 13 (line 156), 14 (line 158), 13 (line 168), 14 (line 170), 15 (line 173), 16 (line 175), 15 (line 185), 16 (line 187), 23 (line 190), 24 (line 192), 24 (line 207), 25 (line 209)
+    ⚠ function length 115 lines exceeds threshold
+    ⚠ 24 unsafe blocks
+  ✓ INTEGRATION string_lexer_simple_parameterised_escapes (line 219)
+    Complexity: logic=0, calls=5, nesting=0, cognitive=0, cyclomatic=1
+    ⚠ magic numbers: 65 (line 230), 5 (line 239), 6 (line 241), 5 (line 251), 6 (line 253), 13 (line 256), 14 (line 258), 14 (line 273), 15 (line 275)
+    ⚠ function length 64 lines exceeds threshold
+    ⚠ 12 unsafe blocks
+  ✓ INTEGRATION string_lexer_complex_parameterised_escapes (line 285)
+    Complexity: logic=0, calls=9, nesting=0, cognitive=0, cyclomatic=1
+    ⚠ magic numbers: 255 (line 296), 24 (line 305), 25 (line 307), 255 (line 313), 255 (line 313), 255 (line 313), 24 (line 317), 25 (line 319), 47 (line 322), 48 (line 324), 47 (line 334), 48 (line 336), 52 (line 339), 53 (line 341), 52 (line 351), 53 (line 353), 58 (line 356), 59 (line 358), 58 (line 368), 59 (line 370), 63 (line 373), 64 (line 375), 32 (line 381), 63 (line 385), 64 (line 387), 75 (line 390), 76 (line 392), 76 (line 407), 77 (line 409)
+    ⚠ function length 132 lines exceeds threshold
+    ⚠ 28 unsafe blocks
+
+── lexer/tokens.rs 
+  ✓ OPERATION   StringEscape::try_from_escape_seq (line 74)
+    Complexity: logic=1, calls=0, nesting=1, cognitive=1, cyclomatic=1
+    ⚠ error handling: 1 panic/unreachable
+
+═══ Summary ═══
+  Functions: 35    Quality Score: 64.4%
+
+  IOSP:         57.1%  (7I, 5O, 14T, 9 violations)
+  Complexity:    5.7%  (3 complexity, 7 magic numbers, 9 long fn, 8 unsafe, 6 error handling)
+  DRY:          71.4%  (3 dead code, 7 boilerplate)
+  SRP:          91.4%  (3 module)
+  Coupling:    100.0%
+  Test Quality:100.0%
+
+55 quality findings. Run with --verbose for details.
+
+═══ Coupling ═══
+  Modules analyzed: 2
+
+  Incoming = modules depending on this one
+  Outgoing = modules this one depends on
+  Instability = Outgoing / (Incoming + Outgoing)
+
+                          In  Out  Instability
+    lexer                  0    0  0.00
+    mod                    0    0  0.00
+
+  ✓ No circular dependencies.
+
+═══ DRY / Dead Code ═══
+  ⚠ is_mosaic_ident_start [uncalled] (lexer/mod.rs:119) — never called; consider removing
+  ⚠ is_mosaic_ident_part [uncalled] (lexer/mod.rs:123) — never called; consider removing
+  ⚠ StreamedLexer::peek_next_token [uncalled] (lexer/mod.rs:187) — never called; consider removing
+  ⚠ [BP-002] PositionRange (lexer/debug.rs:40) — Trivial Display implementation with a single write! call
+    → Consider using derive_more::Display
+  ⚠ [BP-009] Position (lexer/tests.rs:6) — 4 constructions of `Position` with overlapping fields
+    → Use struct update syntax: `Type { changed, ..base }`
+  ⚠ [BP-009] Position (lexer/tests.rs:53) — 4 constructions of `Position` with overlapping fields
+    → Use struct update syntax: `Type { changed, ..base }`
+  ⚠ [BP-009] Position (lexer/tests.rs:102) — 12 constructions of `Position` with overlapping fields
+    → Use struct update syntax: `Type { changed, ..base }`
+  ⚠ [BP-009] Position (lexer/tests.rs:219) — 6 constructions of `Position` with overlapping fields
+    → Use struct update syntax: `Type { changed, ..base }`
+  ⚠ [BP-009] Position (lexer/tests.rs:285) — 14 constructions of `Position` with overlapping fields
+    → Use struct update syntax: `Type { changed, ..base }`
+  ⚠ [BP-009] DebugPosition (lexer/debug.rs:91) — 2 constructions of `DebugPosition` with overlapping fields
+    → Use struct update syntax: `Type { changed, ..base }`
+
+═══ SRP Analysis ═══
+  ⚠ lexer/mod.rs — 369 production lines (score=0.14)
+  ⚠ lexer/string.rs — 651 production lines (score=0.70)
+  ⚠ lexer/tests.rs — 395 production lines (score=0.19)
+  ⚠ lexer/tests.rs — 5 independent function clusters
+    Cluster 1: [string_lexer_complex_parameterised_escapes]
+    Cluster 2: [string_lexer_simple_escape]
+    Cluster 3: [string_lexer_simple_escapes]
+    Cluster 4: [string_lexer_simple_parameterised_escapes]
+    Cluster 5: [string_lexer_static]

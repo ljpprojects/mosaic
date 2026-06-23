@@ -22,13 +22,65 @@ fn readFile(path: &String) -> &String, &^io::Error @allocates {
     # $1 is the first return value (usize), $2 the second (&^io::Error),
     # $n the nth
     # Here (buf, $2) indicates to return buf and $2, and the absence of a
-    # passthrough indicator (<) means to ignore $1 if $2 is nil
-    propagate(buf, $2) file.readIntoString(buf);
+    # passthrough value means to ignore if $2 is nil
+    propagate(: buf, $2) file.readIntoString(buf);
 
-    # An example of passthrough-propagations
+    # An example of passthrough-propagations. Note that only one value is allowed
+    # to pass through.
+    #
     # let bytes_read = propagate(buf, $2; <$1) file.readIntoString(buf);
-    # Here, if $2 != nil then buf, $2 is returned, otherwise the value $1 is
+    # Here, if $2 != nil then (buf, $2) is returned, otherwise the value $1 is
+    #
     # passed through and assigned to bytes_read
+    #
+    # In other words, propagate({Pivot}{Cmp}: {Ret1}, ..., {RetN}; {Pass}) {Expr}
+    # Note: {Pivot} is assumed to be the last value returned by {Expr}
+    # Note: When {Cmp} is omitted it is assumed to be '!= nil'. If the colon is
+    #       omitted too then it will always succeed. If instead a ! and a colon
+    $       is used then it will fail (i.e. passthroughs run)
+    # Note: If The {RetN} arguments are omitted (so just the semicolon remains) then no values are #       returned if the {Pivot} matches {Cmp}
+    #
+    # For example, if a function F returns the values (iptr, u8x32, f32) to filter
+    # out the vector, you would use this:
+    #    propagate (!:; $2) F(...)
+    #
+    # The omission of {Pivot}, {Cmp}, and the use of '!:1 means that the
+    # passthrough will always run. The omission of {Ret} arguments is to avoid
+    # unneccesary code, as it wouldnt be run anyway, but if it were then nothing
+    # would be returned (and propagate either returns the default value of the
+    # inferred type or becomes a statement). Since it always falls back to the
+    # passthrough the compiler knows not to run any condition (and thus it cannot
+    # be a statement).
+    # If there was a condition, since $2 has the type u8x32, and it implements
+    # std::data::Default (which returns a vector with all lanes zero) it still
+    # wouldn't be a statement, and when the condition is true that default would
+    # be returned.
+    #
+    # Coming back to the double2 function, we can use propagate to turn the
+    # returns into an i32x2:
+    let double2vec: i32x2 = propagate(!:; <i32x2 [$1,$2]>) double2(78, 1984);
+
+    # UPDATE FOR OS 2000 SUPPORT: Subroutine Has Been Renamed Block Because You Foolish Children
+    # Couldn't Handle The Name Fuckery
+    #
+    # Since propagate returns the values given as {Ret} arguments, if you need
+    # to capture that value, define a block, mark it @invoke, and bind the result
+    # to a variable. We will use guard + that F example. The block can have an
+    # optional name if you want to `goto` it (keep in mind bool::default()
+    # returns false) If you specify @invoke they are also invoked immediately.
+    #
+    # ...
+    #
+    # let cond = block @invoke {
+    #    # Here propagate returns false to the subroutine if lane 0 of the bitmask is 1
+    #    return propagate(($2.highbits() & 0x01) != 0: $3 < 64209;) F(...)
+    # };
+    # guard cond else {
+    #     # If we are here then the lane 0 bit of $2 was 0 and $3 >= 64209
+    #     return "lmnop";
+    # }
+    #
+    # return "ololo";
 
     return buf;
 }

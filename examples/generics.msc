@@ -1,0 +1,69 @@
+# Mosaic uses monomorphisation, so each call to a generic function with a new generic
+# type generates a new function.
+#
+# ᐞ = MSR exclusive
+# ᕽ = MRC exclusive (`--nomsr`, `-M`)
+#
+# Like Old Old Mosaic, Mosaic's generics have many type bounds:
+# `instance` means the type must be some reference to instancetype, so
+#   `&instancetype`, `&~instancetype`, `&+.instancetype`, etc. all satisfy this
+#   bound.
+# `primitive` requires the type to be a primitive (integers, floats, and booleans)
+# `L + R` requires the left and right bounds to be satisfied
+# `!R` requires the right bound to NOT be satisfied
+# `sized` requires the type to have a statically known size
+# `indirection` requires the type to be some form of indirection (ptr or ref)
+# `ptr` requires the type to be a pointer
+# `ref` requires the type to be a reference
+# `*R` (implies `indirection`) requires the type inside a reference satisfy the right bound
+#      many asterisks imply the level of indirection
+#      (so `**R` implies `indirection + *indirection + **R`)
+#      `*+R` means the referent at the end of an indirection chain must satisfy `R`
+# `msr`ᐞ requires the type to implement `core::msr::Ref` AND NOT be a counted ref
+# `rc`ᐞ requires the type to implement `core::msr::Ref` AND be a counted ref
+# `atomic`ᐞ requires the type to be an atomically counted reference and implement `core::msr::Ref`
+# `stack`ᐞ requires the type to be a stack-allocated reference
+# `immut`ᐞ requires the type to be an immutable reference
+# `mut`ᐞ requires the type to be a mutable reference
+# `nonnull`ᐞ requires the type to be a non-null reference
+# `nullable`ᐞ requires the type to be nullable
+# `static`ᐞ requires the type to be a statically-lived reference
+# `strong`ᕽ requires the type to be a strong reference
+# `weak`ᕽ requires the type to be a weak reference
+# Any other identifier/path will be an interface bound
+fn double<T: msr + *core::mem::Clone>(x: T @take) -> T, T
+    = (x.clone(), x);
+
+# You could pass &.u8 or &~f64 to double
+# You could NOT pass i32 (`msr` imples `ref`), &+u8, fn() -> void, or *void
+
+import std::fmt;
+import std::io;
+
+# Generics can be thought of as equations
+# If we call println_alt("lmnop") the compiler does this to verify correctness:
+#   - R = &'.[u8]
+#   - R : ref = true
+#   - *R = [u8]
+#   - [u8] : fmt::Fmt = true
+#   = Bounds met, R = &'.[u8], function monomorphised
+fn println_alt<R: ref + *+fmt::Fmt>(d: R) -> void @allocates {
+    mut fmt = fmt::Formatter::new();
+    d.format(fmt);
+    io::printString(fmt.finalise());
+}
+
+# Overload to allow types that are Fmt but not refs
+# If we call println_alt(2) the compiler does this to verify correctness:
+#   - T = i8
+#   - T : sized = true
+#   - T : fmt::Fmt = true
+#   = Bounds met, T = i8, function monomorphised
+fn println_alt<T: sized + fmt::Fmt>(s: T) -> void {
+     mut fmt = fmt::Formatter::new();
+    d.format(fmt);
+    io::printString(fmt.finalise());
+}
+
+# You could use dynamic dispatch but you would have to overload for each reference
+# type

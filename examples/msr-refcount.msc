@@ -1,0 +1,74 @@
+#/
+    Mosaic has support for reference counting even when MSR is being used.
+    The lifetime of a counted reference (under MSR) is as follows:
+
+    Allocation
+      The data is allocated on the heap and an &+ is instantiated.
+
+    Cloning
+      The RC is cloned and that cloned reference usually enters a new region.
+
+    Drop
+      When a reference is dropped it just decrements the refcount by 1.
+
+    Deallocation
+      When the refcount reaches zero Ref::drop is called on the data.
+
+    Counted references are not atomic by default. For atomicity, add `/`.
+/#
+
+import core::msr;
+
+interface Data : msr::Ref {
+    # Use + to indicate reference counting, as stated in refs.msc
+    # This will be represented as a fat pointer, and the metadata is a pointer
+    # to specialised RC metadata (which is usually reserved in .bss). This
+    # metadata will contain the refcount and the pointee's metadata (or nil).
+    #
+    # To get the refcount, you can use the `fn msr::rc_refcount(rc: &+void) -> uptr`
+    # intrinsic.
+    #
+    # To get the data you can use the `fn msr::rc_data(rc: &+uptr) -> *uptr`
+    # intrinsic.
+    #
+    # To get the pointee's metadata you can use
+    # `fn msr::rc_pointeeMetadata(rc: &+void) -> *uptr`.
+    #
+    # If you use the SIMD-representation then you can use propagate on it:
+    # let metadata: rcmetadata = propagate(!:; $1);
+    # let data: *uptr = propagate(!:; $2);
+    #
+    # The type of the metadata ($1) for atomically counted references is
+    # `arcmetadata`
+    #
+    # The same properties are used as under MRC here (and the MSR ones are valid
+    # too)
+    # Here @take indicates that the given reference should not return to the
+    # caller's static region. @strong indicates that the refcount should be
+    # incremented. @weak would not increment the refcount but would require the
+    # property's type to be nullable.
+    let @private @take @strong name: &+.[u8];
+
+    fn new(name: &+.[u8] @take @strong) -> &instancetype @allocates;
+    fn init(self: &instancetype, name: &+.[u8] @take @strong) -> void;
+}
+
+impl Data {
+    synthesise let name;
+    synthesise fn Ref::alloc;
+
+    fn new(name: &+.[u8] @take @strong) -> &instancetype @allocates
+        = instancetype::alloc()<.init(name);
+
+    # Using @strong on a counted reference will increment the refcount at the
+    # start of the region (here that is at the start of the function)
+    fn init(self: &instancetype, name: &+.[u8] @take @strong) -> void {
+        # Make sure to initialise superclasses (but not inherited interfaces)
+        # None are needed here but still
+
+        # Since we escape the reference into self's regioned allocation the compiler
+        # won't drop name and thus wont decrease the refcount after it just
+        # increased it
+        escape name into self._name;
+    }
+}

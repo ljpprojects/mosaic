@@ -8,14 +8,14 @@ interface Person : msr::Ref, fmt::Format {
     let @take name: &String;
     let @take surname: &String;
 
-    fn init(name: &String, surname: &String) -> &Person @required;
+    fn new(name: &String, surname: &String) -> &Person @required;
 };
 
 impl Person {
     synthesise let name;
     synthesise let surname;
 
-    fn init(name: &String @take, surname: &String @take) -> &Person {
+    fn new(name: &String @take, surname: &String @take) -> &Person {
         # The name and surname allocations enter into init's region and won't return
 
         # msr::Ref::alloc allocates a reference of Self as a regioned allocation

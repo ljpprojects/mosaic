@@ -1,6 +1,10 @@
 # Example of Manual Memory Management (MMM)
 # Use --nomsr to compile
 
+# Be aware that by default (I am not a masochist) the stdlib uses MRC if it cannot
+# use MSR. THis means that stdlib functions only accept objects that are
+# rc::RefCount.
+
 import core::mem;
 import std::fmt;
 

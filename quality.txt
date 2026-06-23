@@ -1,0 +1,614 @@
+
+── compiler/align.rs 
+  ✗ VIOLATION   alignment_of_cranelift_type_on_architecture (line 16) [LOW]
+    Logic: match (line 17)
+    Calls: alignment_of_cranelift_type_on_architecture (line 20)
+    Effort: 6.5
+    Complexity: logic=1, calls=1, nesting=2, cognitive=3, cyclomatic=1
+    ⚠ magic numbers: 4 (line 23), 8 (line 24), 8 (line 25), 4 (line 26), 8 (line 27), 8 (line 28), 8 (line 29), 8 (line 30), 8 (line 31), 8 (line 32)
+
+── compiler/analyser/mod.rs 
+  ✗ VIOLATION   get_usages_of (line 26) [HIGH]
+    Logic: for (line 36), match (line 37), comparison (line 39), if (line 44), comparison (line 44), boolean_op (line 53), comparison (line 53), if (line 68), if (line 69), comparison (line 69), if (line 96), comparison (line 96), if (line 108), comparison (line 108), if (line 115), comparison (line 115), comparison (line 138), if (line 174), comparison (line 174), if (line 188), comparison (line 188), comparison (line 198), comparison (line 204)
+    Calls: get_usages_of (line 38), UsageIntrinsic::new (line 40)
+    Effort: 34.0
+    Complexity: logic=23, calls=43, nesting=4, cognitive=28, cyclomatic=29
+    ⚠ cognitive complexity 28 exceeds threshold
+    ⚠ cyclomatic complexity 29 exceeds threshold
+    ⚠ function length 187 lines exceeds threshold
+
+── compiler/cranelift/ast.rs 
+  ✗ VIOLATION   flatten_ast (line 4) [LOW]
+    Logic: for (line 7)
+    Calls: flatten_ast (line 17)
+    Effort: 6.5
+    Complexity: logic=1, calls=23, nesting=2, cognitive=3, cyclomatic=11
+    ⚠ cyclomatic complexity 11 exceeds threshold
+    ⚠ function length 142 lines exceeds threshold
+
+── compiler/cranelift/linker.rs 
+  ✗ VIOLATION   Linker::link (line 19) [HIGH]
+    Logic: match (line 43), if (line 45), if (line 52), if (line 63), if (line 76), for (line 80), if (line 111), match (line 130), if (line 133)
+    Calls: CharReader::new (line 86), StreamedLexer::new (line 88), StreamedParser::new (line 89), CraneliftGenerator::new (line 106), .compile() (line 107)
+    Effort: 20.5
+    Complexity: logic=9, calls=5, nesting=2, cognitive=13, cyclomatic=13
+    ⚠ cyclomatic complexity 13 exceeds threshold
+    ⚠ function length 122 lines exceeds threshold
+    ⚠ error handling: 3 unwrap
+
+── compiler/cranelift/mod.rs 
+  ✗ VIOLATION   CraneliftGenerator::compile_bit_op (line 239) [HIGH]
+    Logic: match (line 247), match (line 249), comparison (line 296), if (line 328), comparison (line 328), if (line 363)
+    Calls: .compile_body_expr() (line 251), .set_var() (line 253), .nested_ctx() (line 270), .compile_num_op() (line 393)
+    Effort: 18.0
+    Complexity: logic=6, calls=20, nesting=3, cognitive=11, cyclomatic=11
+    ⚠ cyclomatic complexity 11 exceeds threshold
+    ⚠ function length 150 lines exceeds threshold
+    ⚠ error handling: 3 unwrap, 4 todo
+  ✗ VIOLATION   CraneliftGenerator::compile_cmp_op (line 397) [HIGH]
+    Logic: match (line 405), if (line 410), if (line 418), if (line 423), if (line 425), boolean_op (line 425), if (line 432), if (line 442), if (line 450), if (line 454), boolean_op (line 454), if (line 456), boolean_op (line 456), if (line 463), if (line 488), boolean_op (line 488), if (line 500), boolean_op (line 500)
+    Calls: .compile_body_expr() (line 407)
+    Effort: 27.5
+    Complexity: logic=18, calls=12, nesting=4, cognitive=35, cyclomatic=23
+    ⚠ cognitive complexity 35 exceeds threshold
+    ⚠ cyclomatic complexity 23 exceeds threshold
+    ⚠ function length 111 lines exceeds threshold
+    ⚠ error handling: 2 todo
+  ✗ VIOLATION   CraneliftGenerator::compile_num_op (line 516) [HIGH]
+    Logic: match (line 524), if (line 529), boolean_op (line 529), if (line 541), boolean_op (line 541), if (line 553), boolean_op (line 553), if (line 565), boolean_op (line 565), if (line 567), if (line 580)
+    Calls: .compile_body_expr() (line 526), .compile_cmp_op() (line 588)
+    Effort: 20.0
+    Complexity: logic=11, calls=11, nesting=3, cognitive=14, cyclomatic=15
+    ⚠ cyclomatic complexity 15 exceeds threshold
+    ⚠ function length 68 lines exceeds threshold
+    ⚠ error handling: 1 unwrap
+  ✗ VIOLATION   CraneliftGenerator::compile_prefix_op (line 592) [HIGH]
+    Logic: match (line 599), if (line 605), match (line 619)
+    Calls: .compile_body_expr() (line 601), .get_var_ptr() (line 644), Indirection::new (line 646), .into_cranelift() (line 655)
+    Effort: 15.0
+    Complexity: logic=3, calls=7, nesting=3, cognitive=8, cyclomatic=7
+    ⚠ function length 68 lines exceeds threshold
+    ⚠ error handling: 3 unwrap, 3 todo
+  ✗ VIOLATION   CraneliftGenerator::compile_body_expr (line 667) [HIGH]
+    Logic: match (line 673), comparison (line 678), if (line 739), for (line 749), if (line 754), if (line 779), if (line 783), if (line 795), match (line 803), if (line 817), comparison (line 817), match (line 838), if (line 856), if (line 875), if (line 924), if (line 925), comparison (line 925), if (line 930), if (line 935), boolean_op (line 935), comparison (line 935), for (line 936), if (line 937), comparison (line 937), match (line 1202), if (line 1212), comparison (line 1212), match (line 1218), boolean_op (line 1221), boolean_op (line 1222), boolean_op (line 1222), comparison (line 1222), boolean_op (line 1222), comparison (line 1222), boolean_op (line 1223), boolean_op (line 1223), comparison (line 1223), boolean_op (line 1223), comparison (line 1223), boolean_op (line 1224), boolean_op (line 1224), comparison (line 1224), boolean_op (line 1224), comparison (line 1224), boolean_op (line 1225), boolean_op (line 1225), comparison (line 1225), boolean_op (line 1225), comparison (line 1225), boolean_op (line 1226), boolean_op (line 1226), comparison (line 1226), boolean_op (line 1226), comparison (line 1226), boolean_op (line 1227), boolean_op (line 1227), comparison (line 1227), boolean_op (line 1227), comparison (line 1227), boolean_op (line 1228), boolean_op (line 1228), comparison (line 1228), boolean_op (line 1228), comparison (line 1228), arithmetic (line 1232), arithmetic (line 1232), arithmetic (line 1242), arithmetic (line 1242), if (line 1250), if (line 1258), boolean_op (line 1267), boolean_op (line 1267), if (line 1269), comparison (line 1269), if (line 1272), boolean_op (line 1272), comparison (line 1272), if (line 1275), comparison (line 1275), if (line 1292)
+    Calls: .into_cranelift() (line 675), .compile_string() (line 688), .compile_array() (line 690), .get_var() (line 705), .compile_bit_op() (line 707), .compile_prefix_op() (line 708), .compile_body_expr() (line 712), .compile_body() (line 793), .nested_ctx() (line 815), mangle_function (line 896), mangle_method (line 1077), mangle_type (line 1162), Indirection::new (line 1293), .compile_if_expr() (line 1304), .compile_match() (line 1307)
+    Effort: 114.5
+    Complexity: logic=80, calls=42, nesting=6, cognitive=103, cyclomatic=69
+    ⚠ cognitive complexity 103 exceeds threshold
+    ⚠ cyclomatic complexity 69 exceeds threshold
+    ⚠ magic numbers: 4 (line 1232), 4 (line 1240)
+    ⚠ nesting depth 6 exceeds threshold
+    ⚠ function length 639 lines exceeds threshold
+    ⚠ error handling: 16 unwrap, 1 panic/unreachable, 9 todo
+  ✗ VIOLATION   CraneliftGenerator::compile_while_expr (line 1312) [MEDIUM]
+    Logic: if (line 1329)
+    Calls: .compile_while_body() (line 1327), .compile_body_expr() (line 1330)
+    Effort: 6.0
+    Complexity: logic=1, calls=2, nesting=1, cognitive=1, cyclomatic=2
+  ✗ VIOLATION   CraneliftGenerator::compile_for_in_expr (line 1341) [HIGH]
+    Logic: if (line 1374), if (line 1404)
+    Calls: .compile_body_expr() (line 1352), .create_scope() (line 1363), .into_cranelift() (line 1365), .create_var() (line 1397), .compile_body() (line 1399)
+    Effort: 13.5
+    Complexity: logic=2, calls=16, nesting=2, cognitive=4, cyclomatic=3
+    ⚠ magic numbers: 4 (line 1394)
+    ⚠ function length 92 lines exceeds threshold
+    ⚠ error handling: 1 unwrap
+  ✗ VIOLATION   CraneliftGenerator::compile_body (line 1441) [HIGH]
+    Logic: for (line 1450), match (line 1451), if (line 1467), if (line 1492), if (line 1534), if (line 1542), if (line 1568), if (line 1589), comparison (line 1589), arithmetic (line 1589), if (line 1594), comparison (line 1594)
+    Calls: .compile_if_expr() (line 1457), .compile_body_expr() (line 1465), .nested_ctx() (line 1465), .create_var() (line 1473), .compile_extern_fn() (line 1515), .into_cranelift() (line 1525), .compile_body() (line 1546), .compile_while_expr() (line 1556), .compile_for_in_expr() (line 1560), .compile_if_stmt() (line 1565), .compile_match() (line 1576)
+    Effort: 36.5
+    Complexity: logic=12, calls=16, nesting=4, cognitive=32, cyclomatic=19
+    ⚠ cognitive complexity 32 exceeds threshold
+    ⚠ cyclomatic complexity 19 exceeds threshold
+    ⚠ function length 154 lines exceeds threshold
+    ⚠ error handling: 1 unwrap, 1 todo
+  ✗ VIOLATION   CraneliftGenerator::compile_while_body (line 1601) [HIGH]
+    Logic: for (line 1611), match (line 1612), if (line 1621), comparison (line 1621), arithmetic (line 1621)
+    Calls: .compile_body() (line 1618)
+    Effort: 10.5
+    Complexity: logic=5, calls=1, nesting=2, cognitive=5, cyclomatic=4
+  ✗ VIOLATION   CraneliftGenerator::compile_extern_fn (line 1629) [LOW]
+    Logic: if (line 1662)
+    Calls: .into_cranelift() (line 1644)
+    Effort: 4.5
+    Complexity: logic=1, calls=1, nesting=1, cognitive=1, cyclomatic=2
+    ⚠ error handling: 1 unwrap
+  ✗ VIOLATION   CraneliftGenerator::compile_array (line 1686) [MEDIUM]
+    Logic: arithmetic (line 1698), arithmetic (line 1707)
+    Calls: .compile_body_expr() (line 1690)
+    Effort: 5.5
+    Complexity: logic=2, calls=2, nesting=1, cognitive=2, cyclomatic=3
+    ⚠ error handling: 2 unwrap
+  ✗ VIOLATION   CraneliftGenerator::estimate_type_of (line 1761) [HIGH]
+    Logic: match (line 1762), if (line 1778), match (line 1782), match (line 1794), if (line 1804), comparison (line 1804), match (line 1808), boolean_op (line 1810), boolean_op (line 1811), boolean_op (line 1811), comparison (line 1811), boolean_op (line 1811), comparison (line 1811), boolean_op (line 1812), boolean_op (line 1812), comparison (line 1812), boolean_op (line 1812), comparison (line 1812), boolean_op (line 1813), boolean_op (line 1813), comparison (line 1813), boolean_op (line 1813), comparison (line 1813), boolean_op (line 1814), boolean_op (line 1814), comparison (line 1814), boolean_op (line 1814), comparison (line 1814), boolean_op (line 1815), boolean_op (line 1815), comparison (line 1815), boolean_op (line 1815), comparison (line 1815), boolean_op (line 1816), boolean_op (line 1816), comparison (line 1816), boolean_op (line 1816), comparison (line 1816), boolean_op (line 1822), boolean_op (line 1822), if (line 1826)
+    Calls: Indirection::new (line 1764), .get_var_type() (line 1769), .estimate_type_of() (line 1776)
+    Effort: 49.5
+    Complexity: logic=41, calls=6, nesting=2, cognitive=17, cyclomatic=27
+    ⚠ cognitive complexity 17 exceeds threshold
+    ⚠ cyclomatic complexity 27 exceeds threshold
+    ⚠ function length 74 lines exceeds threshold
+    ⚠ error handling: 1 panic/unreachable
+  ✗ VIOLATION   CraneliftGenerator::compile_func (line 1853) [HIGH]
+    Logic: if (line 1883), boolean_op (line 1883), comparison (line 1883), if (line 1885), if (line 1905), boolean_op (line 1905), comparison (line 1905), if (line 1918), arithmetic (line 1920), if (line 1936), if (line 1938), if (line 1954), for (line 1981)
+    Calls: mangle_method (line 1886), mangle_function (line 1888), .into_cranelift() (line 1896), Trace::new_root (line 1977), .create_scope() (line 1979), .create_var() (line 1985), .compile_body() (line 1994)
+    Effort: 27.5
+    Complexity: logic=13, calls=7, nesting=2, cognitive=10, cyclomatic=11
+    ⚠ cyclomatic complexity 11 exceeds threshold
+    ⚠ function length 152 lines exceeds threshold
+    ⚠ error handling: 2 unwrap
+  ✗ VIOLATION   CraneliftGenerator::compile_global (line 2006) [HIGH]
+    Logic: match (line 2007), if (line 2042), if (line 2046), if (line 2048), if (line 2061), if (line 2062), if (line 2067), if (line 2081), boolean_op (line 2085)
+    Calls: .compile_func() (line 2008), .compile_extern_fn() (line 2014), calculate_data_cranelift (line 2023), Trace::new_root (line 2070), CharReader::new (line 2093), File::new (line 2093), StreamedLexer::new (line 2095), StreamedParser::new (line 2096), Self::new (line 2100), .compile() (line 2108), Indirection::new (line 2123)
+    Effort: 33.5
+    Complexity: logic=9, calls=11, nesting=4, cognitive=19, cyclomatic=12
+    ⚠ cognitive complexity 19 exceeds threshold
+    ⚠ cyclomatic complexity 12 exceeds threshold
+    ⚠ function length 124 lines exceeds threshold
+    ⚠ error handling: 13 unwrap
+  ✗ VIOLATION   CraneliftGenerator::compile (line 2131) [HIGH]
+    Logic: for (line 2139), for (line 2148), match (line 2149), if (line 2159), if (line 2169), if (line 2174), comparison (line 2174)
+    Calls: .compile_global() (line 2149)
+    Effort: 12.5
+    Complexity: logic=7, calls=1, nesting=2, cognitive=9, cyclomatic=6
+    ⚠ error handling: 2 unwrap
+  ✗ VIOLATION   CraneliftGenerator::compile_if_expr (line 2194) [MEDIUM]
+    Logic: if (line 2240)
+    Calls: .compile_body_expr() (line 2206), .compile_body() (line 2217), .into_cranelift() (line 2238)
+    Effort: 7.5
+    Complexity: logic=1, calls=5, nesting=1, cognitive=1, cyclomatic=2
+    ⚠ function length 66 lines exceeds threshold
+  ✗ VIOLATION   CraneliftGenerator::compile_match (line 2268) [HIGH]
+    Logic: for (line 2298), if (line 2309), if (line 2316), comparison (line 2316), arithmetic (line 2316), arithmetic (line 2320), if (line 2337), comparison (line 2337), if (line 2341), if (line 2342), if (line 2358), if (line 2359), if (line 2372)
+    Calls: .compile_cmp_op() (line 2312), .compile_body() (line 2335), .into_cranelift() (line 2360)
+    Effort: 25.5
+    Complexity: logic=13, calls=4, nesting=4, cognitive=25, cyclomatic=11
+    ⚠ cognitive complexity 25 exceeds threshold
+    ⚠ cyclomatic complexity 11 exceeds threshold
+    ⚠ function length 104 lines exceeds threshold
+    ⚠ error handling: 1 unwrap, 1 todo
+  ✗ VIOLATION   CraneliftGenerator::compile_if_stmt (line 2380) [MEDIUM]
+    Logic: if (line 2402), if (line 2408)
+    Calls: .compile_body_expr() (line 2392), .compile_while_body() (line 2403), .compile_body() (line 2405)
+    Effort: 8.5
+    Complexity: logic=2, calls=3, nesting=1, cognitive=2, cyclomatic=3
+
+── compiler/cranelift/trace.rs 
+  ✗ VIOLATION   Trace::nested (line 71) [MEDIUM]
+    Logic: arithmetic (line 72)
+    Calls: Trace::new (line 74), Indirection::new (line 74)
+    Effort: 4.0
+    Complexity: logic=1, calls=2, nesting=0, cognitive=0, cyclomatic=1
+
+── compiler/cranelift/types.rs 
+  ✗ VIOLATION   CraneliftType::into_cranelift (line 53) [LOW]
+    Logic: match (line 54)
+    Calls: .into_cranelift() (line 70)
+    Effort: 4.5
+    Complexity: logic=1, calls=1, nesting=1, cognitive=1, cyclomatic=2
+    ⚠ error handling: 2 panic/unreachable
+  ✗ VIOLATION   CraneliftTypeGenerator::compile_type (line 353) [LOW]
+    Logic: match (line 359)
+    Calls: Indirection::new (line 407)
+    Effort: 4.5
+    Complexity: logic=1, calls=1, nesting=1, cognitive=1, cyclomatic=1
+    ⚠ error handling: 1 unwrap, 1 expect
+
+── lexer.rs 
+  ✗ VIOLATION   StreamedLexer::next_token (line 131) [HIGH]
+    Logic: match (line 155), loop (line 161), if (line 167), comparison (line 167), arithmetic (line 168), if (line 176), arithmetic (line 179), arithmetic (line 190), arithmetic (line 196), loop (line 199), if (line 207), comparison (line 207), if (line 247), comparison (line 247), if (line 261), if (line 265), loop (line 271), if (line 276), arithmetic (line 293), if (line 295), loop (line 302), if (line 308), boolean_op (line 309), boolean_op (line 309), boolean_op (line 309), comparison (line 309), if (line 314), comparison (line 314)
+    Calls: LineInfo::new_one_char (line 158), .next_token() (line 171), LineInfo::new (line 223), is_mosaic_ident_start (line 265), is_mosaic_ident_part (line 276)
+    Effort: 47.5
+    Complexity: logic=28, calls=13, nesting=6, cognitive=51, cyclomatic=24
+    ⚠ cognitive complexity 51 exceeds threshold
+    ⚠ cyclomatic complexity 24 exceeds threshold
+    ⚠ nesting depth 6 exceeds threshold
+    ⚠ function length 216 lines exceeds threshold
+    ⚠ error handling: 1 panic/unreachable
+
+── parser.rs 
+  ✗ VIOLATION   StreamedParser::expect_ident (line 651) [HIGH]
+    Logic: match (line 658), if (line 665), comparison (line 665), if (line 666)
+    Calls: .peek_next_token() (line 656), .next_token() (line 667)
+    Effort: 13.0
+    Complexity: logic=4, calls=2, nesting=3, cognitive=11, cyclomatic=3
+  ✗ VIOLATION   StreamedParser::expect_chars (line 699) [MEDIUM]
+    Logic: if (line 713)
+    Calls: .expect_char() (line 708), .next_token() (line 716), LineInfo::new (line 720)
+    Effort: 9.5
+    Complexity: logic=1, calls=4, nesting=2, cognitive=4, cyclomatic=4
+    ⚠ error handling: 1 unwrap
+  ✗ VIOLATION   StreamedParser::expect_char (line 728) [HIGH]
+    Logic: if (line 745), if (line 746), comparison (line 746), if (line 747)
+    Calls: .peek_next_token() (line 729), .next_token() (line 748), .line_info() (line 755)
+    Effort: 14.5
+    Complexity: logic=4, calls=5, nesting=3, cognitive=6, cyclomatic=4
+  ✗ VIOLATION   StreamedParser::parse_fn_type (line 768) [HIGH]
+    Logic: if (line 773), while (line 779), boolean_op (line 779)
+    Calls: .expect_chars() (line 769), LineInfo::new_one_char (line 769), .parse_type() (line 782)
+    Effort: 9.5
+    Complexity: logic=3, calls=12, nesting=1, cognitive=2, cyclomatic=4
+  ✗ VIOLATION   StreamedParser::parse_ident_type (line 797) [HIGH]
+    Logic: if (line 818), comparison (line 818), if (line 822), comparison (line 822)
+    Calls: .peek_next_token() (line 798), .next_token() (line 816), .parse_fn_type() (line 819)
+    Effort: 12.5
+    Complexity: logic=4, calls=4, nesting=2, cognitive=5, cyclomatic=7
+  ✗ VIOLATION   StreamedParser::parse_type (line 847) [HIGH]
+    Logic: if (line 848), if (line 851), if (line 857), if (line 873)
+    Calls: .expect_chars() (line 848), LineInfo::new_one_char (line 848), .expect_ident() (line 849), .expect_char() (line 857), .parse_type() (line 858), Indirection::new (line 866), .peek_next_token() (line 873), .next_token() (line 874), .parse_ident_type() (line 905)
+    Effort: 23.5
+    Complexity: logic=4, calls=22, nesting=3, cognitive=16, cyclomatic=5
+    ⚠ cognitive complexity 16 exceeds threshold
+    ⚠ function length 65 lines exceeds threshold
+  ✗ VIOLATION   StreamedParser::parse_macro_list (line 913) [HIGH]
+    Logic: while (line 935), match (line 938)
+    Calls: .expect_chars() (line 935), LineInfo::new_one_char (line 935), .next_ast_node() (line 936), .parse_type() (line 940)
+    Effort: 14.0
+    Complexity: logic=2, calls=4, nesting=3, cognitive=9, cyclomatic=4
+    ⚠ error handling: 1 todo
+  ✗ VIOLATION   StreamedParser::parse_list (line 953) [MEDIUM]
+    Logic: while (line 979)
+    Calls: .expect_chars() (line 979), LineInfo::new_one_char (line 979), .next_ast_node() (line 980)
+    Effort: 9.5
+    Complexity: logic=1, calls=3, nesting=2, cognitive=6, cyclomatic=5
+  ✗ VIOLATION   StreamedParser::parse_tg_bound (line 994) [HIGH]
+    Logic: match (line 995), comparison (line 1003), comparison (line 1012), while (line 1018), match (line 1021)
+    Calls: .next_token() (line 995), .expect_chars() (line 1004), LineInfo::new_one_char (line 1004), .parse_type() (line 1006), Indirection::new (line 1010), .parse_tg_bound() (line 1013)
+    Effort: 18.0
+    Complexity: logic=5, calls=12, nesting=2, cognitive=4, cyclomatic=6
+  ✗ VIOLATION   StreamedParser::parse_tg_list (line 1032) [HIGH]
+    Logic: if (line 1035), while (line 1042), boolean_op (line 1042), if (line 1063)
+    Calls: .expect_chars() (line 1033), LineInfo::new_one_char (line 1033), .next_token() (line 1045), .parse_tg_bound() (line 1064)
+    Effort: 14.0
+    Complexity: logic=4, calls=12, nesting=2, cognitive=6, cyclomatic=7
+  ✗ VIOLATION   StreamedParser::parse_args_list (line 1075) [HIGH]
+    Logic: if (line 1079), if (line 1080), if (line 1087), while (line 1094), boolean_op (line 1094), if (line 1119)
+    Calls: .expect_chars() (line 1079), LineInfo::new_one_char (line 1079), .next_token() (line 1097), .parse_type() (line 1117), .next_ast_node() (line 1120)
+    Effort: 19.5
+    Complexity: logic=6, calls=15, nesting=3, cognitive=12, cyclomatic=10
+    ⚠ function length 63 lines exceeds threshold
+  ✗ VIOLATION   StreamedParser::parse_block_expr (line 1154) [MEDIUM]
+    Logic: loop (line 1159), match (line 1160)
+    Calls: .expect_chars() (line 1155), LineInfo::new_one_char (line 1155), .next_ast_node() (line 1166)
+    Effort: 10.5
+    Complexity: logic=2, calls=5, nesting=2, cognitive=5, cyclomatic=4
+  ✗ VIOLATION   StreamedParser::parse_data_init_expr (line 1181) [HIGH]
+    Logic: match (line 1182), while (line 1189), match (line 1208), match (line 1229)
+    Calls: .expect_char() (line 1182), .next_token() (line 1190), .next_ast_node() (line 1213), Indirection::new (line 1226), LineInfo::new (line 1237)
+    Effort: 15.5
+    Complexity: logic=4, calls=9, nesting=2, cognitive=9, cyclomatic=5
+    ⚠ function length 64 lines exceeds threshold
+  ✗ VIOLATION   StreamedParser::parse_primary_expr (line 1246) [HIGH]
+    Logic: match (line 1252), if (line 1256), comparison (line 1256), for (line 1288), match (line 1298), if (line 1302), if (line 1303), if (line 1311), if (line 1312), if (line 1320), if (line 1321), if (line 1329), if (line 1330), if (line 1338), if (line 1339), match (line 1350), if (line 1355), comparison (line 1355), if (line 1374), if (line 1383), comparison (line 1383), if (line 1398), boolean_op (line 1398), comparison (line 1398), comparison (line 1398), comparison (line 1399), if (line 1400), boolean_op (line 1400), comparison (line 1400), comparison (line 1400), if (line 1403), if (line 1421), match (line 1436)
+    Calls: .next_token() (line 1247), .expect_char() (line 1275), .parse_macro_list() (line 1277), .is_expr() (line 1303), .is_literal() (line 1312), .is_stmt() (line 1339), .parse_array_expr() (line 1356), .next_ast_node() (line 1362), LineInfo::new (line 1375), .line_info() (line 1377), Indirection::new (line 1382), .parse_data_init_expr() (line 1404), .parse_call_expr() (line 1410), .expect_chars() (line 1421), LineInfo::new_one_char (line 1421), .parse_member_expr() (line 1442)
+    Effort: 69.0
+    Complexity: logic=33, calls=31, nesting=6, cognitive=113, cyclomatic=34
+    ⚠ cognitive complexity 113 exceeds threshold
+    ⚠ cyclomatic complexity 34 exceeds threshold
+    ⚠ nesting depth 6 exceeds threshold
+    ⚠ function length 198 lines exceeds threshold
+    ⚠ error handling: 1 panic/unreachable, 1 todo
+  ✗ VIOLATION   StreamedParser::parse_call_expr (line 1445) [HIGH]
+    Logic: match (line 1446), if (line 1448), if (line 1449)
+    Calls: .expect_chars() (line 1448), LineInfo::new_one_char (line 1448), LineInfo::new (line 1451), .line_info() (line 1452), .parse_list() (line 1462)
+    Effort: 16.5
+    Complexity: logic=3, calls=13, nesting=3, cognitive=12, cyclomatic=3
+  ✗ VIOLATION   StreamedParser::parse_path_expr (line 1488) [MEDIUM]
+    Logic: while (line 1523)
+    Calls: .expect_chars() (line 1523), LineInfo::new_one_char (line 1523), .next_token() (line 1524), .parse_call_expr() (line 1536)
+    Effort: 11.0
+    Complexity: logic=1, calls=4, nesting=2, cognitive=6, cyclomatic=5
+  ✗ VIOLATION   StreamedParser::parse_member_expr (line 1539) [HIGH]
+    Logic: while (line 1545)
+    Calls: .expect_chars() (line 1545), LineInfo::new_one_char (line 1545), .next_token() (line 1546), LineInfo::new (line 1563), .line_info() (line 1563), Indirection::new (line 1564), .parse_call_expr() (line 1569)
+    Effort: 15.5
+    Complexity: logic=1, calls=8, nesting=2, cognitive=3, cyclomatic=4
+  ✗ VIOLATION   StreamedParser::parse_cast_expr (line 1572) [HIGH]
+    Logic: match (line 1582), if (line 1587), if (line 1588)
+    Calls: .parse_primary_expr() (line 1573), .peek_next_token() (line 1578), .expect_ident() (line 1587), .expect_char() (line 1588), .parse_type() (line 1589), LineInfo::new (line 1594), .line_info() (line 1595)
+    Effort: 19.5
+    Complexity: logic=3, calls=12, nesting=3, cognitive=10, cyclomatic=3
+  ✗ VIOLATION   StreamedParser::parse_exponential_expr (line 1618) [HIGH]
+    Logic: if (line 1637), comparison (line 1637), if (line 1639), match (line 1649)
+    Calls: .parse_cast_expr() (line 1619), .peek_next_token() (line 1624), .parse_path_expr() (line 1638), .next_token() (line 1640), .parse_exponential_expr() (line 1642), LineInfo::new (line 1651), .line_info() (line 1652)
+    Effort: 20.5
+    Complexity: logic=4, calls=8, nesting=3, cognitive=8, cyclomatic=4
+  ✗ VIOLATION   StreamedParser::parse_multiplicative_expr (line 1666) [HIGH]
+    Logic: if (line 1685), match (line 1695)
+    Calls: .parse_exponential_expr() (line 1667), .peek_next_token() (line 1672), .next_token() (line 1686), .parse_multiplicative_expr() (line 1688), LineInfo::new (line 1697), .line_info() (line 1698)
+    Effort: 15.0
+    Complexity: logic=2, calls=7, nesting=2, cognitive=5, cyclomatic=3
+  ✗ VIOLATION   StreamedParser::parse_additive_expr (line 1712) [HIGH]
+    Logic: if (line 1731), if (line 1734), comparison (line 1734), if (line 1735), if (line 1736), comparison (line 1736), match (line 1771)
+    Calls: .parse_multiplicative_expr() (line 1713), .peek_next_token() (line 1718), .next_token() (line 1732), .parse_additive_expr() (line 1739), LineInfo::new (line 1748), .line_info() (line 1749)
+    Effort: 26.0
+    Complexity: logic=7, calls=13, nesting=5, cognitive=19, cyclomatic=6
+    ⚠ cognitive complexity 19 exceeds threshold
+    ⚠ nesting depth 5 exceeds threshold
+    ⚠ function length 75 lines exceeds threshold
+  ✗ VIOLATION   StreamedParser::parse_bitwise_expr (line 1788) [HIGH]
+    Logic: for (line 1794), if (line 1795), match (line 1803)
+    Calls: .parse_comparative_expr() (line 1789), .expect_chars() (line 1795), LineInfo::new_one_char (line 1795), .parse_bitwise_expr() (line 1796), LineInfo::new (line 1805), .line_info() (line 1806)
+    Effort: 18.0
+    Complexity: logic=3, calls=7, nesting=3, cognitive=7, cyclomatic=4
+  ✗ VIOLATION   StreamedParser::parse_comparative_expr (line 1821) [HIGH]
+    Logic: for (line 1829), if (line 1830), if (line 1836), match (line 1844)
+    Calls: .parse_additive_expr() (line 1822), .expect_chars() (line 1830), LineInfo::new_one_char (line 1830), .parse_comparative_expr() (line 1837), LineInfo::new (line 1846), .line_info() (line 1847)
+    Effort: 17.0
+    Complexity: logic=4, calls=7, nesting=2, cognitive=7, cyclomatic=5
+  ✗ VIOLATION   StreamedParser::parse_mut_stmt (line 1861) [HIGH]
+    Logic: if (line 1882)
+    Calls: .expect_ident() (line 1862), .next_token() (line 1864), .expect_chars() (line 1882), LineInfo::new_one_char (line 1882), .parse_type() (line 1883), .next_ast_node() (line 1890), LineInfo::new (line 1902), .line_info() (line 1904)
+    Effort: 17.0
+    Complexity: logic=1, calls=17, nesting=2, cognitive=7, cyclomatic=6
+    ⚠ function length 78 lines exceeds threshold
+    ⚠ error handling: 1 unwrap
+  ✗ VIOLATION   StreamedParser::parse_let_stmt (line 1940) [HIGH]
+    Logic: if (line 1961)
+    Calls: .expect_ident() (line 1941), .next_token() (line 1943), .expect_chars() (line 1961), LineInfo::new_one_char (line 1961), .parse_type() (line 1962), .next_ast_node() (line 1969), LineInfo::new (line 1981), .line_info() (line 1983)
+    Effort: 17.0
+    Complexity: logic=1, calls=17, nesting=2, cognitive=7, cyclomatic=6
+    ⚠ function length 78 lines exceeds threshold
+    ⚠ error handling: 1 unwrap
+  ✗ VIOLATION   StreamedParser::parse_include_stmt (line 2019) [MEDIUM]
+    Logic: match (line 2022)
+    Calls: .expect_ident() (line 2020), .parse_path_expr() (line 2022), LineInfo::new (line 2034)
+    Effort: 7.5
+    Complexity: logic=1, calls=3, nesting=1, cognitive=1, cyclomatic=3
+    ⚠ error handling: 1 unwrap, 1 panic/unreachable
+  ✗ VIOLATION   StreamedParser::parse_if_expr (line 2042) [MEDIUM]
+    Logic: if (line 2061)
+    Calls: .expect_ident() (line 2043), .parse_comparative_expr() (line 2045), .parse_block_expr() (line 2056), LineInfo::new (line 2068)
+    Effort: 11.0
+    Complexity: logic=1, calls=7, nesting=2, cognitive=5, cyclomatic=3
+    ⚠ error handling: 1 unwrap
+  ✗ VIOLATION   StreamedParser::parse_fn_expr (line 2092) [HIGH]
+    Logic: match (line 2095), if (line 2097), match (line 2100), if (line 2129), while (line 2145), match (line 2155)
+    Calls: .expect_ident() (line 2093), .next_token() (line 2095), .expect_chars() (line 2097), LineInfo::new_one_char (line 2097), .parse_tg_list() (line 2130), .parse_args_list() (line 2138), .peek_next_token() (line 2145), Modifier::from_str (line 2146), .parse_type() (line 2160), .parse_block_expr() (line 2165), LineInfo::new (line 2171)
+    Effort: 28.5
+    Complexity: logic=6, calls=17, nesting=3, cognitive=14, cyclomatic=7
+    ⚠ function length 94 lines exceeds threshold
+    ⚠ error handling: 1 unwrap, 1 panic/unreachable
+  ✗ VIOLATION   StreamedParser::parse_extern_stmt (line 2187) [MEDIUM]
+    Logic: match (line 2208)
+    Calls: .expect_ident() (line 2188), .peek_next_token() (line 2190), .parse_extern_fn_stmt() (line 2209)
+    Effort: 7.5
+    Complexity: logic=1, calls=3, nesting=1, cognitive=2, cyclomatic=3
+    ⚠ error handling: 1 unwrap
+  ✗ VIOLATION   StreamedParser::parse_extern_fn_stmt (line 2214) [HIGH]
+    Logic: match (line 2240)
+    Calls: .expect_ident() (line 2215), .next_token() (line 2217), .parse_args_list() (line 2235), .expect_chars() (line 2240), LineInfo::new_one_char (line 2240), .parse_type() (line 2245), LineInfo::new (line 2251)
+    Effort: 13.5
+    Complexity: logic=1, calls=7, nesting=1, cognitive=4, cyclomatic=3
+  ✗ VIOLATION   StreamedParser::parse_type_alias (line 2350) [HIGH]
+    Logic: match (line 2371)
+    Calls: .expect_ident() (line 2351), .next_token() (line 2353), .expect_chars() (line 2371), LineInfo::new_one_char (line 2371), .parse_type() (line 2376), LineInfo::new (line 2381)
+    Effort: 12.0
+    Complexity: logic=1, calls=6, nesting=1, cognitive=3, cyclomatic=3
+    ⚠ error handling: 1 unwrap
+  ✗ VIOLATION   StreamedParser::parse_macro_def (line 2389) [HIGH]
+    Logic: if (line 2392), if (line 2403), while (line 2411), if (line 2419), if (line 2438)
+    Calls: .expect_ident() (line 2390), .expect_char() (line 2392), .next_token() (line 2396), MacroArgKind::from_str (line 2430), .next_ast_node() (line 2444)
+    Effort: 16.5
+    Complexity: logic=5, calls=11, nesting=2, cognitive=13, cyclomatic=12
+    ⚠ cyclomatic complexity 12 exceeds threshold
+  ✗ VIOLATION   StreamedParser::parse_defer_stmt (line 2447) [HIGH]
+    Logic: if (line 2450)
+    Calls: .expect_ident() (line 2448), .expect_char() (line 2450), .parse_block_expr() (line 2451), .next_ast_node() (line 2456), LineInfo::new (line 2465)
+    Effort: 12.5
+    Complexity: logic=1, calls=5, nesting=2, cognitive=5, cyclomatic=3
+    ⚠ error handling: 1 unwrap
+  ✗ VIOLATION   StreamedParser::parse_match_stmt (line 2473) [HIGH]
+    Logic: match (line 2482), while (line 2489), if (line 2490), for (line 2509), if (line 2510), match (line 2540)
+    Calls: .expect_ident() (line 2474), .parse_bitwise_expr() (line 2476), .expect_char() (line 2482), .parse_block_expr() (line 2491), Indirection::new (line 2499), .expect_chars() (line 2510), LineInfo::new_one_char (line 2510), .parse_multiplicative_expr() (line 2516), LineInfo::new (line 2546)
+    Effort: 25.5
+    Complexity: logic=6, calls=14, nesting=3, cognitive=18, cyclomatic=7
+    ⚠ cognitive complexity 18 exceeds threshold
+    ⚠ function length 83 lines exceeds threshold
+    ⚠ error handling: 1 unwrap
+  ✗ VIOLATION   StreamedParser::parse_data_stmt (line 2557) [HIGH]
+    Logic: match (line 2578), while (line 2585), boolean_op (line 2585), if (line 2586), match (line 2605), if (line 2616), match (line 2635), match (line 2649)
+    Calls: .expect_ident() (line 2558), .next_token() (line 2560), .expect_char() (line 2578), .parse_type() (line 2610), LineInfo::new (line 2658)
+    Effort: 23.5
+    Complexity: logic=8, calls=15, nesting=4, cognitive=30, cyclomatic=11
+    ⚠ cognitive complexity 30 exceeds threshold
+    ⚠ cyclomatic complexity 11 exceeds threshold
+    ⚠ function length 109 lines exceeds threshold
+    ⚠ error handling: 1 unwrap
+  ✗ VIOLATION   StreamedParser::parse_assignment_expr (line 2719) [HIGH]
+    Logic: if (line 2725)
+    Calls: .parse_bitwise_expr() (line 2720), .expect_chars() (line 2725), LineInfo::new_one_char (line 2725), .parse_assignment_expr() (line 2726), LineInfo::new (line 2731), .line_info() (line 2732)
+    Effort: 14.0
+    Complexity: logic=1, calls=7, nesting=2, cognitive=4, cyclomatic=2
+  ✗ VIOLATION   StreamedParser::next_ast_node (line 2755) [HIGH]
+    Logic: if (line 2756), if (line 2776)
+    Calls: .peek_next_token() (line 2756), .parse_macro_def() (line 2758), .parse_data_stmt() (line 2759), .parse_let_stmt() (line 2760), .parse_mut_stmt() (line 2761), .parse_include_stmt() (line 2762), .parse_if_expr() (line 2763), .parse_fn_expr() (line 2764), .parse_extern_stmt() (line 2765), .parse_return_stmt() (line 2766), .parse_for_in_expr() (line 2767), .parse_while_stmt() (line 2768), .parse_type_alias() (line 2769), .parse_defer_stmt() (line 2770), .parse_match_stmt() (line 2771), .parse_guard_clause() (line 2772), .parse_sizeof_expr() (line 2773), .parse_assignment_expr() (line 2774), .next_token() (line 2779), .next_ast_node() (line 2780), .parse_bitwise_expr() (line 2782)
+    Effort: 39.5
+    Complexity: logic=2, calls=23, nesting=3, cognitive=8, cyclomatic=3
+
+═══ Summary ═══
+  Functions: 207    Quality Score: 69.9%
+
+  IOSP:         50.4%  (26I, 38O, 80T, 63 violations)
+  Complexity:   44.0%  (23 complexity, 6 magic numbers, 4 nesting, 29 long fn, 2 unsafe, 52 error handling)
+  DRY:          84.1%  (1 duplicates, 5 fragments, 15 dead code, 10 boilerplate)
+  SRP:          96.1%  (2 struct, 4 module, 2 params)
+  Coupling:     97.1%  (1 cycles, 4 SDP)
+  Test Quality: 69.6%  (1 no assertion, 62 untested)
+
+288 quality findings. Run with --verbose for details.
+
+═══ Coupling ═══
+  Modules analyzed: 11
+  ✗ Circular dependency: compiler → errors → lexer → parser → reader → states
+  ⚠ SDP violation: errors (I=0.43) depends on compiler (I=0.78)
+  ⚠ SDP violation: errors (I=0.43) depends on parser (I=0.56)
+  ⚠ SDP violation: parser (I=0.56) depends on lexer (I=0.57)
+  ⚠ SDP violation: states (I=0.40) depends on parser (I=0.56)
+
+  Incoming = modules depending on this one
+  Outgoing = modules this one depends on
+  Instability = Outgoing / (Incoming + Outgoing)
+
+                          In  Out  Instability
+    cli                    2    0  0.00
+    compiler               2    7  0.78
+    errors                 4    3  0.43
+    file                   4    0  0.00
+    lexer                  3    4  0.57
+    main                   0    7  1.00
+    parser                 4    5  0.56
+    reader                 3    3  0.50
+    states                 3    2  0.40
+    tokens                 4    0  0.00
+    utils                  2    0  0.00
+
+═══ DRY / Dead Code ═══
+  ⚠ Group 1: Exact duplicate (2 functions)
+    - StreamedParser::parse_mut_stmt (parser.rs:1861)
+    - StreamedParser::parse_let_stmt (parser.rs:1940)
+  ⚠ Fragment 1: 3 matching statements
+    - StreamedParser::parse_exponential_expr (parser.rs:1624-1635)
+    - StreamedParser::parse_multiplicative_expr (parser.rs:1672-1683)
+  ⚠ Fragment 2: 3 matching statements
+    - StreamedParser::parse_exponential_expr (parser.rs:1624-1635)
+    - StreamedParser::parse_additive_expr (parser.rs:1718-1729)
+  ⚠ Fragment 3: 3 matching statements
+    - StreamedParser::parse_multiplicative_expr (parser.rs:1672-1683)
+    - StreamedParser::parse_additive_expr (parser.rs:1718-1729)
+  ⚠ Fragment 4: 6 matching statements
+    - StreamedParser::parse_mut_stmt (parser.rs:1862-1937)
+    - StreamedParser::parse_let_stmt (parser.rs:1941-2016)
+  ⚠ Fragment 5: 3 matching statements
+    - CraneliftGenerator::compile_extern_fn (compiler/cranelift/mod.rs:1641-1649)
+    - CraneliftGenerator::compile_func (compiler/cranelift/mod.rs:1893-1901)
+  ⚠ LineInfo::to_ranges [uncalled] (tokens.rs:65) — never called; consider removing
+  ⚠ CharReader::get_snippet [uncalled] (reader.rs:76) — never called; consider removing
+  ⚠ StreamedParser::parse_complete [uncalled] (parser.rs:599) — never called; consider removing
+  ⚠ StreamedParser::parse_break_stmt [uncalled] (parser.rs:2742) — never called; consider removing
+  ⚠ StreamedParser::peek_next_ast_node [uncalled] (parser.rs:2789) — never called; consider removing
+  ⚠ modifiers_of [uncalled] (parser.rs:2802) — never called; consider removing
+  ⚠ generics_of [uncalled] (parser.rs:2806) — never called; consider removing
+  ⚠ argument_types_of [uncalled] (parser.rs:2810) — never called; consider removing
+  ⚠ return_type_of [uncalled] (parser.rs:2814) — never called; consider removing
+  ⚠ VariableBuilder::has_var [uncalled] (compiler/cranelift/builders.rs:131) — never called; consider removing
+  ⚠ CraneliftGenerator::get_calls_of_func [uncalled] (compiler/cranelift/mod.rs:1836) — never called; consider removing
+  ⚠ MethodTableValue::into_stackslot [uncalled] (compiler/cranelift/value.rs:24) — never called; consider removing
+  ⚠ OneOf::unwrap_left [uncalled] (utils.rs:43) — never called; consider removing
+  ⚠ OneOf::unwrap_centre [uncalled] (utils.rs:50) — never called; consider removing
+  ⚠ OneOf::unwrap_right [uncalled] (utils.rs:57) — never called; consider removing
+  ⚠ [BP-002] LineInfo (tokens.rs:21) — Trivial Display implementation with a single write! call
+    → Consider using derive_more::Display
+  ⚠ [BP-002] StatementIdentifier (compiler/identifiers.rs:31) — Trivial Display implementation with a single write! call
+    → Consider using derive_more::Display
+  ⚠ [BP-003] LineInfo (tokens.rs:41) — 4 trivial getter/setter methods — consider field visibility or accessor macros
+    → Consider making fields pub or using a getter/setter derive macro
+  ⚠ [BP-009] AstNode::CallExpr (parser.rs:1445) — 2 constructions of `AstNode::CallExpr` with overlapping fields
+    → Use struct update syntax: `Type { changed, ..base }`
+  ⚠ [BP-009] AstNode::MutStmt (parser.rs:1861) — 2 constructions of `AstNode::MutStmt` with overlapping fields
+    → Use struct update syntax: `Type { changed, ..base }`
+  ⚠ [BP-009] AstNode::LetStmt (parser.rs:1940) — 2 constructions of `AstNode::LetStmt` with overlapping fields
+    → Use struct update syntax: `Type { changed, ..base }`
+  ⚠ [BP-009] MatchArm (parser.rs:2473) — 2 constructions of `MatchArm` with overlapping fields
+    → Use struct update syntax: `Type { changed, ..base }`
+  ⚠ [BP-009] StackSlotData (compiler/cranelift/mod.rs:667) — 2 constructions of `StackSlotData` with overlapping fields
+    → Use struct update syntax: `Type { changed, ..base }`
+  ⚠ [BP-010] (anonymous) (parser.rs:622) — Format string "{}.msc" repeated 4 times
+    → Extract repeated format string into a helper function or constant
+  ⚠ [BP-010] (anonymous) (compiler/cranelift/mod.rs:2038) — Format string "{}.msc" repeated 4 times
+    → Extract repeated format string into a helper function or constant
+  ⚠ Repeated match [(unknown)] Group 1: 4 arms, 10 instances
+    - parse_data_init_expr (parser.rs:1190)
+    - parse_primary_expr (parser.rs:1257)
+    - parse_for_in_expr (parser.rs:2283)
+    - parse_type_alias (parser.rs:2353)
+    - parse_macro_def (parser.rs:2396)
+    - parse_macro_def (parser.rs:2412)
+    - parse_macro_def (parser.rs:2423)
+    - parse_data_stmt (parser.rs:2560)
+    - parse_data_stmt (parser.rs:2587)
+    - parse_data_stmt (parser.rs:2617)
+  ⚠ Repeated match [(unknown)] Group 2: 3 arms, 5 instances
+    - parse_data_init_expr (parser.rs:1213)
+    - parse_mut_stmt (parser.rs:1890)
+    - parse_mut_stmt (parser.rs:1916)
+    - parse_let_stmt (parser.rs:1969)
+    - parse_let_stmt (parser.rs:1995)
+
+═══ SRP Analysis ═══
+  ⚠ StreamedParser (parser.rs:534) — LCOM4=3, fields=3, methods=48, fan-out=96, score=0.81
+    Cluster 1: methods=[iter], fields=[]
+    Cluster 2: methods=[new, expect_ident, expect_chars, expect_char, parse_fn_type, parse_ident_type, parse_type, parse_macro_list, parse_list, parse_tg_bound, parse_tg_list, parse_args_list, parse_array_expr, parse_block_expr, parse_data_init_expr, parse_primary_expr, parse_call_expr, parse_path_expr, parse_member_expr, parse_cast_expr, parse_exponential_expr, parse_multiplicative_expr, parse_additive_expr, parse_bitwise_expr, parse_comparative_expr, parse_mut_stmt, parse_let_stmt, parse_include_stmt, parse_if_expr, parse_fn_expr, parse_extern_stmt, parse_extern_fn_stmt, parse_return_stmt, parse_for_in_expr, parse_while_stmt, parse_type_alias, parse_macro_def, parse_defer_stmt, parse_match_stmt, parse_data_stmt, parse_guard_clause, parse_sizeof_expr, parse_assignment_expr, parse_break_stmt, next_ast_node, peek_next_ast_node], fields=[file, lexer, macros]
+    Cluster 3: methods=[parse_complete], fields=[]
+  ⚠ CraneliftGenerator (compiler/cranelift/mod.rs:98) — LCOM4=1, fields=24, methods=22, fan-out=210, score=0.60
+    Cluster 1: methods=[new, compile_bit_op, compile_cmp_op, compile_num_op, compile_prefix_op, compile_body_expr, compile_while_expr, compile_for_in_expr, compile_body, compile_while_body, compile_extern_fn, compile_array, make_string, compile_string, estimate_type_of, get_calls_of_func, compile_func, compile_global, compile, compile_if_expr, compile_match, compile_if_stmt], fields=[command, module, included_modules, call_conv, compiling_list, fn_counter, file_path, deferred_items, parser, var_builder, function_variants, data_declarations, nodes, isa, tg, fn_refs, deallocator_fns, counter, functions, must_frees, allocator_fns, isa_builder, module_name, auto_frees]
+  ⚠ errors.rs — 530 production lines (score=0.46)
+  ⚠ parser.rs — 2390 production lines (score=1.00)
+  ⚠ compiler/cranelift/types.rs — 368 production lines (score=0.14)
+  ⚠ compiler/cranelift/mod.rs — 1889 production lines (score=1.00)
+  ⚠ VariableBuilder::set_var (compiler/cranelift/builders.rs:68) — 6 parameters (exceeds threshold)
+  ⚠ CraneliftGenerator::compile_if_stmt (compiler/cranelift/mod.rs:2380) — 6 parameters (exceeds threshold)
+
+═══ Test Quality ═══
+  ⚠ example (compiler/cranelift/mangle.rs:84) — TQ-001  No assertion
+  ⚠ begin_line (tokens.rs:72) — TQ-003  Untested
+  ⚠ begin_char (tokens.rs:80) — TQ-003  Untested
+  ⚠ line_info (tokens.rs:101) — TQ-003  Untested
+  ⚠ is_mosaic_ident_start (lexer.rs:31) — TQ-003  Untested
+  ⚠ is_mosaic_ident_part (lexer.rs:35) — TQ-003  Untested
+  ⚠ peek_next_token (lexer.rs:121) — TQ-003  Untested
+  ⚠ next_token (lexer.rs:131) — TQ-003  Untested
+  ⚠ next_char (reader.rs:64) — TQ-003  Untested
+  ⚠ peek_next_char (reader.rs:72) — TQ-003  Untested
+  ⚠ line_info (parser.rs:458) — TQ-003  Untested
+  ⚠ is_stmt (parser.rs:499) — TQ-003  Untested
+  ⚠ is_special (parser.rs:513) — TQ-003  Untested
+  ⚠ is_expr (parser.rs:517) — TQ-003  Untested
+  ⚠ is_literal (parser.rs:521) — TQ-003  Untested
+  ⚠ expect_ident (parser.rs:651) — TQ-003  Untested
+  ⚠ expect_chars (parser.rs:699) — TQ-003  Untested
+  ⚠ expect_char (parser.rs:728) — TQ-003  Untested
+  ⚠ parse_fn_type (parser.rs:768) — TQ-003  Untested
+  ⚠ parse_ident_type (parser.rs:797) — TQ-003  Untested
+  ⚠ parse_type (parser.rs:847) — TQ-003  Untested
+  ⚠ parse_macro_list (parser.rs:913) — TQ-003  Untested
+  ⚠ parse_list (parser.rs:953) — TQ-003  Untested
+  ⚠ parse_tg_bound (parser.rs:994) — TQ-003  Untested
+  ⚠ parse_tg_list (parser.rs:1032) — TQ-003  Untested
+  ⚠ parse_args_list (parser.rs:1075) — TQ-003  Untested
+  ⚠ parse_array_expr (parser.rs:1142) — TQ-003  Untested
+  ⚠ parse_block_expr (parser.rs:1154) — TQ-003  Untested
+  ⚠ parse_data_init_expr (parser.rs:1181) — TQ-003  Untested
+  ⚠ parse_primary_expr (parser.rs:1246) — TQ-003  Untested
+  ⚠ parse_call_expr (parser.rs:1445) — TQ-003  Untested
+  ⚠ parse_path_expr (parser.rs:1488) — TQ-003  Untested
+  ⚠ parse_member_expr (parser.rs:1539) — TQ-003  Untested
+  ⚠ parse_cast_expr (parser.rs:1572) — TQ-003  Untested
+  ⚠ parse_exponential_expr (parser.rs:1618) — TQ-003  Untested
+  ⚠ parse_multiplicative_expr (parser.rs:1666) — TQ-003  Untested
+  ⚠ parse_additive_expr (parser.rs:1712) — TQ-003  Untested
+  ⚠ parse_bitwise_expr (parser.rs:1788) — TQ-003  Untested
+  ⚠ parse_comparative_expr (parser.rs:1821) — TQ-003  Untested
+  ⚠ parse_mut_stmt (parser.rs:1861) — TQ-003  Untested
+  ⚠ parse_let_stmt (parser.rs:1940) — TQ-003  Untested
+  ⚠ parse_include_stmt (parser.rs:2019) — TQ-003  Untested
+  ⚠ parse_if_expr (parser.rs:2042) — TQ-003  Untested
+  ⚠ parse_fn_expr (parser.rs:2092) — TQ-003  Untested
+  ⚠ parse_extern_stmt (parser.rs:2187) — TQ-003  Untested
+  ⚠ parse_extern_fn_stmt (parser.rs:2214) — TQ-003  Untested
+  ⚠ parse_return_stmt (parser.rs:2263) — TQ-003  Untested
+  ⚠ parse_for_in_expr (parser.rs:2280) — TQ-003  Untested
+  ⚠ parse_while_stmt (parser.rs:2325) — TQ-003  Untested
+  ⚠ parse_type_alias (parser.rs:2350) — TQ-003  Untested
+  ⚠ parse_macro_def (parser.rs:2389) — TQ-003  Untested
+  ⚠ parse_defer_stmt (parser.rs:2447) — TQ-003  Untested
+  ⚠ parse_match_stmt (parser.rs:2473) — TQ-003  Untested
+  ⚠ parse_data_stmt (parser.rs:2557) — TQ-003  Untested
+  ⚠ parse_guard_clause (parser.rs:2667) — TQ-003  Untested
+  ⚠ parse_sizeof_expr (parser.rs:2700) — TQ-003  Untested
+  ⚠ parse_assignment_expr (parser.rs:2719) — TQ-003  Untested
+  ⚠ next_ast_node (parser.rs:2755) — TQ-003  Untested
+  ⚠ mangle_stmt_identifier (compiler/identifiers.rs:11) — TQ-003  Untested
+  ⚠ get_var_type (compiler/cranelift/builders.rs:140) — TQ-003  Untested
+  ⚠ estimate_type_of (compiler/cranelift/mod.rs:1761) — TQ-003  Untested
+  ⚠ flatten_ast (compiler/cranelift/ast.rs:4) — TQ-003  Untested
+  ⚠ get_usages_of (compiler/analyser/mod.rs:26) — TQ-003  Untested

@@ -1,0 +1,33 @@
+# The mcontext library handles contexts and context switching, which are required for coroutines
+import mcontext;
+import std::io;
+
+fn otherTask(initiator: &+mcontext::Context) -> void {
+    io::println("Hello from other context!");
+}
+
+fn main -> void @nomangle {
+    # Empty context for swapping
+    mut mainContext: &+mcontext::Context
+        = mcontext::Context::new(link: nil, task: &);
+
+    # Creates a new context where the link is mainContext
+    # Implicit retain of mainContext here
+    let otherContext = mainContext.createSubContext(task: otherTask);
+
+    # This captures the current state, saves it into self.link, and then switches
+    # to the other context
+    #
+    # When otherTask is run, the link address is set to self.link.returnTo
+    # Context::returnTo returns to a context, disregarding the link context
+    otherContext.switchTo();
+}
+
+# fn Context::new(link link_ctx: &+instancetype, task task: fn(&+instancetype) -> void) -> &+instancetype
+# fn Context::createSubContext(self: &+instancetype, task task: fn(&+instancetype) -> void) -> &instancetype
+# fn Context::returnTo(self: &+instancetype)
+
+interface Context : ... {
+    let link_ctx: &+^instancetype;
+    let registers: 48[]
+}

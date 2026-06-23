@@ -1,0 +1,109 @@
+# Interfaces are blueprints for classes
+# Unlike Objective-C, Mosaic uses static dispatch
+
+import core::msr;
+import core::marker;
+import core::data;
+
+interface Data : msr::Ref, marker::StackCompat {
+    # The default visibility is @protected
+    # Using visibility modifiers changes the visibility of the backing variable
+    # Use visibility modifiers on synthesise statements to change getter/setter
+    # visibility.
+    #
+    # @readonly makes the backing property readonly
+    # Since we used let to define it no set method will be synthesised
+    let @readonly x: i64;
+    let @readonly y: i64;
+
+    # You can use instancetype (similar to Objective-C) to mean the type the
+    # method is defined on (Data)
+    fn new(x: i64, y: i64) -> &instancetype @public;
+
+    # Define two signatures for init so that one works on heap refs and another
+    # on stack refs
+    fn init(self: &instancetype, x: i64, y: i64) -> void @public;
+    fn init(self: &~instancetype, x: i64, y: i64) -> void @public;
+}
+
+# An impl block provides optional implementations for methods
+impl Data {
+    # synthesise behaves like it does in Objective-C, and synthesise let
+    # synthesises implementations for the getter (Data::prop) and setter of the
+    # property (Data::setProp) when applicable
+    synthesise let @public x;
+    synthesise let @public y;
+
+    # The compiler knows how to synthesise a few interface methods
+    # Since Data never needs to "own" allocations it doesn't create a regioned
+    # allocation.
+    synthesise fn Ref::alloc;
+    synthesise fn Ref::dealloc;
+    synthesise fn Ref::drop;
+
+    # If a function is one expression we can just use =
+    # Now we actually need to initialise superclasses so it isn't
+    # But the point stands
+    fn new(x: i64, y: i64) -> &instancetype @allocates {
+        mut self = instancetype::alloc();
+        msr::Ref::init(self as &msr::Ref);
+        # marker::StackCompat needs no initialisation
+        return self<.init(x, y);
+    }
+
+    fn init(self: &instancetype, x: i64, y: i64) -> void {
+        # Backing property's names are the property name prefixed with an
+        # underscore
+        self._x = x;
+        self._y = y;
+    }
+
+    fn init(self: &~instancetype, x: i64, y: i64) -> void {
+        self._x = x;
+        self._y = y;
+    }
+}
+
+# &Data will be a normal pointer to some data since it has an implementation
+# Even if &Data has other interfaces which inherit from it the compiler defines
+# how to cast from a subclass to the superclass (which is usually just a simple
+# bit reinterpretation and maybe offset as the compiler ensures that super
+# properties come before subclass properties and remain in the same order as
+# defined in the superclass).
+#
+# Since msr::Ref has no implementation, an &msr::Ref is a fat pointer, where the
+# first 8 bytes (or pointer width) are a pointer to a vtable (usually created at
+# compile time, so usually it points to an adress in .data/.rodata) and a pointer
+# to the bytes of the reference (which the compiler casts from the subclass in a
+# similar method to superclasses with implementations).
+#
+# FAT POINTER LAYOUT
+#
+# ----------------- Metadata
+# 8b (e.g. vtable pointer, length)
+# ----------------- Data
+# 8b (e.g. pointer to data bytes)
+#
+# CRANELIFT REPRESENTATION: u64x2 (with :) or u128 (without :)
+# SIZE: 16
+# ALIGNMENT: 8
+#
+# The difference between &:.[u8] and &.[u8] is that the &:.[u8] is stored in a
+# 128 bit SIMD register, whereas &.[u8] is stored across two 64-bit registers. If
+# no registers are available then it will be spilled onto the stack. Usually there
+# tends to be more SIMD registers available (unless you are writing SIMD heavy code)
+#
+# Regardless of where the fat pointer is stored, you can separate the metadata
+# and data. You can use the `ptr::metadata` or `ptr::data` instrinsics on the
+# pointer and the compiler will expand that to the required operation.
+#
+# With a SIMD-representation fat pointer, you can also use `propagate` on it.
+# `let len: uptr = propagate(!:; $1) "lmnop";`
+# `let bytes: *u8 = propagate(!:; $2) "lmnop";`
+#
+# You CANNOT use the standard lane extraction syntax (`[n]`) unless you cast the
+# SIMD-representation fat pointer to a `uptrx2` first. If you do not, it will
+# run `instancetype::Index::at`
+#
+# `let len: uptr = uptrx2<"lmnop">[0];`
+# `let bytes: uptr = uptrx2<"lmnop">[1];`
