@@ -1,8 +1,8 @@
 use std::num::{NonZeroU8, NonZeroU16};
 
 use mosaic_shared::debug::{PositionRange, TokenContext};
-use mosaic_shared::states::Position;
 use mosaic_shared::reader::CharReader;
+use mosaic_shared::states::Position;
 
 use crate::lexer::StreamedLexer;
 use crate::lexer::tokens::{StringEscape, StringInnards, StringPart, Token};
@@ -40,9 +40,9 @@ pub fn string_lexer_static() {
                         line: unsafe { NonZeroU16::new_unchecked(1) },
                         column: unsafe { NonZeroU8::new_unchecked(7) },
                     },
-                    Some(TokenContext::StringChars)
-                )
-            )])
+                    Some(TokenContext::StringChars),
+                ),
+            )]),
         }),
         PositionRange::new(
             "-".into(),
@@ -56,9 +56,10 @@ pub fn string_lexer_static() {
                 line: unsafe { NonZeroU16::new_unchecked(1) },
                 column: unsafe { NonZeroU8::new_unchecked(8) },
             },
-            Some(TokenContext::StringChars)
-        )
-    ).into()));
+            Some(TokenContext::StringChars),
+        ),
+    )
+        .into()));
 
     assert_eq!(result, expected);
 }
@@ -120,25 +121,23 @@ pub fn string_lexer_simple_escape() {
     let result = lexer.next_token();
     let expected = Some(Ok((
         Token::String(StringInnards {
-            parts: Box::new([
-                (
-                    StringPart::Escape(StringEscape::Newline),
-                    PositionRange::new(
-                        "-".into(),
-                        Position {
-                            offset: 1,
-                            line: unsafe { NonZeroU16::new_unchecked(1) },
-                            column: unsafe { NonZeroU8::new_unchecked(2) },
-                        },
-                        Position {
-                            offset: 3,
-                            line: unsafe { NonZeroU16::new_unchecked(1) },
-                            column: unsafe { NonZeroU8::new_unchecked(4) },
-                        },
-                        Some(TokenContext::StringEscape)
-                    )
-                )
-            ])
+            parts: Box::new([(
+                StringPart::Escape(StringEscape::Newline),
+                PositionRange::new(
+                    "-".into(),
+                    Position {
+                        offset: 1,
+                        line: unsafe { NonZeroU16::new_unchecked(1) },
+                        column: unsafe { NonZeroU8::new_unchecked(2) },
+                    },
+                    Position {
+                        offset: 3,
+                        line: unsafe { NonZeroU16::new_unchecked(1) },
+                        column: unsafe { NonZeroU8::new_unchecked(4) },
+                    },
+                    Some(TokenContext::StringEscape),
+                ),
+            )]),
         }),
         PositionRange::new(
             "-".into(),
@@ -152,9 +151,10 @@ pub fn string_lexer_simple_escape() {
                 line: unsafe { NonZeroU16::new_unchecked(1) },
                 column: unsafe { NonZeroU8::new_unchecked(5) },
             },
-            Some(TokenContext::StringChars)
-        )
-    ).into()));
+            Some(TokenContext::StringChars),
+        ),
+    )
+        .into()));
 
     assert_eq!(result, expected);
 }
@@ -184,8 +184,8 @@ pub fn string_lexer_simple_escapes() {
                             line: unsafe { NonZeroU16::new_unchecked(1) },
                             column: unsafe { NonZeroU8::new_unchecked(7) },
                         },
-                        Some(TokenContext::StringChars)
-                    )
+                        Some(TokenContext::StringChars),
+                    ),
                 ),
                 (
                     StringPart::Escape(StringEscape::Newline),
@@ -201,8 +201,8 @@ pub fn string_lexer_simple_escapes() {
                             line: unsafe { NonZeroU16::new_unchecked(1) },
                             column: unsafe { NonZeroU8::new_unchecked(9) },
                         },
-                        Some(TokenContext::StringEscape)
-                    )
+                        Some(TokenContext::StringEscape),
+                    ),
                 ),
                 (
                     StringPart::Static("ololo".to_string()),
@@ -218,8 +218,8 @@ pub fn string_lexer_simple_escapes() {
                             line: unsafe { NonZeroU16::new_unchecked(1) },
                             column: unsafe { NonZeroU8::new_unchecked(14) },
                         },
-                        Some(TokenContext::StringChars)
-                    )
+                        Some(TokenContext::StringChars),
+                    ),
                 ),
                 (
                     StringPart::Escape(StringEscape::Tab),
@@ -235,8 +235,8 @@ pub fn string_lexer_simple_escapes() {
                             line: unsafe { NonZeroU16::new_unchecked(1) },
                             column: unsafe { NonZeroU8::new_unchecked(16) },
                         },
-                        Some(TokenContext::StringEscape)
-                    )
+                        Some(TokenContext::StringEscape),
+                    ),
                 ),
                 (
                     StringPart::Static("lollipop".to_string()),
@@ -252,10 +252,10 @@ pub fn string_lexer_simple_escapes() {
                             line: unsafe { NonZeroU16::new_unchecked(1) },
                             column: unsafe { NonZeroU8::new_unchecked(24) },
                         },
-                        Some(TokenContext::StringChars)
-                    )
+                        Some(TokenContext::StringChars),
+                    ),
                 ),
-            ])
+            ]),
         }),
         PositionRange::new(
             "-".into(),
@@ -269,9 +269,10 @@ pub fn string_lexer_simple_escapes() {
                 line: unsafe { NonZeroU16::new_unchecked(1) },
                 column: unsafe { NonZeroU8::new_unchecked(25) },
             },
-            Some(TokenContext::StringChars)
-        )
-    ).into()));
+            Some(TokenContext::StringChars),
+        ),
+    )
+        .into()));
 
     assert_eq!(result, expected);
 }
@@ -301,8 +302,8 @@ pub fn string_lexer_simple_parameterised_escapes() {
                             line: unsafe { NonZeroU16::new_unchecked(1) },
                             column: unsafe { NonZeroU8::new_unchecked(6) },
                         },
-                        Some(TokenContext::StringEscapeParameterised)
-                    )
+                        Some(TokenContext::StringEscapeParameterised),
+                    ),
                 ),
                 (
                     StringPart::Escape(StringEscape::UnicodeCharacter('A')),
@@ -318,10 +319,10 @@ pub fn string_lexer_simple_parameterised_escapes() {
                             line: unsafe { NonZeroU16::new_unchecked(1) },
                             column: unsafe { NonZeroU8::new_unchecked(14) },
                         },
-                        Some(TokenContext::StringEscapeParameterised)
-                    )
-                )
-            ])
+                        Some(TokenContext::StringEscapeParameterised),
+                    ),
+                ),
+            ]),
         }),
         PositionRange::new(
             "-".into(),
@@ -335,13 +336,15 @@ pub fn string_lexer_simple_parameterised_escapes() {
                 line: unsafe { NonZeroU16::new_unchecked(1) },
                 column: unsafe { NonZeroU8::new_unchecked(15) },
             },
-            Some(TokenContext::StringChars)
-        )
-    ).into()));
+            Some(TokenContext::StringChars),
+        ),
+    )
+        .into()));
 
     assert_eq!(result, expected);
 }
 
+#[test]
 pub fn string_lexer_complex_parameterised_escapes() {
     let content = r#""\rgb(fg; 255, 000, 000)\rgb(bg; 255, 255, 255)lmnop\reset\bold\ansi(m: 32)""#;
 
@@ -366,8 +369,8 @@ pub fn string_lexer_complex_parameterised_escapes() {
                             line: unsafe { NonZeroU16::new_unchecked(1) },
                             column: unsafe { NonZeroU8::new_unchecked(25) },
                         },
-                        Some(TokenContext::StringEscapeParameterised)
-                    )
+                        Some(TokenContext::StringEscapeParameterised),
+                    ),
                 ),
                 (
                     StringPart::Escape(StringEscape::ANSIRGBBG(255, 255, 255)),
@@ -383,8 +386,8 @@ pub fn string_lexer_complex_parameterised_escapes() {
                             line: unsafe { NonZeroU16::new_unchecked(1) },
                             column: unsafe { NonZeroU8::new_unchecked(48) },
                         },
-                        Some(TokenContext::StringEscapeParameterised)
-                    )
+                        Some(TokenContext::StringEscapeParameterised),
+                    ),
                 ),
                 (
                     StringPart::Static("lmnop".to_string()),
@@ -400,8 +403,8 @@ pub fn string_lexer_complex_parameterised_escapes() {
                             line: unsafe { NonZeroU16::new_unchecked(1) },
                             column: unsafe { NonZeroU8::new_unchecked(53) },
                         },
-                        Some(TokenContext::StringChars)
-                    )
+                        Some(TokenContext::StringChars),
+                    ),
                 ),
                 (
                     StringPart::Escape(StringEscape::ANSIResetAll),
@@ -417,8 +420,8 @@ pub fn string_lexer_complex_parameterised_escapes() {
                             line: unsafe { NonZeroU16::new_unchecked(1) },
                             column: unsafe { NonZeroU8::new_unchecked(59) },
                         },
-                        Some(TokenContext::StringEscape)
-                    )
+                        Some(TokenContext::StringEscape),
+                    ),
                 ),
                 (
                     StringPart::Escape(StringEscape::ANSIBold),
@@ -434,8 +437,8 @@ pub fn string_lexer_complex_parameterised_escapes() {
                             line: unsafe { NonZeroU16::new_unchecked(1) },
                             column: unsafe { NonZeroU8::new_unchecked(64) },
                         },
-                        Some(TokenContext::StringEscape)
-                    )
+                        Some(TokenContext::StringEscape),
+                    ),
                 ),
                 (
                     StringPart::Escape(StringEscape::ANSIOther('m', Box::new([32]))),
@@ -451,10 +454,10 @@ pub fn string_lexer_complex_parameterised_escapes() {
                             line: unsafe { NonZeroU16::new_unchecked(1) },
                             column: unsafe { NonZeroU8::new_unchecked(76) },
                         },
-                        Some(TokenContext::StringEscapeParameterised)
-                    )
+                        Some(TokenContext::StringEscapeParameterised),
+                    ),
                 ),
-            ])
+            ]),
         }),
         PositionRange::new(
             "-".into(),
@@ -468,9 +471,10 @@ pub fn string_lexer_complex_parameterised_escapes() {
                 line: unsafe { NonZeroU16::new_unchecked(1) },
                 column: unsafe { NonZeroU8::new_unchecked(77) },
             },
-            Some(TokenContext::StringChars)
-        )
-    ).into()));
+            Some(TokenContext::StringChars),
+        ),
+    )
+        .into()));
 
     assert_eq!(result, expected);
 }
@@ -487,43 +491,39 @@ pub fn string_lexer_templates() {
     let result = lexer.next_token();
     let expected = Some(Ok((
         Token::String(StringInnards {
-            parts: Box::new([
-                (
-                    StringPart::Template(Box::new([
-                        (
-                            Token::Keyword("import"),
-                            PositionRange::new(
-                                "-".into(),
-                                Position {
-                                    offset: 3,
-                                    line: unsafe { NonZeroU16::new_unchecked(1) },
-                                    column: unsafe { NonZeroU8::new_unchecked(4) },
-                                },
-                                Position {
-                                    offset: 9,
-                                    line: unsafe { NonZeroU16::new_unchecked(1) },
-                                    column: unsafe { NonZeroU8::new_unchecked(10) },
-                                },
-                                Some(TokenContext::Keyword)
-                            )
-                        )
-                    ])),
+            parts: Box::new([(
+                StringPart::Template(Box::new([(
+                    Token::Keyword("import"),
                     PositionRange::new(
                         "-".into(),
                         Position {
-                            offset: 1,
+                            offset: 3,
                             line: unsafe { NonZeroU16::new_unchecked(1) },
-                            column: unsafe { NonZeroU8::new_unchecked(2) },
+                            column: unsafe { NonZeroU8::new_unchecked(4) },
                         },
                         Position {
-                            offset: 10,
+                            offset: 9,
                             line: unsafe { NonZeroU16::new_unchecked(1) },
-                            column: unsafe { NonZeroU8::new_unchecked(11) },
+                            column: unsafe { NonZeroU8::new_unchecked(10) },
                         },
-                        Some(TokenContext::StringTemplate)
-                    )
-                )
-            ])
+                        Some(TokenContext::Keyword),
+                    ),
+                )])),
+                PositionRange::new(
+                    "-".into(),
+                    Position {
+                        offset: 1,
+                        line: unsafe { NonZeroU16::new_unchecked(1) },
+                        column: unsafe { NonZeroU8::new_unchecked(2) },
+                    },
+                    Position {
+                        offset: 10,
+                        line: unsafe { NonZeroU16::new_unchecked(1) },
+                        column: unsafe { NonZeroU8::new_unchecked(11) },
+                    },
+                    Some(TokenContext::StringTemplate),
+                ),
+            )]),
         }),
         PositionRange::new(
             "-".into(),
@@ -537,9 +537,10 @@ pub fn string_lexer_templates() {
                 line: unsafe { NonZeroU16::new_unchecked(1) },
                 column: unsafe { NonZeroU8::new_unchecked(12) },
             },
-            Some(TokenContext::StringChars)
-        )
-    ).into()));
+            Some(TokenContext::StringChars),
+        ),
+    )
+        .into()));
 
     assert_eq!(result, expected);
 }

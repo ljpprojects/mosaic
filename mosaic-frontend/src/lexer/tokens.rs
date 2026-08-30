@@ -1,7 +1,7 @@
-use std::fmt::Debug;
+use crate::lexer::string::STR_ESCAPE_SEQUENCES;
 use bigdecimal::{BigDecimal, num_bigint::BigInt};
 use mosaic_shared::debug::PositionRange;
-use crate::lexer::string::LEGAL_ESCAPE_SEQUENCES;
+use std::fmt::Debug;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StringEscape {
@@ -69,7 +69,7 @@ impl StringEscape {
     /// If the escape sequence is invalid, None is returned.
     /// If the matched escape sequence is parameterised, None is returned.
     pub fn try_from_escape_seq(seq: &str) -> Option<Self> {
-        let _guard = LEGAL_ESCAPE_SEQUENCES.binary_search(&seq).ok()?;
+        let _guard = STR_ESCAPE_SEQUENCES.binary_search(&seq).ok()?;
 
         match seq {
             "\"" => Some(StringEscape::DoubleQuote),

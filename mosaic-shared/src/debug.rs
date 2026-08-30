@@ -1,4 +1,9 @@
-use std::{fmt::{Debug, Display, Formatter}, num::{NonZeroU8, NonZeroU16}, path::PathBuf, sync::Arc};
+use std::{
+    fmt::{Debug, Display, Formatter},
+    num::{NonZeroU8, NonZeroU16},
+    path::PathBuf,
+    sync::Arc,
+};
 
 use crate::states::Position;
 
@@ -12,6 +17,8 @@ pub enum TokenContext {
     Comment,
     NumberLiteral,
     CharLiteral,
+    CharEscape,
+    CharEscapeParameterised,
     Modifier,
     Keyword,
     Identifier,
@@ -43,9 +50,13 @@ impl Display for PositionRange {
         write!(
             f,
             "{}:{} - {}:{}{m_C}",
-            self.start.line, self.start.column,
-            self.end.line, self.end.column,
-            m_C = self.start.context
+            self.start.line,
+            self.start.column,
+            self.end.line,
+            self.end.column,
+            m_C = self
+                .start
+                .context
                 .map(|c| format!(" in {c:?}"))
                 .unwrap_or_default(),
         )
@@ -57,12 +68,16 @@ impl Debug for PositionRange {
         write!(
             f,
             "{F} @ {}:{} (+{s_O}) - {}:{} (+{e_O}){m_C}",
-            self.start.line, self.start.column,
-            self.end.line, self.end.column,
+            self.start.line,
+            self.start.column,
+            self.end.line,
+            self.end.column,
             F = self.start.file.display(),
             s_O = self.start.offset,
             e_O = self.end.offset,
-            m_C = self.start.context
+            m_C = self
+                .start
+                .context
                 .map(|c| format!(" in {c:?}"))
                 .unwrap_or_default(),
         )
@@ -70,11 +85,7 @@ impl Debug for PositionRange {
 }
 
 impl PositionRange {
-    pub fn one_char(
-        file: PathBuf,
-        pos: Position,
-        context: Option<TokenContext>,
-    ) -> Self {
+    pub fn one_char(file: PathBuf, pos: Position, context: Option<TokenContext>) -> Self {
         let pos = DebugPosition {
             file,
             offset: pos.offset,
@@ -111,6 +122,6 @@ impl PositionRange {
             context,
         };
 
-        Self { start, end, }
+        Self { start, end }
     }
 }

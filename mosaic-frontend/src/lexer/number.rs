@@ -1,7 +1,7 @@
 use bigdecimal::{BigDecimal, Zero, num_bigint::BigInt};
 
-use mosaic_shared::states::{LexerState, WithState};
 use mosaic_shared::debug::{PositionRange, TokenContext};
+use mosaic_shared::states::{LexerState, WithState};
 
 use crate::lexer::LexOutput;
 use crate::lexer::{StreamedLexer, errors::LexError, tokens::Token};
@@ -51,8 +51,7 @@ impl ActualScaleChangeExtension for BigDecimal {
         let mut d = self.clone();
         let offset = size_of::<BigInt>();
         unsafe {
-            *((&mut d) as *mut BigDecimal as *mut i64).byte_add(offset)
-                = scale;
+            *((&mut d) as *mut BigDecimal as *mut i64).byte_add(offset) = scale;
         };
         d
     }
@@ -134,15 +133,9 @@ impl ActualScaleChangeExtension for BigDecimal {
 /// MOSAIC COMPILER IS \{Schedule 9} MEANING \{Fun} BUT IS ALSO \{Schedule 1}
 ///
 /// I AM GOING TO SEND \{Gift = Schedule 6 Drug} TO YOUR HOUSE IN 2 \{Business Years}
-pub struct NumberLexer<'a> {
-    lexer: &'a mut StreamedLexer<'a>
-}
+pub struct NumberLexer;
 
-impl<'a> NumberLexer<'a> {
-    pub fn new(lexer: &'a mut StreamedLexer<'a>) -> Self {
-        Self { lexer }
-    }
-
+impl<'a> NumberLexer {
     /// Lex a base 10 number assuming we already know that it won't be another
     /// base. It still expects all of the digits of the number to be unconsumed.
     ///
@@ -162,8 +155,11 @@ impl<'a> NumberLexer<'a> {
     /// literal.
     ///
     /// This also handles scientific notation and applies it at compile time.
-    pub fn lex_number_base_10(&mut self, begin_state: LexerState<'a>) -> Result<LexOutput, LexError> {
-        self.lexer.cur_context = Some(TokenContext::NumberLiteral);
+    pub fn lex_base_10(
+        lexer: &mut StreamedLexer<'a>,
+        begin_state: LexerState<'a>,
+    ) -> Result<LexOutput, LexError> {
+        lexer.cur_context = Some(TokenContext::NumberLiteral);
 
         // We don't need to store the digits as thats a waste of space, we can just
         // multiply whatever is already in this by 10 (or generally the base)
@@ -197,36 +193,36 @@ impl<'a> NumberLexer<'a> {
         let mut state_flag = 0u8;
 
         loop {
-            let Some(next) =
-                self.lexer.next_char(false)
-                    .transpose()
-                    .inspect_err(|_| self.lexer.reset_to_state(begin_state))?
+            let Some(next) = lexer
+                .next_char(false)
+                .transpose()
+                .inspect_err(|_| lexer.reset_to_state(begin_state))?
             else {
-                break
+                break;
             };
 
             if next == 'p' || next == 'e' && state_flag & 0x10 == 0 {
                 // We have an exponent part now
                 state_flag = 2;
-                continue
+                continue;
             }
 
             // Negation is a unary operator and thus not the job of the lexer
 
             if next == '.' && state_flag & 4 == 0 {
                 state_flag = 5; // Enter fractional part (4 | 1)
-                continue
+                continue;
             } else if next == '.' {
                 // No fractional parts inside another fractional
                 // No fractional exponents
                 // Thus this is the start of a new token (probably a member access)
-                self.lexer.prev_char(false);
-                break
+                lexer.prev_char(false);
+                break;
             }
 
             if !next.is_ascii_digit() {
-                self.lexer.prev_char(false);
-                break
+                lexer.prev_char(false);
+                break;
             };
 
             let digit = next as i8 - '0' as i8;
@@ -241,7 +237,7 @@ impl<'a> NumberLexer<'a> {
                 exponent *= 10;
                 exponent += digit as i64;
             }
-        };
+        }
 
         eprintln!("frac {fraction_part}");
 
@@ -254,13 +250,14 @@ impl<'a> NumberLexer<'a> {
             return Ok(LexOutput(
                 Token::Integer(integer),
                 PositionRange::new(
-                    self.lexer.reader.path.into(),
+                    lexer.reader.path.into(),
                     begin_state.pos,
-                    self.lexer.pos,
-                    self.lexer.cur_context
+                    lexer.pos,
+                    lexer.cur_context,
                 ),
-                None
-            )).inspect(|_| self.lexer.cur_context = begin_state.cur_context)
+                None,
+            ))
+            .inspect(|_| lexer.cur_context = begin_state.cur_context);
         } else {
             // If any of those were true:
             //   state_flag & 4 == 4
@@ -274,13 +271,14 @@ impl<'a> NumberLexer<'a> {
             return Ok(LexOutput(
                 Token::Decimal(decimal),
                 PositionRange::new(
-                    self.lexer.reader.path.into(),
+                    lexer.reader.path.into(),
                     begin_state.pos,
-                    self.lexer.pos,
-                    self.lexer.cur_context
+                    lexer.pos,
+                    lexer.cur_context,
                 ),
-                None
-            )).inspect(|_| self.lexer.cur_context = begin_state.cur_context)
+                None,
+            ))
+            .inspect(|_| lexer.cur_context = begin_state.cur_context);
         }
     }
 
@@ -289,8 +287,11 @@ impl<'a> NumberLexer<'a> {
     ///
     /// The logic is basically the same as lex_number_base_10 but with adjustments
     /// made for the different base.
-    pub fn lex_number_base_16(&mut self, begin_state: LexerState<'a>) -> Result<LexOutput, LexError> {
-        self.lexer.cur_context = Some(TokenContext::NumberLiteral);
+    pub fn lex_base_16(
+        lexer: &mut StreamedLexer<'a>,
+        begin_state: LexerState<'a>,
+    ) -> Result<LexOutput, LexError> {
+        lexer.cur_context = Some(TokenContext::NumberLiteral);
 
         let mut integer_part = BigInt::ZERO;
         let mut fraction_part = BigDecimal::zero();
@@ -303,32 +304,32 @@ impl<'a> NumberLexer<'a> {
         let mut state_flag = 0u8;
 
         loop {
-            let Some(next) =
-                self.lexer.next_char(false)
-                    .transpose()
-                    .inspect_err(|_| self.lexer.reset_to_state(begin_state))?
+            let Some(next) = lexer
+                .next_char(false)
+                .transpose()
+                .inspect_err(|_| lexer.reset_to_state(begin_state))?
             else {
-                break
+                break;
             };
 
             // e is not allowed as it is a hexadecimal digit
             if next == 'p' {
                 // We have an exponent part now
                 state_flag = 2;
-                continue
+                continue;
             }
 
             if next == '.' && state_flag & 4 == 0 {
                 state_flag |= 5; // Enter fractional part
-                continue
+                continue;
             } else if next == '.' {
-                self.lexer.prev_char(false);
-                break
+                lexer.prev_char(false);
+                break;
             }
 
             if !next.is_ascii_hexdigit() {
-                self.lexer.prev_char(false);
-                break
+                lexer.prev_char(false);
+                break;
             };
 
             // 0 - 9 = digits
@@ -338,24 +339,22 @@ impl<'a> NumberLexer<'a> {
 
             // Adjust upper/lowercase A-F to 10-15
             if digit >= 17 as i8 && digit <= 22 as i8 {
-               digit -= 7;
+                digit -= 7;
             } else if digit >= 49 as i8 && digit <= 54 as i8 {
-               digit -= 39;
+                digit -= 39;
             }
 
             if state_flag == 0 {
                 integer_part <<= 4; // * 2^4
                 integer_part += digit;
             } else if state_flag & 1 == 1 {
-                fraction_part +=
-                    BigDecimal::from(digit)
-                    / BigDecimal::from(16)
-                        .powi(fraction_part.fractional_digit_count() + 1);
+                fraction_part += BigDecimal::from(digit)
+                    / BigDecimal::from(16).powi(fraction_part.fractional_digit_count() + 1);
             } else if state_flag & 2 == 2 {
                 exponent <<= 4;
                 exponent += digit as i64;
             }
-        };
+        }
 
         // Combine our number into a BigInt/BigDecimal
         if fraction_part.fractional_digit_count() == 0 && exponent >= 0 {
@@ -366,13 +365,14 @@ impl<'a> NumberLexer<'a> {
             return Ok(LexOutput(
                 Token::Integer(integer),
                 PositionRange::new(
-                    self.lexer.reader.path.into(),
+                    lexer.reader.path.into(),
                     begin_state.pos,
-                    self.lexer.pos,
-                    self.lexer.cur_context
+                    lexer.pos,
+                    lexer.cur_context,
                 ),
-                None
-            )).inspect(|_| self.lexer.cur_context = begin_state.cur_context)
+                None,
+            ))
+            .inspect(|_| lexer.cur_context = begin_state.cur_context);
         } else {
             // Negative scale = positive power of ten
             // Positive scale = negative power of ten
@@ -381,13 +381,14 @@ impl<'a> NumberLexer<'a> {
             return Ok(LexOutput(
                 Token::Decimal(decimal),
                 PositionRange::new(
-                    self.lexer.reader.path.into(),
+                    lexer.reader.path.into(),
                     begin_state.pos,
-                    self.lexer.pos,
-                    self.lexer.cur_context
+                    lexer.pos,
+                    lexer.cur_context,
                 ),
-                None
-            )).inspect(|_| self.lexer.cur_context = begin_state.cur_context)
+                None,
+            ))
+            .inspect(|_| lexer.cur_context = begin_state.cur_context);
         }
     }
 
@@ -396,8 +397,11 @@ impl<'a> NumberLexer<'a> {
     ///
     /// The logic is basically the same as lex_number_base_10 but with adjustments
     /// made for the different base.
-    pub fn lex_number_base_8(&mut self, begin_state: LexerState<'a>) -> Result<LexOutput, LexError> {
-        self.lexer.cur_context = Some(TokenContext::NumberLiteral);
+    pub fn lex_base_8(
+        lexer: &mut StreamedLexer<'a>,
+        begin_state: LexerState<'a>,
+    ) -> Result<LexOutput, LexError> {
+        lexer.cur_context = Some(TokenContext::NumberLiteral);
 
         let mut integer_part = BigInt::ZERO;
         let mut fraction_part = BigDecimal::zero();
@@ -410,31 +414,31 @@ impl<'a> NumberLexer<'a> {
         let mut state_flag = 0u8;
 
         loop {
-            let Some(next) =
-                self.lexer.next_char(false)
-                    .transpose()
-                    .inspect_err(|_| self.lexer.reset_to_state(begin_state))?
+            let Some(next) = lexer
+                .next_char(false)
+                .transpose()
+                .inspect_err(|_| lexer.reset_to_state(begin_state))?
             else {
-                break
+                break;
             };
 
             if next == 'p' || next == 'e' {
                 // We have an exponent part now
                 state_flag = 2;
-                continue
+                continue;
             }
 
             if next == '.' && state_flag & 4 == 0 {
                 state_flag |= 5; // Enter fractional part
-                continue
+                continue;
             } else if next == '.' {
-                self.lexer.prev_char(false);
-                break
+                lexer.prev_char(false);
+                break;
             }
 
             if !next.is_ascii_octdigit() {
-                self.lexer.prev_char(false);
-                break
+                lexer.prev_char(false);
+                break;
             };
 
             // 0 - 1 = digits
@@ -444,15 +448,13 @@ impl<'a> NumberLexer<'a> {
                 integer_part <<= 3; // * 2^3 = 8
                 integer_part += digit;
             } else if state_flag & 1 == 1 {
-                fraction_part +=
-                    BigDecimal::from(digit)
-                    / BigDecimal::from(8)
-                        .powi(fraction_part.fractional_digit_count() + 1);
+                fraction_part += BigDecimal::from(digit)
+                    / BigDecimal::from(8).powi(fraction_part.fractional_digit_count() + 1);
             } else if state_flag & 2 == 2 {
                 exponent <<= 3;
                 exponent += digit as i64;
             }
-        };
+        }
 
         // Combine our number into a BigInt/BigDecimal
         if fraction_part.fractional_digit_count() == 0 && exponent >= 0 {
@@ -463,26 +465,28 @@ impl<'a> NumberLexer<'a> {
             return Ok(LexOutput(
                 Token::Integer(integer),
                 PositionRange::new(
-                    self.lexer.reader.path.into(),
+                    lexer.reader.path.into(),
                     begin_state.pos,
-                    self.lexer.pos,
-                    self.lexer.cur_context
+                    lexer.pos,
+                    lexer.cur_context,
                 ),
-                None
-            )).inspect(|_| self.lexer.cur_context = begin_state.cur_context)
+                None,
+            ))
+            .inspect(|_| lexer.cur_context = begin_state.cur_context);
         } else {
             let decimal = (fraction_part + integer_part) * BigDecimal::from(8).powi(exponent);
 
             return Ok(LexOutput(
                 Token::Decimal(decimal),
                 PositionRange::new(
-                    self.lexer.reader.path.into(),
+                    lexer.reader.path.into(),
                     begin_state.pos,
-                    self.lexer.pos,
-                    self.lexer.cur_context
+                    lexer.pos,
+                    lexer.cur_context,
                 ),
-                None
-            )).inspect(|_| self.lexer.cur_context = begin_state.cur_context)
+                None,
+            ))
+            .inspect(|_| lexer.cur_context = begin_state.cur_context);
         }
     }
 
@@ -491,8 +495,11 @@ impl<'a> NumberLexer<'a> {
     ///
     /// The logic is basically the same as lex_number_base_10 but with adjustments
     /// made for the different base.
-    pub fn lex_number_base_2(&mut self, begin_state: LexerState<'a>) -> Result<LexOutput, LexError> {
-        self.lexer.cur_context = Some(TokenContext::NumberLiteral);
+    pub fn lex_base_2(
+        lexer: &mut StreamedLexer<'a>,
+        begin_state: LexerState<'a>,
+    ) -> Result<LexOutput, LexError> {
+        lexer.cur_context = Some(TokenContext::NumberLiteral);
 
         let mut integer_part = BigInt::ZERO;
         let mut fraction_part = BigDecimal::zero();
@@ -504,31 +511,31 @@ impl<'a> NumberLexer<'a> {
         let mut state_flag = 0u8;
 
         loop {
-            let Some(next) =
-                self.lexer.next_char(false)
-                    .transpose()
-                    .inspect_err(|_| self.lexer.reset_to_state(begin_state))?
+            let Some(next) = lexer
+                .next_char(false)
+                .transpose()
+                .inspect_err(|_| lexer.reset_to_state(begin_state))?
             else {
-                break
+                break;
             };
 
             if next == 'p' || next == 'e' {
                 // We have an exponent part now
                 state_flag = 2;
-                continue
+                continue;
             }
 
             if next == '.' && state_flag & 1 == 0 {
                 state_flag |= 1; // Enter fractional part
-                continue
+                continue;
             } else if next == '.' {
-                self.lexer.prev_char(false);
-                break
+                lexer.prev_char(false);
+                break;
             }
 
             if next != '0' && next != '1' {
-                self.lexer.prev_char(false);
-                break
+                lexer.prev_char(false);
+                break;
             };
 
             // 0 - 1 = digits
@@ -538,15 +545,13 @@ impl<'a> NumberLexer<'a> {
                 integer_part <<= 1; // * 2^1
                 integer_part += digit;
             } else if state_flag & 1 == 1 {
-                fraction_part +=
-                    BigDecimal::from(digit)
-                    / BigDecimal::from(2)
-                        .powi(fraction_part.fractional_digit_count() + 1);
+                fraction_part += BigDecimal::from(digit)
+                    / BigDecimal::from(2).powi(fraction_part.fractional_digit_count() + 1);
             } else if state_flag & 2 == 2 {
                 exponent <<= 1;
                 exponent += digit as i64;
             }
-        };
+        }
 
         // Combine our number into a BigInt/BigDecimal
         if fraction_part.fractional_digit_count() == 0 && exponent >= 0 {
@@ -557,64 +562,76 @@ impl<'a> NumberLexer<'a> {
             return Ok(LexOutput(
                 Token::Integer(integer),
                 PositionRange::new(
-                    self.lexer.reader.path.into(),
+                    lexer.reader.path.into(),
                     begin_state.pos,
-                    self.lexer.pos,
-                    self.lexer.cur_context
+                    lexer.pos,
+                    lexer.cur_context,
                 ),
-                None
-            )).inspect(|_| self.lexer.cur_context = begin_state.cur_context)
+                None,
+            ))
+            .inspect(|_| lexer.cur_context = begin_state.cur_context);
         } else {
             let decimal = (fraction_part + integer_part) * BigDecimal::from(2).powi(exponent);
 
             return Ok(LexOutput(
                 Token::Decimal(decimal),
                 PositionRange::new(
-                    self.lexer.reader.path.into(),
+                    lexer.reader.path.into(),
                     begin_state.pos,
-                    self.lexer.pos,
-                    self.lexer.cur_context
+                    lexer.pos,
+                    lexer.cur_context,
                 ),
-                None
-            )).inspect(|_| self.lexer.cur_context = begin_state.cur_context)
+                None,
+            ))
+            .inspect(|_| lexer.cur_context = begin_state.cur_context);
         }
     }
 
     /// Disambiguates the base of a number, returning the base and consuming any
     /// base prefixes.
     /// Returns either 2, 8, 10, or 16.
-    fn disambiguate_base(&mut self) -> u8 {
+    fn disambiguate_base(lexer: &mut StreamedLexer<'a>) -> u8 {
         // If we see the 0x prefix the base is 16
-        if self.lexer.expect_char_sequence("0x").is_ok() {
+        if lexer.expect_char_sequence("0x").is_ok() {
             16
-        } else if self.lexer.expect_char_sequence("0o").is_ok() { // 0o = 8
+        } else if lexer.expect_char_sequence("0o").is_ok() {
+            // 0o = 8
             8
-        } else if self.lexer.expect_char_sequence("0b").is_ok() { // 0b = 2
+        } else if lexer.expect_char_sequence("0b").is_ok() {
+            // 0b = 2
             2
-        } else { // Anything else is base 10
+        } else {
+            // Anything else is base 10
             10
         }
     }
 
-    pub fn lex_number(&mut self) -> Result<LexOutput, LexError> {
-        let begin_state = self.lexer.state();
+    pub fn lex_number(lexer: &mut StreamedLexer<'a>) -> Result<LexOutput, LexError> {
+        let begin_state = lexer.state();
 
         // Dispatch to handlers based on base
-        match self.disambiguate_base() {
-            2 => self.lex_number_base_2(begin_state),
-            8 => self.lex_number_base_8(begin_state),
-            10 => self.lex_number_base_10(begin_state),
-            16 => self.lex_number_base_16(begin_state),
-            _ => unreachable!("NumberLexer::disambiguate_base only returns 2, 8, 10, or 16")
+        match Self::disambiguate_base(lexer) {
+            2 => Self::lex_base_2(lexer, begin_state),
+            8 => Self::lex_base_8(lexer, begin_state),
+            10 => Self::lex_base_10(lexer, begin_state),
+            16 => Self::lex_base_16(lexer, begin_state),
+            _ => unreachable!("NumberLexer::disambiguate_base only returns 2, 8, 10, or 16"),
         }
     }
 }
 
 mod tests {
-    use std::{num::{NonZeroU8, NonZeroU16}, str::FromStr};
+    use std::{
+        num::{NonZeroU8, NonZeroU16},
+        str::FromStr,
+    };
 
     use bigdecimal::{BigDecimal, FromPrimitive, num_bigint::BigInt};
-    use mosaic_shared::{debug::{PositionRange, TokenContext}, reader::CharReader, states::Position};
+    use mosaic_shared::{
+        debug::{PositionRange, TokenContext},
+        reader::CharReader,
+        states::Position,
+    };
 
     use crate::lexer::{StreamedLexer, tokens::Token};
 
@@ -640,9 +657,10 @@ mod tests {
                     line: unsafe { NonZeroU16::new_unchecked(1) },
                     column: unsafe { NonZeroU8::new_unchecked(8) },
                 },
-                Some(TokenContext::NumberLiteral)
-            )
-        ).into()));
+                Some(TokenContext::NumberLiteral),
+            ),
+        )
+            .into()));
 
         assert_eq!(result, expected);
     }
@@ -669,9 +687,10 @@ mod tests {
                     line: unsafe { NonZeroU16::new_unchecked(1) },
                     column: unsafe { NonZeroU8::new_unchecked(4) },
                 },
-                Some(TokenContext::NumberLiteral)
-            )
-        ).into()));
+                Some(TokenContext::NumberLiteral),
+            ),
+        )
+            .into()));
 
         assert_eq!(result, expected);
     }
@@ -698,9 +717,10 @@ mod tests {
                     line: unsafe { NonZeroU16::new_unchecked(1) },
                     column: unsafe { NonZeroU8::new_unchecked(5) },
                 },
-                Some(TokenContext::NumberLiteral)
-            )
-        ).into()));
+                Some(TokenContext::NumberLiteral),
+            ),
+        )
+            .into()));
 
         assert_eq!(result, expected);
     }
@@ -727,9 +747,10 @@ mod tests {
                     line: unsafe { NonZeroU16::new_unchecked(1) },
                     column: unsafe { NonZeroU8::new_unchecked(7) },
                 },
-                Some(TokenContext::NumberLiteral)
-            )
-        ).into()));
+                Some(TokenContext::NumberLiteral),
+            ),
+        )
+            .into()));
 
         assert_eq!(result, expected);
     }
@@ -756,9 +777,10 @@ mod tests {
                     line: unsafe { NonZeroU16::new_unchecked(1) },
                     column: unsafe { NonZeroU8::new_unchecked(6) },
                 },
-                Some(TokenContext::NumberLiteral)
-            )
-        ).into()));
+                Some(TokenContext::NumberLiteral),
+            ),
+        )
+            .into()));
 
         assert_eq!(result, expected);
     }
@@ -785,9 +807,10 @@ mod tests {
                     line: unsafe { NonZeroU16::new_unchecked(1) },
                     column: unsafe { NonZeroU8::new_unchecked(6) },
                 },
-                Some(TokenContext::NumberLiteral)
-            )
-        ).into()));
+                Some(TokenContext::NumberLiteral),
+            ),
+        )
+            .into()));
 
         assert_eq!(result, expected);
     }
@@ -814,9 +837,10 @@ mod tests {
                     line: unsafe { NonZeroU16::new_unchecked(1) },
                     column: unsafe { NonZeroU8::new_unchecked(7) },
                 },
-                Some(TokenContext::NumberLiteral)
-            )
-        ).into()));
+                Some(TokenContext::NumberLiteral),
+            ),
+        )
+            .into()));
 
         assert_eq!(result, expected);
     }
@@ -843,9 +867,10 @@ mod tests {
                     line: unsafe { NonZeroU16::new_unchecked(1) },
                     column: unsafe { NonZeroU8::new_unchecked(11) },
                 },
-                Some(TokenContext::NumberLiteral)
-            )
-        ).into()));
+                Some(TokenContext::NumberLiteral),
+            ),
+        )
+            .into()));
 
         assert_eq!(result, expected);
     }
@@ -872,9 +897,10 @@ mod tests {
                     line: unsafe { NonZeroU16::new_unchecked(1) },
                     column: unsafe { NonZeroU8::new_unchecked(9) },
                 },
-                Some(TokenContext::NumberLiteral)
-            )
-        ).into()));
+                Some(TokenContext::NumberLiteral),
+            ),
+        )
+            .into()));
 
         assert_eq!(result, expected);
     }

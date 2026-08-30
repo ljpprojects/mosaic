@@ -21,6 +21,7 @@ pub enum LexWarning {
 #[derive(Debug, PartialEq, Eq)]
 pub enum LexError {
     InvalidChar(char, PositionRange),
+    InvalidCodepoint(u32, PositionRange),
     UnclosedString(PositionRange),
     TooManyLines(Option<TokenContext>),
     TooManyColumns(Option<TokenContext>, NonZeroU16),
@@ -36,6 +37,7 @@ pub enum LexError {
     ExpectedModifier(PositionRange),
     ExpectedKeyword(PositionRange),
     ExpectedDigit(char, PositionRange),
+    ExpectedHexDigit(char, PositionRange),
     ByteLiteralOverflow(PositionRange),
     IntegerLiteralOverflow(PositionRange),
     FloatLiteralOverflow(PositionRange),

@@ -2,18 +2,20 @@ use crate::file::File;
 use crate::states::{ReaderState, WithState};
 use mmap_rs::{Mmap, MmapFlags, MmapOptions};
 
-use std::fs;
+use core::slice;
+use std::{fs, str};
 
 #[derive(Debug)]
 pub struct CharReader<'a> {
     pub pos: usize,
     pub path: &'a str,
-    mmap: Mmap,
+    _mmap: Mmap,
+    mmaped_str: &'a str,
 }
 
 impl PartialEq for CharReader<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.mmap.as_ref() == other.mmap.as_ref()
+        self.pos == other.pos && self.path == other.path
     }
 }
 
@@ -53,42 +55,53 @@ impl<'a> CharReader<'a> {
         .map()
         .unwrap();
 
-        Self { path, pos: 0, mmap }
+        let mmaped_str =
+            unsafe { str::from_utf8(slice::from_raw_parts(mmap.as_ptr(), mmap.len())).unwrap() };
+
+        Self {
+            path,
+            pos: 0,
+            _mmap: mmap,
+            mmaped_str,
+        }
     }
 
     pub fn static_bytes(bytes: Box<[u8]>) -> Self {
-        let mut mmap =
-            MmapOptions::new(bytes.len())
-                .unwrap()
-                .with_flags(MmapFlags::SEQUENTIAL)
-                .map_mut()
-                .unwrap();
+        let mut mmap = MmapOptions::new(bytes.len())
+            .unwrap()
+            .with_flags(MmapFlags::SEQUENTIAL)
+            .map_mut()
+            .unwrap();
 
         mmap.copy_from_slice(&*bytes);
+
+        let mmap = mmap.make_read_only().unwrap();
+        let mmaped_str =
+            unsafe { str::from_utf8(slice::from_raw_parts(mmap.as_ptr(), mmap.len())).unwrap() };
 
         Self {
             path: "-",
             pos: 0,
-            mmap: mmap.make_read_only().unwrap(),
+            _mmap: mmap,
+            mmaped_str,
         }
     }
 
     pub fn next_char(&mut self) -> Option<char> {
-        let byte = *self.mmap.get(self.pos)?;
+        let c = self.mmaped_str.chars().nth(self.pos)?; // O(n) time; yuck, but before we were just getting the nth byte and casting it up to a character
 
         self.pos += 1;
-
-        Some(byte as char)
+        Some(c)
     }
 
     pub fn prev_char(&mut self) -> Option<char> {
         self.pos -= 1;
 
-        let byte = *self.mmap.get(self.pos)?;
+        let byte = self.mmaped_str.chars().nth(self.pos)?;
         Some(byte as char)
     }
 
     pub fn peek_next_char(&self) -> Option<char> {
-        self.mmap.get(self.pos).map(|&c| c as char)
+        self.mmaped_str.chars().nth(self.pos)
     }
 }
