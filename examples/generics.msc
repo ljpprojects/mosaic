@@ -11,6 +11,7 @@
 # `primitive` requires the type to be a primitive (integers, floats, and booleans)
 # `L + R` requires the left and right bounds to be satisfied
 # `!R` requires the right bound to NOT be satisfied
+# `=T` requires the type to be exactly T (there can only be one of these bounds in an entire expression)
 # `sized` requires the type to have a statically known size
 # `indirection` requires the type to be some form of indirection (ptr or ref)
 # `ptr` requires the type to be a pointer
@@ -30,6 +31,7 @@
 # `static`ᐞ requires the type to be a statically-lived reference
 # `strong`ᕽ requires the type to be a strong reference
 # `weak`ᕽ requires the type to be a weak reference
+# `str` requires the type to be a form of string (utf8str, utf16lstr, utf16bstr, utf16bomstr)
 # Any other identifier/path will be an interface bound
 fn double<T: msr + *core::mem::Clone>(x: T @take) -> T, T
     = (x.clone(), x);

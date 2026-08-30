@@ -1,0 +1,40 @@
+utf8str     => UTF-8
+utf16lstr   => UTF-16 without BOM (little endian)
+utf16bstr   => UTF-16 without BOM (big endian)
+utf16bomstr => UTF-16 with BOM
+
+- Must be behind indirection
+- Creates a fat pointer
+- ABI-equivalent to a reference/pointer to a slice
+- Strings literals are &'.utf8str by default
+
+At compile time macros can be used:
+
+"foo": &'.utf8str
+#utf16lstr("foo"): &'.utf16lstr
+#utf16bstr("foo"): &'.utf16bstr
+#utf16bomstr("foo"): &'.utf16bomstr
+
+At runtime these methods can be used:
+
+fn cloneAsUtf8<S: nonnull + immut + *str>(self: S) @allocates -> &utf8str;
+fn cloneAsUtf16Le<S: nonnull + immut + *str>(self: S) @allocates -> &utf16lstr;
+fn cloneAsUtf16Be<S: nonnull + immut + *str>(self: S) @allocates -> &utf16bstr;
+fn cloneAsUtf16Bom<S: nonnull + immut + *str>(self: S) @allocates -> &utf16bomstr;
+
+fn cloneIntoUtf8<S: nonnull + immut + *str, D: nonnull + mut + *=utf8str>(
+    self: S,
+    dest: D
+) -> bool;
+fn cloneIntoUtf16Le<S: nonnull + immut + *str, D: nonnull + mut + *=utf16lstr>(
+    self: S,
+    dest: D
+) -> bool;
+fn cloneIntoUtf16Be<S: nonnull + immut + *str, D: nonnull + mut + *=utf16bstr>(
+    self: S,
+    dest: D
+) -> bool;
+fn cloneIntoUtf16Bom<S: nonnull + immut + *str, D: nonnull + mut + *=utf16bomstr>(
+    self: S,
+    dest: D
+) -> bool;
